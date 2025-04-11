@@ -19,7 +19,6 @@ type Client interface {
 
 type Discharge struct {
 	name             string
-	discharge        bool
 	schedules        []entity.Schedule
 	capacityLimit    float64
 	powerLimit       int
@@ -31,12 +30,11 @@ type Discharge struct {
 	log              *slog.Logger
 }
 
-func New(name string, discharge bool, client Client, log *slog.Logger) (*Discharge, error) {
+func New(name string, client Client, log *slog.Logger) (*Discharge, error) {
 	return &Discharge{
-		name:      name,
-		discharge: discharge,
-		client:    client,
-		log:       log.With(sl.Module("battery.discharge")),
+		name:   name,
+		client: client,
+		log:    log.With(sl.Module("battery.discharge")),
 	}, nil
 }
 
@@ -68,7 +66,7 @@ func (d *Discharge) Run() error {
 			d.status = status
 			d.observeStatus()
 
-			if !d.discharge {
+			if len(d.schedules) == 0 {
 				continue
 			}
 
@@ -157,7 +155,9 @@ func (d *Discharge) runDischarge() {
 		return
 	}
 
-	log.Info("starting discharge")
+	log.With(
+		slog.Int("power_limit", d.powerLimit),
+	).Info("starting discharge")
 	err = d.client.StartDischarge(d.powerLimit)
 	if err != nil {
 		d.log.With(sl.Err(err)).Error("starting discharge")

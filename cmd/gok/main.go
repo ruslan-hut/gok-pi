@@ -72,13 +72,13 @@ func main() {
 			log := lg.With(slog.String("battery", workerId))
 			api := apiclient.New(b.Url, b.Token, log)
 
-			worker, err := discharger.New(workerId, b.Discharge, api, log)
+			worker, err := discharger.New(workerId, api, log)
 			if err != nil {
 				log.Error("creating discharge worker", sl.Err(err))
 			}
 
 			for _, s := range schedules {
-				if s.Enabled && s.BatteryName == b.Name {
+				if s.BatteryName == b.Name {
 					worker.AddSchedule(s)
 				}
 			}
