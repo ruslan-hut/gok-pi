@@ -25,6 +25,7 @@ type Discharge struct {
 	socLimit         float64
 	readyToDischarge bool
 	isDischarging    bool
+	soc              float64
 	client           Client
 	status           *entity.SystemStatus
 	log              *slog.Logger
@@ -63,8 +64,7 @@ func (d *Discharge) Run() error {
 				d.log.With(sl.Err(err)).Error("checking battery status")
 				continue
 			}
-			d.status = status
-			d.observeStatus()
+			d.observeStatus(status)
 
 			if len(d.schedules) == 0 {
 				continue
@@ -84,8 +84,8 @@ func (d *Discharge) Run() error {
 }
 
 // isReadyToDischarge checks if the battery is ready to start discharging based on status and SoC limit.
-func (d *Discharge) isReadyToDischarge() bool {
-	return d.status != nil && d.status.USOC > d.socLimit
+func (d *Discharge) stopCondition() bool {
+	return d.socLimit >= d.soc
 }
 
 // isTimeToDischarge determines whether the current time falls within the specified discharge time window.
@@ -138,7 +138,7 @@ func (d *Discharge) runDischarge() {
 	)
 
 	if d.isDischarging {
-		if !d.isReadyToDischarge() {
+		if d.stopCondition() {
 			log.Info("battery level reached the limit, stopping discharge")
 			err := d.stopDischarge()
 			if err != nil {
@@ -208,10 +208,14 @@ func (d *Discharge) stopDischarge() error {
 
 // observeStatus updates various battery status metrics through external observers.
 // If the status is nil, the method returns immediately.
-func (d *Discharge) observeStatus() {
-	if d.status == nil {
+func (d *Discharge) observeStatus(status *entity.SystemStatus) {
+	if status == nil {
 		return
 	}
+
+	d.status = status
+	d.soc = status.RSOC
+
 	go func(status *entity.SystemStatus) {
 		observers.UpdateSoC(d.name, status.RSOC)
 		observers.UpdateUSoC(d.name, status.USOC)
@@ -220,5 +224,5 @@ func (d *Discharge) observeStatus() {
 		observers.UpdatePac(d.name, status.PacTotalW)
 		observers.UpdateDischargeState(d.name, status.BatteryDischarging)
 		observers.UpdateOpMode(d.name, status.OperatingMode)
-	}(d.status)
+	}(status)
 }
