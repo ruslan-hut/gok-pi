@@ -9,21 +9,10 @@ import (
 )
 
 type Config struct {
-	Env       string            `yaml:"env" env-default:"local" env-required:"true"`
-	Schedules []entity.Schedule `yaml:"schedules"`
-	Metrics   MetricsServer     `yaml:"metrics"`
-	Batteries []BatteryConfig   `yaml:"batteries"`
-}
-
-type BatteryConfig struct {
-	Name          string `yaml:"name" env-default:"battery1"`
-	Url           string `yaml:"url" env-default:"https://example.battery/api"`
-	Token         string `yaml:"token" env-default:"auth-token"`
-	Enabled       bool   `yaml:"enabled" env-default:"true"`
-	Discharge     bool   `yaml:"discharge" env-default:"false"`
-	CapacityLimit int    `yaml:"capacity_limit" env-default:"20000"`
-	PowerLimit    int    `yaml:"power_limit" env-default:"1000"`
-	SocLimit      int    `yaml:"soc_limit" env-default:"50"`
+	Env       string                 `yaml:"env" env-default:"local" env-required:"true"`
+	Metrics   MetricsServer          `yaml:"metrics"`
+	Batteries []entity.BatteryConfig `yaml:"batteries"`
+	Schedules []entity.Schedule      `yaml:"schedules"`
 }
 
 type MetricsServer struct {

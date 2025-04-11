@@ -25,7 +25,7 @@ func main() {
 	lg.Info("starting gok-pi", slog.String("config", *configPath), slog.String("env", conf.Env))
 	lg.Debug("debug messages enabled")
 	// filter enabled batteries
-	var batteries []config.BatteryConfig
+	var batteries []entity.BatteryConfig
 	for _, b := range conf.Batteries {
 		if b.Enabled {
 			batteries = append(batteries, b)
@@ -50,11 +50,6 @@ func main() {
 	lg.With(
 		slog.Int("schedules", len(schedules)),
 	).Info("loaded schedules")
-
-	if len(schedules) == 0 {
-		lg.Warn("no schedules enabled")
-		return
-	}
 
 	if conf.Metrics.Enabled {
 		lg.Info("starting metrics server", slog.String("bind", conf.Metrics.Bind), slog.String("port", conf.Metrics.Port))

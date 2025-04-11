@@ -1,6 +1,26 @@
 ---
 
 env: local
+metrics:
+  enabled: false
+  bind: 0.0.0.0
+  port: 5000
+batteries:
+  - name: battery1
+    url: https://example.battery1/api
+    token: auth-token1
+    enabled: true
+    capacity_limit: 10000
+  - name: battery2
+    url: https://example.battery2/api
+    token: auth-token2
+    enabled: false
+    capacity_limit: 5000
+  - name: battery3
+    url: https://example.battery3/api
+    token: auth-token3
+    enabled: true
+    capacity_limit: 5000
 schedules:
   - start_time: 20:00
     stop_time: 00:00
@@ -19,34 +39,4 @@ schedules:
     battery_name: battery3
     enabled: true
     power_limit: 500
-    soc_limit: 50
-
-metrics:
-  enabled: false
-  bind: 0.0.0.0
-  port: 5000
-batteries:
-  - name: battery1
-    url: https://example.battery1/api
-    token: auth-token1
-    enabled: true
-    discharge: true
-    capacity_limit: 10000
-    power_limit: 500
-    soc_limit: 50
-  - name: battery2
-    url: https://example.battery2/api
-    token: auth-token2
-    enabled: false
-    discharge: false
-    capacity_limit: 5000
-    power_limit: 250
-    soc_limit: 50
-  - name: battery3
-    url: https://example.battery3/api
-    token: auth-token3
-    enabled: true
-    discharge: false
-    capacity_limit: 5000
-    power_limit: 250
     soc_limit: 50
