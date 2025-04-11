@@ -18,17 +18,17 @@ type Client interface {
 }
 
 type Discharge struct {
-	name          string
-	discharge     bool
-	startTime     string
-	stopTime      string
-	capacityLimit float64
-	powerLimit    int
-	socLimit      float64
-	isDischarging bool
-	client        Client
-	status        *entity.SystemStatus
-	log           *slog.Logger
+	name             string
+	discharge        bool
+	schedules        []entity.Schedule
+	capacityLimit    float64
+	powerLimit       int
+	socLimit         float64
+	readyToDischarge bool
+	isDischarging    bool
+	client           Client
+	status           *entity.SystemStatus
+	log              *slog.Logger
 }
 
 func New(name string, discharge bool, client Client, log *slog.Logger) (*Discharge, error) {
@@ -40,15 +40,17 @@ func New(name string, discharge bool, client Client, log *slog.Logger) (*Dischar
 	}, nil
 }
 
-func (d *Discharge) SetLimits(capacityLimit, powerLimit, socLimit int) {
+func (d *Discharge) SetCapacityLimit(capacityLimit int) {
 	d.capacityLimit = float64(capacityLimit)
+}
+
+func (d *Discharge) SetLimits(powerLimit, socLimit int) {
 	d.powerLimit = powerLimit
 	d.socLimit = float64(socLimit)
 }
 
-func (d *Discharge) SetTime(startTime, stopTime string) {
-	d.startTime = startTime
-	d.stopTime = stopTime
+func (d *Discharge) AddSchedule(schedule entity.Schedule) {
+	d.schedules = append(d.schedules, schedule)
 }
 
 func (d *Discharge) Run() error {
@@ -70,7 +72,8 @@ func (d *Discharge) Run() error {
 				continue
 			}
 
-			if d.isTimeToDischarge() && d.isReadyToDischarge() {
+			d.checkTime()
+			if d.readyToDischarge {
 				d.runDischarge()
 			} else {
 				err = d.stopDischarge()
@@ -88,14 +91,14 @@ func (d *Discharge) isReadyToDischarge() bool {
 }
 
 // isTimeToDischarge determines whether the current time falls within the specified discharge time window.
-func (d *Discharge) isTimeToDischarge() bool {
+func (d *Discharge) isTimeToDischarge(start, stop string) bool {
 	// Calculate the start and stop times for today
-	startTime, err := timer.ParseTime(d.startTime)
+	startTime, err := timer.ParseTime(start)
 	if err != nil {
 		d.log.With(sl.Err(err)).Error("parsing start time")
 		return false
 	}
-	stopTime, err := timer.ParseTime(d.stopTime)
+	stopTime, err := timer.ParseTime(stop)
 	if err != nil {
 		d.log.With(sl.Err(err)).Error("parsing stop time")
 		return false
@@ -105,6 +108,22 @@ func (d *Discharge) isTimeToDischarge() bool {
 	}
 	now := time.Now()
 	return now.After(startTime) && now.Before(stopTime)
+}
+
+// checkTime determines whether the current time falls within the specified discharge time window.
+func (d *Discharge) checkTime() {
+
+	for _, schedule := range d.schedules {
+		if schedule.Enabled {
+			if d.isTimeToDischarge(schedule.StartTime, schedule.StopTime) {
+				d.SetLimits(schedule.PowerLimit, schedule.SocLimit)
+				d.readyToDischarge = true
+				return
+			}
+		}
+	}
+
+	d.readyToDischarge = false
 }
 
 // runDischarge manages the discharge process of the battery based on its current status and predefined limits.

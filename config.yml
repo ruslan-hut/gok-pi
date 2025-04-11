@@ -1,8 +1,26 @@
 ---
 
 env: local
-start_time: 20:00
-stop_time: 00:00
+schedules:
+  - start_time: 20:00
+    stop_time: 00:00
+    battery_name: battery1
+    enabled: true
+    power_limit: 500
+    soc_limit: 50
+  - start_time: 20:00
+    stop_time: 00:00
+    battery_name: battery2
+    enabled: false
+    power_limit: 500
+    soc_limit: 50
+  - start_time: 20:00
+    stop_time: 00:00
+    battery_name: battery3
+    enabled: true
+    power_limit: 500
+    soc_limit: 50
+
 metrics:
   enabled: false
   bind: 0.0.0.0

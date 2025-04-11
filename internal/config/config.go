@@ -3,16 +3,16 @@ package config
 import (
 	"fmt"
 	"github.com/ilyakaznacheev/cleanenv"
+	"gok-pi/battery/entity"
 	"log"
 	"sync"
 )
 
 type Config struct {
-	Env       string          `yaml:"env" env-default:"local" env-required:"true"`
-	StartTime string          `yaml:"start_time" env-default:"18:00"`
-	StopTime  string          `yaml:"stop_time" env-default:"22:00"`
-	Metrics   MetricsServer   `yaml:"metrics"`
-	Batteries []BatteryConfig `yaml:"batteries"`
+	Env       string            `yaml:"env" env-default:"local" env-required:"true"`
+	Schedules []entity.Schedule `yaml:"schedules"`
+	Metrics   MetricsServer     `yaml:"metrics"`
+	Batteries []BatteryConfig   `yaml:"batteries"`
 }
 
 type BatteryConfig struct {

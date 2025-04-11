@@ -4,6 +4,7 @@ import (
 	"flag"
 	"gok-pi/battery/api-client"
 	"gok-pi/battery/discharger"
+	"gok-pi/battery/entity"
 	"gok-pi/internal/config"
 	"gok-pi/internal/lib/logger"
 	"gok-pi/internal/lib/sl"
@@ -39,6 +40,22 @@ func main() {
 		return
 	}
 
+	// filter enabled schedules
+	var schedules []entity.Schedule
+	for _, s := range conf.Schedules {
+		if s.Enabled {
+			schedules = append(schedules, s)
+		}
+	}
+	lg.With(
+		slog.Int("schedules", len(schedules)),
+	).Info("loaded schedules")
+
+	if len(schedules) == 0 {
+		lg.Warn("no schedules enabled")
+		return
+	}
+
 	if conf.Metrics.Enabled {
 		lg.Info("starting metrics server", slog.String("bind", conf.Metrics.Bind), slog.String("port", conf.Metrics.Port))
 		go func() {
@@ -65,8 +82,13 @@ func main() {
 				log.Error("creating discharge worker", sl.Err(err))
 			}
 
-			worker.SetTime(conf.StartTime, conf.StopTime)
-			worker.SetLimits(b.CapacityLimit, b.PowerLimit, b.SocLimit)
+			for _, s := range schedules {
+				if s.Enabled && s.BatteryName == b.Name {
+					worker.AddSchedule(s)
+				}
+			}
+
+			worker.SetCapacityLimit(b.CapacityLimit)
 
 			err = worker.Run()
 			if err != nil {
