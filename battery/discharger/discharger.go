@@ -83,7 +83,7 @@ func (d *Discharge) Run() error {
 	}
 }
 
-// isReadyToDischarge checks if the battery is ready to start discharging based on status and SoC limit.
+// stopCondition checks if the current state of charge (SoC) is below the specified limit.
 func (d *Discharge) stopCondition() bool {
 	return d.socLimit >= d.soc
 }
