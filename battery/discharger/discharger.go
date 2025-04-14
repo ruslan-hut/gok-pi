@@ -155,6 +155,10 @@ func (d *Discharge) runDischarge() {
 		return
 	}
 
+	if d.rate == 0 && !d.isDischarging {
+		return
+	}
+
 	err := d.client.SwitchOperatingModeToManual(d.status.OperatingMode)
 	if err != nil {
 		d.log.With(sl.Err(err)).Error("switching operating mode")
