@@ -25,7 +25,10 @@ type Discharge struct {
 	socLimit         float64
 	readyToDischarge bool
 	isDischarging    bool
-	soc              float64
+	soc              float64 // State of Charge from last status
+	capacity         float64 // Remaining capacity in Wh from last status
+	stopTime         time.Time
+	rate             int // Discharge rate in Wh/h calculated based on the remaining capacity and time
 	client           Client
 	status           *entity.SystemStatus
 	log              *slog.Logger
@@ -104,6 +107,7 @@ func (d *Discharge) isTimeToDischarge(start, stop string) bool {
 	if startTime.After(stopTime) {
 		stopTime = stopTime.Add(24 * time.Hour)
 	}
+	d.stopTime = stopTime
 	now := time.Now()
 	return now.After(startTime) && now.Before(stopTime)
 }
@@ -115,6 +119,7 @@ func (d *Discharge) checkTime() {
 		if schedule.Enabled {
 			if d.isTimeToDischarge(schedule.StartTime, schedule.StopTime) {
 				d.SetLimits(schedule.PowerLimit, schedule.SocLimit)
+				d.calculateRate()
 				d.readyToDischarge = true
 				return
 			}
@@ -133,6 +138,7 @@ func (d *Discharge) runDischarge() {
 		slog.String("operating_mode", d.status.OperatingMode),
 		slog.Float64("remaining capacity", d.status.RemainingCapacityWh),
 		slog.Float64("SoC", d.status.RSOC),
+		slog.Int("rate", d.rate),
 		slog.Float64("consumption", d.status.ConsumptionW),
 		slog.Bool("discharge", d.status.BatteryDischarging),
 	)
@@ -155,10 +161,8 @@ func (d *Discharge) runDischarge() {
 		return
 	}
 
-	log.With(
-		slog.Int("power_limit", d.powerLimit),
-	).Info("starting discharge")
-	err = d.client.StartDischarge(d.powerLimit)
+	log.Info("starting discharge")
+	err = d.client.StartDischarge(d.rate)
 	if err != nil {
 		d.log.With(sl.Err(err)).Error("starting discharge")
 		return
@@ -190,21 +194,21 @@ func (d *Discharge) stopDischarge() error {
 }
 
 // calculate discharge rate as Wh/h
-//func (d *Discharge) calculateRate(capacity float64, stopTime time.Time) int {
-//	estimate := capacity - d.capacityLimit
-//	if estimate <= 0 {
-//		return 0
-//	}
-//	remainingTime := stopTime.Sub(time.Now())
-//	if remainingTime <= 0 {
-//		return 0
-//	}
-//	rate := estimate / remainingTime.Hours()
-//	if rate > float64(d.powerLimit) {
-//		return d.powerLimit
-//	}
-//	return int(rate)
-//}
+func (d *Discharge) calculateRate() {
+	d.rate = d.powerLimit
+	estimate := d.capacity - d.capacityLimit
+	if estimate <= 0 {
+		return
+	}
+	remainingTime := d.stopTime.Sub(time.Now())
+	if remainingTime <= 0 {
+		return
+	}
+	rate := estimate / remainingTime.Hours()
+	if rate <= float64(d.powerLimit) {
+		d.rate = int(rate)
+	}
+}
 
 // observeStatus updates various battery status metrics through external observers.
 // If the status is nil, the method returns immediately.
@@ -214,7 +218,8 @@ func (d *Discharge) observeStatus(status *entity.SystemStatus) {
 	}
 
 	d.status = status
-	d.soc = status.RSOC
+	d.soc = status.USOC
+	d.capacity = status.RemainingCapacityWh
 
 	go func(status *entity.SystemStatus) {
 		observers.UpdateSoC(d.name, status.RSOC)
