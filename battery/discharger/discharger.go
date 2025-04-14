@@ -20,7 +20,7 @@ type Client interface {
 type Discharge struct {
 	name             string
 	schedules        []entity.Schedule
-	capacityLimit    float64
+	capacityLimit    float64 // Capacity limit in Wh calculated based on the SoC limit
 	powerLimit       int
 	socLimit         float64
 	readyToDischarge bool
@@ -42,8 +42,8 @@ func New(name string, client Client, log *slog.Logger) (*Discharge, error) {
 	}, nil
 }
 
-func (d *Discharge) SetCapacityLimit(capacityLimit int) {
-	d.capacityLimit = float64(capacityLimit)
+func (d *Discharge) SetCapacityLimit(_ int) {
+	//d.capacityLimit = float64(capacityLimit)
 }
 
 func (d *Discharge) SetLimits(powerLimit, socLimit int) {
@@ -195,7 +195,7 @@ func (d *Discharge) stopDischarge() error {
 
 // calculate discharge rate as Wh/h
 func (d *Discharge) calculateRate() {
-	d.rate = d.powerLimit
+	d.rate = 0
 	estimate := d.capacity - d.capacityLimit
 	if estimate <= 0 {
 		return
@@ -207,6 +207,8 @@ func (d *Discharge) calculateRate() {
 	rate := estimate / remainingTime.Hours()
 	if rate <= float64(d.powerLimit) {
 		d.rate = int(rate)
+	} else {
+		d.rate = d.powerLimit
 	}
 }
 
@@ -220,6 +222,10 @@ func (d *Discharge) observeStatus(status *entity.SystemStatus) {
 	d.status = status
 	d.soc = status.USOC
 	d.capacity = status.RemainingCapacityWh
+	d.capacityLimit = 0
+	if status.RSOC > 0 {
+		d.capacityLimit = d.socLimit * status.RemainingCapacityWh / status.RSOC
+	}
 
 	go func(status *entity.SystemStatus) {
 		observers.UpdateSoC(d.name, status.RSOC)
