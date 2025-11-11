@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -51,6 +52,12 @@ func (s *Server) ListenAndServe(addr string) error {
 	if s.cfg.UIStaticDir != "" {
 		fs := http.FileServer(http.Dir(s.cfg.UIStaticDir))
 		mux.Handle("/app/", http.StripPrefix("/app/", fs))
+
+		downloadPath := filepath.Join(s.cfg.UIStaticDir, "downloads")
+		if info, err := os.Stat(downloadPath); err == nil && info.IsDir() {
+			downloadFS := http.FileServer(http.Dir(downloadPath))
+			mux.Handle("/downloads/", http.StripPrefix("/downloads/", downloadFS))
+		}
 	}
 
 	s.log.Info("control server listening", slog.String("addr", addr))

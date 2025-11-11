@@ -81,6 +81,39 @@ npm run build
 
 During development, run `npm run dev` (served on `http://localhost:5173`) with the built-in proxy to the Go control server at `http://localhost:8080`.
 
+### Deployment Workflow
+
+The repository includes `.github/workflows/deploy.yml`, a GitHub Actions pipeline that:
+
+- builds the React bundle (`npm ci && npm run build`);
+- cross-compiles the control server (`linux/amd64`) and agent binary (`linux/arm64`, Raspberry Pi ready);
+- stages the agent inside `downloads/` beneath the static UI directory so it can be downloaded via browser or `curl`;
+- pushes the bundle to a remote host over SSH and atomically updates `${DEPLOY_PATH}/current`;
+- optionally executes a restart command (set the `DEPLOY_RESTART_CMD` secret, e.g. `sudo systemctl restart gok-controlserver`).
+
+Configure the following repository secrets before running the workflow:
+
+- `DEPLOY_HOST` – SSH hostname (or IP) of the remote control server.
+- `DEPLOY_USER` – SSH username (must have write access to `DEPLOY_PATH`).
+- `DEPLOY_SSH_KEY` – private key (OpenSSH format) with access to the host.
+- `DEPLOY_PATH` – absolute target path on the host, for example `/opt/gok-pi`.
+- `DEPLOY_RESTART_CMD` *(optional)* – command executed after each release to restart the service.
+
+Trigger the workflow by pushing to `main` or manually via *Actions → Deploy Control Server → Run workflow*. The control server should be started with:
+
+```bash
+./controlserver -addr :8080 -secret "<shared-secret>" -static /opt/gok-pi/current/app
+```
+
+With this layout, the ARM64 agent binary is exposed at `/downloads/gok-pi-agent-linux-arm64`. Devices can download it directly:
+
+```bash
+curl -o gok-pi-agent-linux-arm64 https://control.example.com/downloads/gok-pi-agent-linux-arm64
+chmod +x gok-pi-agent-linux-arm64
+```
+
+The React sidebar also surfaces a download button once the deployment workflow publishes the binary.
+
 ## Sonnen Controller's API
 
 Sonnen's API provides a comprehensive set of controls and data for managing and monitoring a battery system. This includes functions for reading battery status, controlling battery charging and discharging, reading and setting battery parameters, and more. 

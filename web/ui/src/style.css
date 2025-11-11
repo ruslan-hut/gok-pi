@@ -1,3 +1,17 @@
+.download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 1rem 0;
+  color: #38bdf8;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.download-link:hover {
+  text-decoration: underline;
+}
+
 :root {
   color-scheme: light dark;
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",

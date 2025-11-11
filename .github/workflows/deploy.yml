@@ -1,0 +1,97 @@
+name: Deploy Control Server
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/ui/package-lock.json
+
+      - name: Install UI dependencies and build
+        working-directory: web/ui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+
+      - name: Build control server (linux/amd64)
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          mkdir -p out
+          go build -o out/controlserver ./cmd/controlserver
+
+      - name: Build agent binary (linux/arm64)
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: arm64
+        run: |
+          mkdir -p out/downloads
+          go build -o out/downloads/gok-pi-agent-linux-arm64 ./cmd/gok
+
+      - name: Prepare deployment bundle
+        run: |
+          mkdir -p deploy/app/downloads
+          cp -r web/ui/dist/. deploy/app/
+          cp out/downloads/gok-pi-agent-linux-arm64 deploy/app/downloads/
+          cp out/controlserver deploy/controlserver
+          sha256sum deploy/controlserver > deploy/SHASUMS
+          sha256sum deploy/app/downloads/gok-pi-agent-linux-arm64 >> deploy/SHASUMS
+          echo "${GITHUB_SHA}" > deploy/version.txt
+          tar -czf release.tar.gz -C deploy .
+
+      - name: Upload bundle to remote host
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "release.tar.gz"
+          target: "/tmp"
+
+      - name: Deploy on remote host
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: DEPLOY_PATH,DEPLOY_RESTART_CMD
+          script: |
+            set -euo pipefail
+            if [ -z "${DEPLOY_PATH}" ]; then
+              echo "DEPLOY_PATH secret must be set" >&2
+              exit 1
+            fi
+            RELEASE_DIR="${DEPLOY_PATH}/releases/${GITHUB_SHA}"
+            mkdir -p "${RELEASE_DIR}"
+            tar -xzf "/tmp/release.tar.gz" -C "${RELEASE_DIR}"
+            chmod +x "${RELEASE_DIR}/controlserver"
+            ln -sfn "${RELEASE_DIR}" "${DEPLOY_PATH}/current"
+            rm -f "/tmp/release.tar.gz"
+            if [ -n "${{ secrets.DEPLOY_RESTART_CMD }}" ]; then
+              eval "${{ secrets.DEPLOY_RESTART_CMD }}"
+            fi
+
