@@ -1,6 +1,8 @@
 package discharger
 
 import (
+	"errors"
+	"fmt"
 	"gok-pi/battery/entity"
 	"gok-pi/internal/lib/sl"
 	"gok-pi/internal/lib/timer"
@@ -17,6 +19,36 @@ type Client interface {
 	SwitchOperatingModeToAuto(currentMode string) error
 }
 
+type CommandType string
+
+const (
+	CommandStartDischarge CommandType = "start_discharge"
+	CommandStopDischarge  CommandType = "stop_discharge"
+	CommandSetLimits      CommandType = "set_limits"
+	CommandForceMode      CommandType = "force_mode"
+)
+
+type OperatingMode string
+
+const (
+	OperatingModeManual OperatingMode = "manual"
+	OperatingModeAuto   OperatingMode = "auto"
+)
+
+type ControlCommand struct {
+	Type   CommandType
+	Power  int
+	Limits *CommandLimits
+	Mode   OperatingMode
+}
+
+type CommandLimits struct {
+	PowerLimit *int
+	SocLimit   *int
+}
+
+var ErrCommandQueueFull = errors.New("discharger command queue full")
+
 type Discharge struct {
 	name             string
 	schedules        []entity.Schedule
@@ -32,13 +64,16 @@ type Discharge struct {
 	client           Client
 	status           *entity.SystemStatus
 	log              *slog.Logger
+	commands         chan ControlCommand
+	manualOverride   bool
 }
 
 func New(name string, client Client, log *slog.Logger) (*Discharge, error) {
 	return &Discharge{
-		name:   name,
-		client: client,
-		log:    log.With(sl.Module("battery.discharge")),
+		name:     name,
+		client:   client,
+		log:      log.With(sl.Module("battery.discharge")),
+		commands: make(chan ControlCommand, 16),
 	}, nil
 }
 
@@ -55,12 +90,25 @@ func (d *Discharge) AddSchedule(schedule entity.Schedule) {
 	d.schedules = append(d.schedules, schedule)
 }
 
+func (d *Discharge) SubmitCommand(cmd ControlCommand) error {
+	select {
+	case d.commands <- cmd:
+		return nil
+	default:
+		return ErrCommandQueueFull
+	}
+}
+
 func (d *Discharge) Run() error {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
+		case cmd := <-d.commands:
+			if err := d.processControlCommand(cmd); err != nil {
+				d.log.With(sl.Err(err)).Error("processing remote command")
+			}
 		case <-ticker.C:
 			status, err := d.client.Status()
 			if err != nil {
@@ -70,10 +118,16 @@ func (d *Discharge) Run() error {
 			d.observeStatus(status)
 
 			if len(d.schedules) == 0 {
-				continue
+				if !d.manualOverride {
+					continue
+				}
 			}
 
-			d.checkTime()
+			if d.manualOverride {
+				d.readyToDischarge = true
+			} else {
+				d.checkTime()
+			}
 			if d.readyToDischarge {
 				d.runDischarge()
 			} else {
@@ -195,6 +249,100 @@ func (d *Discharge) stopDischarge() error {
 		d.isDischarging = false
 	}
 	return nil
+}
+
+func (d *Discharge) processControlCommand(cmd ControlCommand) error {
+	log := d.log.With(
+		slog.String("command", string(cmd.Type)),
+	)
+
+	switch cmd.Type {
+	case CommandStartDischarge:
+		if cmd.Power > 0 {
+			d.rate = cmd.Power
+		}
+		d.manualOverride = true
+		d.readyToDischarge = true
+
+		currentMode := ""
+		if d.status != nil {
+			currentMode = d.status.OperatingMode
+		}
+
+		if err := d.client.SwitchOperatingModeToManual(currentMode); err != nil {
+			return fmt.Errorf("switching to manual mode: %w", err)
+		}
+
+		if d.rate <= 0 {
+			if d.powerLimit > 0 {
+				d.rate = d.powerLimit
+			} else {
+				return fmt.Errorf("no discharge rate configured")
+			}
+		}
+
+		log.With(slog.Int("rate", d.rate)).Info("starting discharge via remote command")
+		if err := d.client.StartDischarge(d.rate); err != nil {
+			return fmt.Errorf("starting discharge: %w", err)
+		}
+
+		d.isDischarging = true
+		return nil
+
+	case CommandStopDischarge:
+		d.manualOverride = false
+		log.Info("stopping discharge via remote command")
+		return d.stopDischarge()
+
+	case CommandSetLimits:
+		if cmd.Limits == nil {
+			return fmt.Errorf("missing limits payload")
+		}
+		if cmd.Limits.PowerLimit != nil {
+			d.powerLimit = *cmd.Limits.PowerLimit
+			log = log.With(slog.Int("power_limit", d.powerLimit))
+		}
+		if cmd.Limits.SocLimit != nil {
+			d.socLimit = float64(*cmd.Limits.SocLimit)
+			log = log.With(slog.Int("soc_limit", *cmd.Limits.SocLimit))
+		}
+		d.calculateRate()
+		log.With(slog.Int("rate", d.rate)).Info("updated discharge limits via remote command")
+
+		if d.manualOverride && d.rate > 0 {
+			if err := d.client.StartDischarge(d.rate); err != nil {
+				return fmt.Errorf("applying updated rate: %w", err)
+			}
+			d.isDischarging = true
+		}
+		return nil
+
+	case CommandForceMode:
+		currentMode := ""
+		if d.status != nil {
+			currentMode = d.status.OperatingMode
+		}
+		switch cmd.Mode {
+		case OperatingModeManual:
+			d.manualOverride = true
+			if err := d.client.SwitchOperatingModeToManual(currentMode); err != nil {
+				return fmt.Errorf("forcing manual mode: %w", err)
+			}
+			log.Info("forced manual mode via remote command")
+			return nil
+		case OperatingModeAuto:
+			d.manualOverride = false
+			if err := d.client.SwitchOperatingModeToAuto(currentMode); err != nil {
+				return fmt.Errorf("forcing auto mode: %w", err)
+			}
+			log.Info("forced auto mode via remote command")
+			return nil
+		default:
+			return fmt.Errorf("unknown operating mode: %s", cmd.Mode)
+		}
+	default:
+		return fmt.Errorf("unsupported command type: %s", cmd.Type)
+	}
 }
 
 // calculate discharge rate as Wh/h

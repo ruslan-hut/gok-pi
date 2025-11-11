@@ -1,15 +1,20 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"gok-pi/battery/api-client"
 	"gok-pi/battery/discharger"
 	"gok-pi/battery/entity"
 	"gok-pi/internal/config"
 	"gok-pi/internal/lib/logger"
 	"gok-pi/internal/lib/sl"
+	"gok-pi/internal/remote/wsclient"
 	"gok-pi/metrics/server"
 	"log/slog"
+	"strings"
 	"sync"
 )
 
@@ -62,37 +67,151 @@ func main() {
 		}()
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var wg sync.WaitGroup
+	workers := make(map[string]*discharger.Discharge)
 
-	for _, b := range batteries {
+	for _, batteryCfg := range batteries {
+		batteryCfg := batteryCfg
+		log := lg.With(slog.String("battery", batteryCfg.Name))
+		api := apiclient.New(batteryCfg.Url, batteryCfg.Token, log)
+
+		worker, err := discharger.New(batteryCfg.Name, api, log)
+		if err != nil {
+			log.Error("creating discharge worker", sl.Err(err))
+			continue
+		}
+
+		for _, s := range schedules {
+			if s.BatteryName == batteryCfg.Name {
+				worker.AddSchedule(s)
+			}
+		}
+
+		worker.SetCapacityLimit(batteryCfg.CapacityLimit)
+		workers[batteryCfg.Name] = worker
+
 		wg.Add(1)
-		go func(workerId string) {
+		go func(worker *discharger.Discharge, workerLog *slog.Logger) {
 			defer wg.Done()
-
-			log := lg.With(slog.String("battery", workerId))
-			api := apiclient.New(b.Url, b.Token, log)
-
-			worker, err := discharger.New(workerId, api, log)
-			if err != nil {
-				log.Error("creating discharge worker", sl.Err(err))
+			if err := worker.Run(); err != nil {
+				workerLog.Error("running discharge worker", sl.Err(err))
 			}
-
-			for _, s := range schedules {
-				if s.BatteryName == b.Name {
-					worker.AddSchedule(s)
-				}
-			}
-
-			worker.SetCapacityLimit(b.CapacityLimit)
-
-			err = worker.Run()
-			if err != nil {
-				log.Error("running discharge worker", sl.Err(err))
-			}
-			log.Info("discharge worker stopped")
-		}(b.Name)
+			workerLog.Info("discharge worker stopped")
+		}(worker, log)
 	}
+
+	if conf.RemoteControl.Enabled {
+		lg.Info("starting remote control client", slog.String("url", conf.RemoteControl.ServerURL))
+		remoteClient := wsclient.New(conf.RemoteControl, wsclient.AgentMetadata{
+			ID:  conf.Env,
+			Env: conf.Env,
+		}, lg)
+		remoteClient.Run(ctx)
+		go handleRemoteCommands(ctx, remoteClient.Commands(), workers, lg)
+	}
+
 	wg.Wait()
 
 	lg.Info("gok-pi stopped")
+}
+
+func handleRemoteCommands(ctx context.Context, commands <-chan wsclient.Command, workers map[string]*discharger.Discharge, log *slog.Logger) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case cmd, ok := <-commands:
+			if !ok {
+				return
+			}
+			if cmd.Type != "agent.command" {
+				continue
+			}
+			if cmd.Target == "" {
+				log.Warn("remote command missing target battery")
+				continue
+			}
+			worker, ok := workers[cmd.Target]
+			if !ok {
+				log.With(slog.String("target", cmd.Target)).Warn("remote command for unknown battery")
+				continue
+			}
+			controlCmd, err := translateCommand(cmd)
+			if err != nil {
+				log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate remote command")
+				continue
+			}
+			if err := worker.SubmitCommand(controlCmd); err != nil {
+				log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit remote command")
+			}
+		}
+	}
+}
+
+func translateCommand(cmd wsclient.Command) (discharger.ControlCommand, error) {
+	switch cmd.Command {
+	case string(discharger.CommandStartDischarge):
+		var payload struct {
+			Power int `json:"power"`
+		}
+		if len(cmd.Payload) > 0 {
+			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
+				return discharger.ControlCommand{}, fmt.Errorf("decode start payload: %w", err)
+			}
+		}
+		return discharger.ControlCommand{
+			Type:  discharger.CommandStartDischarge,
+			Power: payload.Power,
+		}, nil
+	case string(discharger.CommandStopDischarge):
+		return discharger.ControlCommand{
+			Type: discharger.CommandStopDischarge,
+		}, nil
+	case string(discharger.CommandSetLimits):
+		var payload struct {
+			PowerLimit *int `json:"power_limit"`
+			SocLimit   *int `json:"soc_limit"`
+		}
+		if len(cmd.Payload) > 0 {
+			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
+				return discharger.ControlCommand{}, fmt.Errorf("decode limits payload: %w", err)
+			}
+		}
+		return discharger.ControlCommand{
+			Type: discharger.CommandSetLimits,
+			Limits: &discharger.CommandLimits{
+				PowerLimit: payload.PowerLimit,
+				SocLimit:   payload.SocLimit,
+			},
+		}, nil
+	case string(discharger.CommandForceMode):
+		var payload struct {
+			Mode string `json:"mode"`
+		}
+		if len(cmd.Payload) > 0 {
+			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
+				return discharger.ControlCommand{}, fmt.Errorf("decode force mode payload: %w", err)
+			}
+		}
+		mode := strings.ToLower(payload.Mode)
+		switch mode {
+		case "manual":
+			return discharger.ControlCommand{
+				Type: discharger.CommandForceMode,
+				Mode: discharger.OperatingModeManual,
+			}, nil
+		case "auto", "":
+			return discharger.ControlCommand{
+				Type: discharger.CommandForceMode,
+				Mode: discharger.OperatingModeAuto,
+			}, nil
+		default:
+			return discharger.ControlCommand{}, fmt.Errorf("unsupported operating mode: %s", mode)
+		}
+	default:
+		return discharger.ControlCommand{}, fmt.Errorf("unsupported remote command: %s", cmd.Command)
+	}
 }

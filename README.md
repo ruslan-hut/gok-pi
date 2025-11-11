@@ -23,6 +23,64 @@ This service is designed with a versatile deployment nature. It can run on vario
 
 The ability to run on diverse platforms like a standalone server or a Raspberry Pi ensures that this service can cater to different needs, be it for a heavy-duty commercial setup or a small-scale residential use.
 
+## Remote Monitoring & Control
+
+The agent can optionally maintain a persistent WebSocket connection to a remote control plane for telemetry streaming and remote actions. Configure the `remote_control` block in `config.yml` (or environment variables):
+
+- `enabled`: turn the feature on for the agent instance.
+- `server_url`: WebSocket URL exposed by the control server (placed behind nginx for TLS).
+- `shared_secret`: pre-shared token injected as an auth header for agent registration.
+- `reconnect.initial_seconds` / `reconnect.max_seconds`: bounds for exponential reconnect backoff.
+
+When disabled, the agent behaves as before and no remote traffic is emitted.
+
+### Control Plane
+
+Run the dedicated control server to aggregate agent telemetry, broker WebSocket sessions, and forward commands:
+
+```bash
+go run ./cmd/controlserver \
+  -addr :8080 \
+  -secret "<shared-secret>" \
+  -static ./web/ui/dist
+```
+
+- `-secret` must match the agent `remote_control.shared_secret`.
+- `-static` is optional; when provided the built React dashboard is hosted under `/app`.
+- Agents connect to `/api/agent`, while the web UI consumes `/api/ui` for live updates.
+
+Example nginx snippet for TLS termination:
+
+```
+server {
+    listen 443 ssl;
+    server_name control.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+### React Dashboard
+
+The dashboard in `web/ui` provides a lightweight overview of connected agents and allows remote actions. Build it once and serve through the control server:
+
+```bash
+cd web/ui
+npm install
+npm run build
+```
+
+During development, run `npm run dev` (served on `http://localhost:5173`) with the built-in proxy to the Go control server at `http://localhost:8080`.
+
 ## Sonnen Controller's API
 
 Sonnen's API provides a comprehensive set of controls and data for managing and monitoring a battery system. This includes functions for reading battery status, controlling battery charging and discharging, reading and setting battery parameters, and more. 

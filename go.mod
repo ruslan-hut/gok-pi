@@ -3,8 +3,10 @@ module gok-pi
 go 1.24.0
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/prometheus/client_golang v1.23.2
+	nhooyr.io/websocket v1.8.17
 )
 
 require (
