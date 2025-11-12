@@ -105,14 +105,66 @@ Trigger the workflow by pushing to `main` or manually via *Actions → Deploy Co
 ./gok -addr :8080 -secret "<shared-secret>" -static /opt/gok-pi/current/app
 ```
 
-With this layout, the ARM64 agent binary is exposed at `/downloads/gok-pi-agent-linux-arm64`. Devices can download it directly:
+### Agent Release Artifacts
+
+The agent consumes a `gok` binary and a neighbouring `VERSION` file that stores the SHA-256 hash of that binary. Publish both artifacts during each deploy so devices can discover updates without downloading the entire binary every time.
+
+Build a release locally with the helper script:
+
+```bash
+./deploy/build_agent_release.sh \
+  --output /tmp/gok-release \
+  --binary-name gok-pi-agent-linux-arm64
+```
+
+The script produces `/tmp/gok-release/gok-pi-agent-linux-arm64` and `/tmp/gok-release/VERSION`. Upload both files to the hosting location exposed to agents (for example, the `/downloads` directory served by the control server). Pass `--upload 'scp "$1" "$2" user@host:/srv/downloads/'` to run a custom publish command automatically.
+
+With the GitHub Actions workflow, the ARM64 agent binary is exposed at `/downloads/gok-pi-agent-linux-arm64` and the manifest at `/downloads/VERSION`. Devices can fetch them directly:
 
 ```bash
 curl -o gok-pi-agent-linux-arm64 https://control.example.com/downloads/gok-pi-agent-linux-arm64
+curl -o VERSION https://control.example.com/downloads/VERSION
 chmod +x gok-pi-agent-linux-arm64
 ```
 
-The React sidebar also surfaces a download button once the deployment workflow publishes the binary.
+The React sidebar also surfaces a download button once the deployment workflow publishes the artifacts.
+
+### Agent Auto Update
+
+Install the updater binary on the device (for example, under `/opt/gok-pi/bin/agentupdater`) and configure a systemd unit to check for new releases on a schedule.
+
+1. Copy the sample units:
+
+   ```bash
+   sudo cp deploy/agent-updater.service /etc/systemd/system/gok-agent-updater.service
+   sudo cp deploy/agent-updater.timer /etc/systemd/system/gok-agent-updater.timer
+   ```
+
+2. Replace `{{AGENT_USER}}`, `{{AGENT_GROUP}}`, and `{{AGENT_PATH}}` in the service file with the real values (typically the same ones used for `gok-agent`).
+
+3. Provide the download endpoints by editing `/etc/default/gok-agent-updater`:
+
+   ```
+   GOK_UPDATE_VERSION_URL=https://control.example.com/downloads/VERSION
+   # Optional overrides:
+   # GOK_UPDATE_BINARY_URL=https://control.example.com/downloads/gok-pi-agent-linux-arm64
+   # GOK_UPDATE_BINARY_NAME=gok
+   # GOK_UPDATE_TIMEOUT=45s
+   ```
+
+4. Reload systemd and activate the timer:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now gok-agent-updater.timer
+   ```
+
+The timer triggers `gok-agent-updater.service` 5 minutes after boot and every 30 minutes thereafter. The service runs the updater binary with the environment-derived URLs, compares the remote `VERSION` hash against the local copy, and only downloads the new binary when the hashes differ. Journal entries are tagged with `gok-agent-updater`.
+
+Manual verification checklist:
+- Stage a fake release by placing a binary and `VERSION` hash under a temporary HTTP server (e.g. `python -m http.server`).
+- Run `agentupdater -agent-root $(pwd)/current -version-url http://localhost:8000/VERSION -binary-url http://localhost:8000/gok`.
+- Observe the binary replacement and updated `VERSION` file under the agent root, and confirm the log output reports the new hash.
 
 ## Control Server Service Setup
 

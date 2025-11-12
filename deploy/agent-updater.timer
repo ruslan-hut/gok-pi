@@ -1,0 +1,12 @@
+[Unit]
+Description=Run GOK Agent Auto Updater
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=30m
+AccuracySec=1m
+Unit=agent-updater.service
+
+[Install]
+WantedBy=timers.target
+

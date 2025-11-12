@@ -1,0 +1,24 @@
+[Unit]
+Description=GOK Agent
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{AGENT_USER}}
+Group={{AGENT_GROUP}}
+Environment=GOK_CONF={{AGENT_PATH}}/config.yml
+Environment=GOK_LOG_DIR=/var/log/gok
+EnvironmentFile=-/etc/default/gok-agent
+WorkingDirectory={{AGENT_PATH}}/current
+ExecStart={{AGENT_PATH}}/current/gok -conf=${GOK_CONF} -log=${GOK_LOG_DIR}
+Restart=on-failure
+RestartSec=5s
+SyslogIdentifier=gok-agent
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
+

@@ -1,0 +1,19 @@
+[Unit]
+Description=GOK Agent Auto Updater
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User={{AGENT_USER}}
+Group={{AGENT_GROUP}}
+WorkingDirectory={{AGENT_PATH}}/current
+Environment=GOK_UPDATE_AGENT_ROOT={{AGENT_PATH}}/current
+Environment=GOK_UPDATE_LOG_DIR=/var/log/gok
+EnvironmentFile=-/etc/default/gok-agent-updater
+ExecStart={{AGENT_PATH}}/bin/agentupdater -version-url=${GOK_UPDATE_VERSION_URL}
+SyslogIdentifier=gok-agent-updater
+
+[Install]
+WantedBy=multi-user.target
+
