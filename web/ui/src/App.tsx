@@ -253,15 +253,15 @@ export default function App() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <h1>GOK-Pi Dashboard</h1>
-        <div className="status-bar">
-          <span className="connection">
-            <span
-              className={`connection-dot ${connectionActive ? "online" : ""}`}
-            />
-            {connectionActive ? "Live updates" : "Reconnecting..."}
-          </span>
-        </div>
+        <h1>
+          GOK-Pi Dashboard
+          <span
+            className={`connection-dot ${connectionActive ? "online" : ""}`}
+            role="status"
+            aria-label={connectionActive ? "Live updates active" : "Reconnecting"}
+            title={connectionActive ? "Live updates active" : "Reconnecting"}
+          />
+        </h1>
         <div className="agent-list">
           {Object.values(agents).map((agent) => (
             <button
