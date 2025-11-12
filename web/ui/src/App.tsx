@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchAgentConfig,
   fetchAgents,
@@ -89,18 +89,18 @@ export default function App() {
     }
   }, []);
 
-  function handleLogin(token: string) {
+  const handleLogin = useCallback((token: string) => {
     setAuthToken(token);
     setAuthenticated(true);
-  }
+  }, []);
 
-  function handleLogout() {
+  const handleLogout = useCallback(() => {
     clearAuthToken();
     setAuthenticated(false);
     setAgents({});
     setSelectedAgentId(undefined);
     setConnectionActive(false);
-  }
+  }, []);
 
   if (authenticated === null) {
     return (
@@ -119,8 +119,11 @@ export default function App() {
       return;
     }
 
+    let cancelled = false;
+
     fetchAgents()
       .then((data) => {
+        if (cancelled) return;
         setAgents((prev) => {
           const next: AgentsMap = { ...prev };
           Object.entries(data).forEach(([id, agent]) => {
@@ -140,13 +143,18 @@ export default function App() {
         }
       })
       .catch((err) => {
+        if (cancelled) return;
         if (err.message.includes("Unauthorized")) {
           handleLogout();
         } else {
           setMessage(err.message);
         }
       });
-  }, [selectedAgentId, authenticated]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAgentId, authenticated, handleLogout]);
 
   useEffect(() => {
     if (!selectedAgentId || !authenticated) {
@@ -156,15 +164,20 @@ export default function App() {
       setConfigError(undefined);
       return;
     }
+
+    let cancelled = false;
     setConfigLoading(true);
+
     fetchAgentConfig(selectedAgentId)
       .then((cfg) => {
+        if (cancelled) return;
         setAgentConfig(cfg);
         setConfigDraft(formatConfigDraft(cfg));
         setConfigDirty(false);
         setConfigError(undefined);
       })
       .catch((err) => {
+        if (cancelled) return;
         if (err instanceof Error && err.message.includes("Unauthorized")) {
           handleLogout();
         } else {
@@ -174,8 +187,16 @@ export default function App() {
           setConfigError(err instanceof Error ? err.message : "Failed to load configuration");
         }
       })
-      .finally(() => setConfigLoading(false));
-  }, [selectedAgentId, authenticated]);
+      .finally(() => {
+        if (!cancelled) {
+          setConfigLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAgentId, authenticated, handleLogout]);
 
   useEffect(() => {
     if (!authenticated) {
