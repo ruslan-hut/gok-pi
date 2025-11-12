@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchAgentConfig,
   fetchAgents,
@@ -74,6 +74,7 @@ export default function App() {
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string>();
+  const isLoggingOutRef = useRef(false);
 
   // Check authentication on mount
   useEffect(() => {
@@ -95,11 +96,17 @@ export default function App() {
   }, []);
 
   const handleLogout = useCallback(() => {
+    if (isLoggingOutRef.current) return;
+    isLoggingOutRef.current = true;
     clearAuthToken();
     setAuthenticated(false);
     setAgents({});
     setSelectedAgentId(undefined);
     setConnectionActive(false);
+    // Reset the flag after a short delay to allow state updates to complete
+    setTimeout(() => {
+      isLoggingOutRef.current = false;
+    }, 100);
   }, []);
 
   if (authenticated === null) {
@@ -115,7 +122,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!authenticated) {
+    if (!authenticated || isLoggingOutRef.current) {
       return;
     }
 
@@ -123,7 +130,7 @@ export default function App() {
 
     fetchAgents()
       .then((data) => {
-        if (cancelled) return;
+        if (cancelled || isLoggingOutRef.current) return;
         setAgents((prev) => {
           const next: AgentsMap = { ...prev };
           Object.entries(data).forEach(([id, agent]) => {
@@ -143,7 +150,7 @@ export default function App() {
         }
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (cancelled || isLoggingOutRef.current) return;
         if (err.message.includes("Unauthorized")) {
           handleLogout();
         } else {
@@ -157,7 +164,7 @@ export default function App() {
   }, [selectedAgentId, authenticated, handleLogout]);
 
   useEffect(() => {
-    if (!selectedAgentId || !authenticated) {
+    if (!selectedAgentId || !authenticated || isLoggingOutRef.current) {
       setAgentConfig(null);
       setConfigDraft("");
       setConfigDirty(false);
@@ -170,14 +177,14 @@ export default function App() {
 
     fetchAgentConfig(selectedAgentId)
       .then((cfg) => {
-        if (cancelled) return;
+        if (cancelled || isLoggingOutRef.current) return;
         setAgentConfig(cfg);
         setConfigDraft(formatConfigDraft(cfg));
         setConfigDirty(false);
         setConfigError(undefined);
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (cancelled || isLoggingOutRef.current) return;
         if (err instanceof Error && err.message.includes("Unauthorized")) {
           handleLogout();
         } else {
