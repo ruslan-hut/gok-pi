@@ -102,7 +102,7 @@ Configure the following repository secrets before running the workflow:
 Trigger the workflow by pushing to `main` or manually via *Actions → Deploy Control Server → Run workflow*. The control server should be started with:
 
 ```bash
-./controlserver -addr :8080 -secret "<shared-secret>" -static /opt/gok-pi/current/app
+./gok -addr :8080 -secret "<shared-secret>" -static /opt/gok-pi/current/app
 ```
 
 With this layout, the ARM64 agent binary is exposed at `/downloads/gok-pi-agent-linux-arm64`. Devices can download it directly:
@@ -113,6 +113,26 @@ chmod +x gok-pi-agent-linux-arm64
 ```
 
 The React sidebar also surfaces a download button once the deployment workflow publishes the binary.
+
+## Control Server Service Setup
+
+Deploy the control server as a systemd service so it starts automatically and restarts on failure.
+
+1. Copy `deploy/controlserver.service` to `/etc/systemd/system/gok-controlserver.service` on the host.
+2. Replace the `{{DEPLOY_USER}}`, `{{DEPLOY_GROUP}}`, and `{{DEPLOY_PATH}}` placeholders with the real deploy account (e.g. `deploy`) and path (e.g. `/opt/gok-pi`).
+3. Optionally create `/etc/default/controlserver` to override defaults exposed via environment variables:
+   - `CONTROL_ADDR` – bind address (`:8080` by default).
+   - `CONTROL_SECRET` – shared secret expected from agents.
+   - `CONTROL_STATIC` – path to the React UI assets (defaults to `${DEPLOY_PATH}/current/app`).
+4. Ensure the GitHub Actions deploy script lands releases under `${DEPLOY_PATH}/releases/<commit>` and updates `${DEPLOY_PATH}/current`. It already fixes ownership and permissions so nginx (`www-data`) can serve the UI.
+5. Reload and enable the unit:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now gok-controlserver.service
+```
+
+Check the status with `sudo systemctl status gok-controlserver.service` and tail logs via `journalctl -u gok-controlserver.service -f`.
 
 ## Sonnen Controller's API
 

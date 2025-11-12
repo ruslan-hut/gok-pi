@@ -7,9 +7,12 @@ Wants=network-online.target
 Type=simple
 User={{DEPLOY_USER}}
 Group={{DEPLOY_GROUP}}
+Environment=CONTROL_ADDR=:8080
+Environment=CONTROL_SECRET=
+Environment=CONTROL_STATIC={{DEPLOY_PATH}}/current/app
 EnvironmentFile=-/etc/default/controlserver
 WorkingDirectory={{DEPLOY_PATH}}/current
-ExecStart={{DEPLOY_PATH}}/current/controlserver --config {{DEPLOY_PATH}}/current/config.yml
+ExecStart={{DEPLOY_PATH}}/current/gok --addr=${CONTROL_ADDR} --secret=${CONTROL_SECRET} --static=${CONTROL_STATIC}
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal

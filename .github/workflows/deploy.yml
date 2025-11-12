@@ -41,7 +41,7 @@ jobs:
           GOARCH: amd64
         run: |
           mkdir -p out
-          go build -o out/controlserver ./cmd/controlserver
+          go build -o out/gok ./cmd/controlserver
 
       - name: Build agent binary (linux/arm64)
         env:
@@ -57,8 +57,8 @@ jobs:
           mkdir -p deploy/app/downloads
           cp -r web/ui/dist/. deploy/app/
           cp out/downloads/gok-pi-agent-linux-arm64 deploy/app/downloads/
-          cp out/controlserver deploy/controlserver
-          sha256sum deploy/controlserver > deploy/SHASUMS
+          cp out/gok deploy/gok
+          sha256sum deploy/gok > deploy/SHASUMS
           sha256sum deploy/app/downloads/gok-pi-agent-linux-arm64 >> deploy/SHASUMS
           echo "${GITHUB_SHA}" > deploy/version.txt
           tar -czf release.tar.gz -C deploy .
@@ -88,7 +88,7 @@ jobs:
             RELEASE_DIR="${DEPLOY_PATH}/releases/${GITHUB_SHA}"
             mkdir -p "${RELEASE_DIR}"
             tar -xzf "/tmp/release.tar.gz" -C "${RELEASE_DIR}"
-            chmod +x "${RELEASE_DIR}/controlserver"
+            chmod +x "${RELEASE_DIR}/gok"
             chown -R www-data:www-data "${RELEASE_DIR}/app"
             find "${RELEASE_DIR}/app" -type d -print0 | xargs -0 chmod 755
             find "${RELEASE_DIR}/app" -type f -print0 | xargs -0 chmod 644
