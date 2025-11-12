@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"gok-pi/battery/entity"
 )
 
 func testLogger() *slog.Logger {
@@ -129,3 +132,53 @@ func TestHandleAgentConfigPutSuccess(t *testing.T) {
 	}
 }
 
+func TestOnAgentConfigSyncSeedsStore(t *testing.T) {
+	srv := New(Config{}, testLogger())
+
+	msg := AgentConfigSync{
+		Type: "agent.config",
+		Config: AgentConfigSnapshot{
+			Batteries: []entity.BatteryConfig{
+				{
+					Name:          "battery-1",
+					Url:           "http://example",
+					Token:         "secret",
+					Enabled:       true,
+					CapacityLimit: 400,
+				},
+			},
+			Schedules: []entity.Schedule{
+				{
+					StartTime:   "08:00",
+					StopTime:    "09:00",
+					BatteryName: "battery-1",
+					Enabled:     true,
+					PowerLimit:  200,
+					SocLimit:    50,
+				},
+			},
+		},
+		SentAt: time.Now().UTC(),
+	}
+
+	srv.onAgentConfigSync("agent-1", msg)
+
+	cfg, ok := srv.configs.Get("agent-1")
+	if !ok {
+		t.Fatal("expected config to be seeded")
+	}
+	if cfg.Revision != 1 {
+		t.Fatalf("expected revision 1, got %d", cfg.Revision)
+	}
+
+	// Second sync should not overwrite revision.
+	msg.Config.Batteries[0].CapacityLimit = 999
+	srv.onAgentConfigSync("agent-1", msg)
+	cfg2, _ := srv.configs.Get("agent-1")
+	if cfg2.Revision != 1 {
+		t.Fatalf("expected revision to remain 1, got %d", cfg2.Revision)
+	}
+	if cfg2.Batteries[0].CapacityLimit != 400 {
+		t.Fatalf("expected original capacity limit preserved, got %d", cfg2.Batteries[0].CapacityLimit)
+	}
+}

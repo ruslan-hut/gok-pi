@@ -129,6 +129,35 @@ func (cs *ConfigStore) Save(agentID string, req AgentConfigRequest) (AgentConfig
 	return cloneAgentConfig(next), nil
 }
 
+// Seed inserts a configuration when no record exists for the agent yet. It returns the resulting config and
+// whether it was inserted.
+func (cs *ConfigStore) Seed(agentID string, batteries []entity.BatteryConfig, schedules []entity.Schedule, ts time.Time) (AgentConfig, bool, error) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	if current, exists := cs.records[agentID]; exists {
+		return cloneAgentConfig(current), false, nil
+	}
+
+	cfg := AgentConfig{
+		Revision:  1,
+		UpdatedAt: ts.UTC(),
+		Batteries: cloneBatteryConfigs(batteries),
+		Schedules: cloneSchedules(schedules),
+	}
+	if cfg.UpdatedAt.IsZero() {
+		cfg.UpdatedAt = time.Now().UTC()
+	}
+
+	cs.records[agentID] = cfg
+	if err := cs.persistLocked(); err != nil {
+		delete(cs.records, agentID)
+		return AgentConfig{}, false, err
+	}
+
+	return cloneAgentConfig(cfg), true, nil
+}
+
 // snapshot returns a copy of all stored configs.
 func (cs *ConfigStore) snapshot() configSnapshot {
 	cs.mu.RLock()

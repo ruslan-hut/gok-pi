@@ -30,7 +30,8 @@ const (
 )
 
 const (
-	messageTypeConfigPush = "server.config.push"
+	messageTypeConfigPush  = "server.config.push"
+	messageTypeAgentConfig = "agent.config"
 )
 
 type AgentMetadata struct {
@@ -91,6 +92,7 @@ type Client struct {
 	telemetryCh chan observers.Snapshot
 	commands    chan Command
 	configs     chan ConfigUpdate
+	configSync  chan configSnapshot
 }
 
 func New(cfg config.RemoteControl, meta AgentMetadata, log *slog.Logger) *Client {
@@ -116,6 +118,7 @@ func New(cfg config.RemoteControl, meta AgentMetadata, log *slog.Logger) *Client
 		telemetryCh: make(chan observers.Snapshot, 64),
 		commands:    make(chan Command, 32),
 		configs:     make(chan ConfigUpdate, 8),
+		configSync:  make(chan configSnapshot, 4),
 	}
 }
 
@@ -125,6 +128,18 @@ func (c *Client) Commands() <-chan Command {
 
 func (c *Client) ConfigUpdates() <-chan ConfigUpdate {
 	return c.configs
+}
+
+func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedules []entity.Schedule) {
+	snapshot := configSnapshot{
+		Batteries: cloneBatteryConfigs(batteries),
+		Schedules: cloneSchedules(schedules),
+	}
+	select {
+	case c.configSync <- snapshot:
+	default:
+		c.log.With(slog.String("component", "config")).Warn("config snapshot dropped; buffer full")
+	}
 }
 
 func (c *Client) Run(ctx context.Context) {
@@ -276,6 +291,10 @@ func (c *Client) writeLoop(ctx context.Context, conn *websocket.Conn) error {
 			if err := c.writeTelemetry(ctx, conn, snapshot); err != nil {
 				return err
 			}
+		case cfg := <-c.configSync:
+			if err := c.writeConfigSnapshot(ctx, conn, cfg); err != nil {
+				return err
+			}
 		case <-heartbeatTicker.C:
 			if err := c.writeHeartbeat(ctx, conn); err != nil {
 				return err
@@ -327,6 +346,25 @@ func (c *Client) writeTelemetry(ctx context.Context, conn *websocket.Conn, snaps
 	}
 	if err := wsjson.Write(ctx, conn, msg); err != nil {
 		return fmt.Errorf("send telemetry: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) writeConfigSnapshot(ctx context.Context, conn *websocket.Conn, snapshot configSnapshot) error {
+	msg := struct {
+		Type      string        `json:"type"`
+		Timestamp time.Time     `json:"sent_at"`
+		Config    configPayload `json:"config"`
+	}{
+		Type:      messageTypeAgentConfig,
+		Timestamp: time.Now().UTC(),
+		Config: configPayload{
+			Batteries: snapshot.Batteries,
+			Schedules: snapshot.Schedules,
+		},
+	}
+	if err := wsjson.Write(ctx, conn, msg); err != nil {
+		return fmt.Errorf("send config snapshot: %w", err)
 	}
 	return nil
 }
@@ -387,6 +425,34 @@ type ConfigUpdate struct {
 	AgentID string
 	Config  AgentConfig
 	SentAt  time.Time
+}
+
+type configSnapshot struct {
+	Batteries []entity.BatteryConfig
+	Schedules []entity.Schedule
+}
+
+type configPayload struct {
+	Batteries []entity.BatteryConfig `json:"batteries"`
+	Schedules []entity.Schedule      `json:"schedules"`
+}
+
+func cloneBatteryConfigs(in []entity.BatteryConfig) []entity.BatteryConfig {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]entity.BatteryConfig, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneSchedules(in []entity.Schedule) []entity.Schedule {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]entity.Schedule, len(in))
+	copy(out, in)
+	return out
 }
 
 func detectVersion() string {

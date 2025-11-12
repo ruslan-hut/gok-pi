@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"time"
+
+	"gok-pi/battery/entity"
 )
 
 const (
@@ -97,4 +99,15 @@ type AgentSummary struct {
 	Agent     AgentDescriptor              `json:"agent"`
 	LastSeen  time.Time                    `json:"last_seen"`
 	Telemetry map[string]TelemetrySnapshot `json:"telemetry"`
+}
+
+type AgentConfigSnapshot struct {
+	Batteries []entity.BatteryConfig `json:"batteries"`
+	Schedules []entity.Schedule      `json:"schedules"`
+}
+
+type AgentConfigSync struct {
+	Type   string              `json:"type"`
+	Config AgentConfigSnapshot `json:"config"`
+	SentAt time.Time           `json:"sent_at"`
 }

@@ -411,6 +411,27 @@ func (s *Server) pushConfigToAgent(agentID string, cfg AgentConfig) error {
 	return agent.pushConfig(cfg)
 }
 
+func (s *Server) onAgentConfigSync(agentID string, sync AgentConfigSync) {
+	cfg, seeded, err := s.configs.Seed(agentID, sync.Config.Batteries, sync.Config.Schedules, sync.SentAt)
+	if err != nil {
+		s.log.With(
+			slog.String("agent", agentID),
+			slog.Any("error", err),
+		).Warn("seed agent config from snapshot")
+		return
+	}
+	if !seeded {
+		return
+	}
+
+	s.log.With(
+		slog.String("agent", agentID),
+		slog.Int("revision", cfg.Revision),
+	).Info("seeded agent config from agent snapshot")
+
+	s.broadcastConfigUpdated(agentID, cfg)
+}
+
 func (s *Server) handleVersionManifest(downloadPath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

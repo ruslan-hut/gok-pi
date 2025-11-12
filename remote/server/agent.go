@@ -16,6 +16,7 @@ const (
 	agentMessageTelemetry = "agent.telemetry"
 	agentMessageHeartbeat = "agent.heartbeat"
 	agentMessageCommand   = "agent.command"
+	agentMessageConfig    = "agent.config"
 
 	serverMessageConfigPush = "server.config.push"
 )
@@ -164,6 +165,13 @@ func (a *agentConnection) handleMessage(message []byte) {
 			return
 		}
 		a.updateHeartbeat(heartbeat)
+	case agentMessageConfig:
+		var cfg AgentConfigSync
+		if err := json.Unmarshal(message, &cfg); err != nil {
+			a.log().With(slog.Any("error", err)).Warn("decode config sync")
+			return
+		}
+		a.s.onAgentConfigSync(a.id, cfg)
 	default:
 		a.log().With(slog.String("type", base.Type)).Debug("received unhandled agent message")
 	}

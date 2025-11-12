@@ -139,3 +139,53 @@ func TestConfigStore_TimestampsCloned(t *testing.T) {
 	}
 }
 
+func TestConfigStore_Seed(t *testing.T) {
+	store, err := NewConfigStore("")
+	if err != nil {
+		t.Fatalf("NewConfigStore: %v", err)
+	}
+
+	now := time.Now().UTC()
+	cfg, seeded, err := store.Seed("agent-1", []entity.BatteryConfig{
+		{
+			Name:          "battery-1",
+			Url:           "http://example",
+			Token:         "token",
+			Enabled:       true,
+			CapacityLimit: 200,
+		},
+	}, []entity.Schedule{
+		{
+			StartTime:   "10:00",
+			StopTime:    "12:00",
+			BatteryName: "battery-1",
+			Enabled:     true,
+			PowerLimit:  150,
+			SocLimit:    60,
+		},
+	}, now)
+	if err != nil {
+		t.Fatalf("Seed: %v", err)
+	}
+	if !seeded {
+		t.Fatal("expected seed to insert record")
+	}
+	if cfg.Revision != 1 {
+		t.Fatalf("expected revision 1, got %d", cfg.Revision)
+	}
+	if !cfg.UpdatedAt.Equal(now) {
+		t.Fatalf("expected UpdatedAt to match provided timestamp, got %s", cfg.UpdatedAt)
+	}
+
+	// Second seed should no-op.
+	cfg2, seeded, err := store.Seed("agent-1", nil, nil, time.Now())
+	if err != nil {
+		t.Fatalf("Seed second: %v", err)
+	}
+	if seeded {
+		t.Fatal("expected second seed to be ignored")
+	}
+	if cfg2.Revision != cfg.Revision {
+		t.Fatalf("expected revision to remain %d, got %d", cfg.Revision, cfg2.Revision)
+	}
+}
