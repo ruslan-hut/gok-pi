@@ -41,6 +41,10 @@ body {
   margin-bottom: 1rem;
 }
 
+.sidebar .status-bar {
+  margin-bottom: 1.25rem;
+}
+
 .agent-list {
   display: flex;
   flex-direction: column;
