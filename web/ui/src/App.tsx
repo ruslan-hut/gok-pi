@@ -20,6 +20,16 @@ const defaultCommandState: CommandState = {
   socLimit: 50,
 };
 
+const OFFLINE_GRACE_MS = 2 * 60 * 1000;
+
+function computeConnectionStatus(agent: AgentSummary): boolean {
+  const lastSeen = new Date(agent.last_seen).getTime();
+  if (Number.isNaN(lastSeen)) {
+    return false;
+  }
+  return Date.now() - lastSeen <= OFFLINE_GRACE_MS;
+}
+
 function getWsUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const host = window.location.host;
@@ -43,7 +53,7 @@ export default function App() {
             next[id] = {
               ...(prev[id] ?? agent),
               ...agent,
-              connected: agent.connected ?? true,
+              connected: computeConnectionStatus(agent),
             };
           });
           return next;
@@ -117,7 +127,10 @@ export default function App() {
   function updateAgent(agent: AgentSummary) {
     setAgents((prev) => ({
       ...prev,
-      [agent.agent.id]: { ...agent, connected: true },
+      [agent.agent.id]: {
+        ...agent,
+        connected: computeConnectionStatus(agent),
+      },
     }));
   }
 
@@ -169,7 +182,7 @@ export default function App() {
             next[agent.agent.id] = {
               ...(existing ?? agent),
               ...agent,
-              connected: true,
+              connected: computeConnectionStatus(agent),
             };
           });
           Object.keys(next).forEach((id) => {
@@ -197,6 +210,27 @@ export default function App() {
         break;
     }
   }
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setAgents((prev) => {
+        let changed = false;
+        const next: AgentsMap = {};
+        for (const [id, agent] of Object.entries(prev)) {
+          const connected = agent.connected !== false && computeConnectionStatus(agent);
+          if (connected !== agent.connected) {
+            changed = true;
+          }
+          next[id] = { ...agent, connected };
+        }
+        return changed ? next : prev;
+      });
+    }, 30 * 1000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, []);
 
   async function handleCommand(
     command: string,
