@@ -88,11 +88,13 @@ type Client struct {
 
 	agent AgentInfo
 
-	startOnce   sync.Once
-	telemetryCh chan observers.Snapshot
-	commands    chan Command
-	configs     chan ConfigUpdate
-	configSync  chan configSnapshot
+	startOnce       sync.Once
+	telemetryCh     chan observers.Snapshot
+	commands        chan Command
+	configs         chan ConfigUpdate
+	configSync      chan configSnapshot
+	initialConfig   *configSnapshot
+	initialConfigMu sync.RWMutex
 }
 
 func New(cfg config.RemoteControl, meta AgentMetadata, log *slog.Logger) *Client {
@@ -135,6 +137,9 @@ func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedul
 		Batteries: cloneBatteryConfigs(batteries),
 		Schedules: cloneSchedules(schedules),
 	}
+	c.initialConfigMu.Lock()
+	c.initialConfig = &snapshot
+	c.initialConfigMu.Unlock()
 	select {
 	case c.configSync <- snapshot:
 	default:
@@ -319,6 +324,14 @@ func (c *Client) sendInitialSnapshots(ctx context.Context, conn *websocket.Conn)
 	initial := observers.GetSnapshots()
 	for _, snap := range initial {
 		if err := c.writeTelemetry(ctx, conn, snap); err != nil {
+			return err
+		}
+	}
+	c.initialConfigMu.RLock()
+	cfg := c.initialConfig
+	c.initialConfigMu.RUnlock()
+	if cfg != nil {
+		if err := c.writeConfigSnapshot(ctx, conn, *cfg); err != nil {
 			return err
 		}
 	}
