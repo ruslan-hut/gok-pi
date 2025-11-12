@@ -195,13 +195,6 @@ export default function App() {
             {connectionActive ? "Live updates" : "Reconnecting..."}
           </span>
         </div>
-        <a
-          className="download-link"
-          href="/downloads/gok-pi-agent-linux-arm64"
-          download
-        >
-          ⬇ Download ARM64 Agent
-        </a>
         <div className="agent-list">
           {Object.values(agents).map((agent) => (
             <button

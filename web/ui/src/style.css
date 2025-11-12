@@ -200,3 +200,66 @@ button.primary {
   background: #34d399;
 }
 
+@media (max-width: 960px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+    padding: 1.25rem 1.5rem;
+  }
+
+  .content {
+    padding: 1.5rem;
+  }
+
+  .status-bar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .agent-list {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+
+  .agent-card {
+    min-width: 220px;
+  }
+}
+
+@media (max-width: 600px) {
+  .content {
+    padding: 1.25rem;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .controls {
+    gap: 0.5rem;
+  }
+
+  .control-row {
+    flex-direction: column;
+  }
+
+  .control-row button,
+  .control-row input {
+    width: 100%;
+  }
+
+  .badge {
+    font-size: 0.7rem;
+  }
+}
+
