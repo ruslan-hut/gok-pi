@@ -76,6 +76,17 @@ export default function App() {
   const [configError, setConfigError] = useState<string>();
   const isLoggingOutRef = useRef(false);
   const handleLogoutRef = useRef<() => void>();
+  const selectedAgentIdRef = useRef<string | undefined>();
+  const configDirtyRef = useRef(false);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    selectedAgentIdRef.current = selectedAgentId;
+  }, [selectedAgentId]);
+
+  useEffect(() => {
+    configDirtyRef.current = configDirty;
+  }, [configDirty]);
 
   // Check authentication on mount
   useEffect(() => {
@@ -112,18 +123,111 @@ export default function App() {
     handleLogoutRef.current = handleLogout;
   }, [handleLogout]);
 
-  if (authenticated === null) {
-    return (
-      <div className="app">
-        <div className="empty-state">Loading...</div>
-      </div>
-    );
-  }
+  // Helper functions for message handling
+  const updateAgent = useCallback((agent: AgentSummary) => {
+    setAgents((prev: AgentsMap) => ({
+      ...prev,
+      [agent.agent.id]: {
+        ...agent,
+        connected: computeConnectionStatus(agent),
+      },
+    }));
+  }, []);
 
-  if (!authenticated) {
-    return <Login onLogin={handleLogin} />;
-  }
+  const updateTelemetry = useCallback((agentId: string, snapshot: TelemetrySnapshot) => {
+    setAgents((prev: AgentsMap) => {
+      const current = prev[agentId];
+      if (!current) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [agentId]: {
+          ...current,
+          telemetry: {
+            ...current.telemetry,
+            [snapshot.name]: snapshot,
+          },
+        },
+      };
+    });
+  }, []);
 
+  const removeAgent = useCallback((agentId: string) => {
+    let wasConnected = false;
+    setAgents((prev: AgentsMap) => {
+      const next = { ...prev };
+      const current = next[agentId];
+      if (!current) {
+        return prev;
+      }
+      wasConnected = current.connected !== false;
+      next[agentId] = { ...current, connected: false };
+      return next;
+    });
+    if (wasConnected) {
+      setMessage(`Agent ${agentId} disconnected`);
+    }
+  }, []);
+
+  const handleMessage = useCallback((message: DashboardMessage) => {
+    switch (message.type) {
+      case "agents.snapshot": {
+        setAgents((prev: AgentsMap) => {
+          const next: AgentsMap = { ...prev };
+          const seen = new Set<string>();
+          message.agents.forEach((agent) => {
+            seen.add(agent.agent.id);
+            const existing = prev[agent.agent.id];
+            next[agent.agent.id] = {
+              ...(existing ?? agent),
+              ...agent,
+              connected: computeConnectionStatus(agent),
+            };
+          });
+          Object.keys(next).forEach((id) => {
+            if (!seen.has(id)) {
+              next[id] = { ...next[id], connected: false };
+            }
+          });
+          return next;
+        });
+        setSelectedAgentId((current: string | undefined) => {
+          if (!current && message.agents.length > 0) {
+            return message.agents[0].agent.id;
+          }
+          return current;
+        });
+        break;
+      }
+      case "agent.summary":
+        updateAgent(message.agent);
+        break;
+      case "agent.telemetry":
+        updateTelemetry(message.agent_id, message.snapshot);
+        break;
+      case "agent.removed":
+        removeAgent(message.agent_id);
+        break;
+      case "config.updated":
+        if (message.agent_id !== selectedAgentIdRef.current) {
+          break;
+        }
+        setAgentConfig(message.config);
+        setConfigError(undefined);
+        if (configDirtyRef.current) {
+          setMessage("Remote configuration changed while editing; draft unchanged.");
+        } else {
+          setConfigDraft(formatConfigDraft(message.config));
+          setConfigDirty(false);
+        }
+        break;
+      default:
+        break;
+    }
+  }, [updateAgent, updateTelemetry, removeAgent]);
+
+  // Fetch agents when authenticated
   useEffect(() => {
     if (!authenticated || isLoggingOutRef.current) {
       return;
@@ -134,7 +238,7 @@ export default function App() {
     fetchAgents()
       .then((data) => {
         if (cancelled || isLoggingOutRef.current) return;
-        setAgents((prev) => {
+        setAgents((prev: AgentsMap) => {
           const next: AgentsMap = { ...prev };
           Object.entries(data).forEach(([id, agent]) => {
             next[id] = {
@@ -145,12 +249,15 @@ export default function App() {
           });
           return next;
         });
-        if (!selectedAgentId) {
-          const firstAgent = Object.values(data)[0];
-          if (firstAgent) {
-            setSelectedAgentId(firstAgent.agent.id);
+        setSelectedAgentId((current: string | undefined) => {
+          if (!current) {
+            const firstAgent = Object.values(data)[0];
+            if (firstAgent) {
+              return firstAgent.agent.id;
+            }
           }
-        }
+          return current;
+        });
       })
       .catch((err) => {
         if (cancelled || isLoggingOutRef.current) return;
@@ -164,8 +271,9 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedAgentId, authenticated]);
+  }, [authenticated]);
 
+  // Fetch agent config when selected agent changes
   useEffect(() => {
     if (!selectedAgentId || !authenticated || isLoggingOutRef.current) {
       setAgentConfig(null);
@@ -208,6 +316,7 @@ export default function App() {
     };
   }, [selectedAgentId, authenticated]);
 
+  // WebSocket connection for real-time updates
   useEffect(() => {
     if (!authenticated) {
       return;
@@ -252,125 +361,12 @@ export default function App() {
         socket.close();
       }
     };
-  }, [authenticated]);
+  }, [authenticated, handleMessage]);
 
-  const selectedAgent = selectedAgentId ? agents[selectedAgentId] : undefined;
-  const selectedAgentOnline = selectedAgent
-    ? selectedAgent.connected !== false
-    : false;
-
-  const batteries = useMemo(() => {
-    if (!selectedAgent) {
-      return [];
-    }
-    return Object.values(selectedAgent.telemetry).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
-  }, [selectedAgent]);
-
-  function updateAgent(agent: AgentSummary) {
-    setAgents((prev) => ({
-      ...prev,
-      [agent.agent.id]: {
-        ...agent,
-        connected: computeConnectionStatus(agent),
-      },
-    }));
-  }
-
-  function updateTelemetry(agentId: string, snapshot: TelemetrySnapshot) {
-    setAgents((prev) => {
-      const current = prev[agentId];
-      if (!current) {
-        return prev;
-      }
-      return {
-        ...prev,
-        [agentId]: {
-          ...current,
-          telemetry: {
-            ...current.telemetry,
-            [snapshot.name]: snapshot,
-          },
-        },
-      };
-    });
-  }
-
-  function removeAgent(agentId: string) {
-    let wasConnected = false;
-    setAgents((prev) => {
-      const next = { ...prev };
-      const current = next[agentId];
-      if (!current) {
-        return prev;
-      }
-      wasConnected = current.connected !== false;
-      next[agentId] = { ...current, connected: false };
-      return next;
-    });
-    if (wasConnected) {
-      setMessage(`Agent ${agentId} disconnected`);
-    }
-  }
-
-  function handleMessage(message: DashboardMessage) {
-    switch (message.type) {
-      case "agents.snapshot": {
-        setAgents((prev) => {
-          const next: AgentsMap = { ...prev };
-          const seen = new Set<string>();
-          message.agents.forEach((agent) => {
-            seen.add(agent.agent.id);
-            const existing = prev[agent.agent.id];
-            next[agent.agent.id] = {
-              ...(existing ?? agent),
-              ...agent,
-              connected: computeConnectionStatus(agent),
-            };
-          });
-          Object.keys(next).forEach((id) => {
-            if (!seen.has(id)) {
-              next[id] = { ...next[id], connected: false };
-            }
-          });
-          return next;
-        });
-        if (!selectedAgentId && message.agents.length > 0) {
-          setSelectedAgentId(message.agents[0].agent.id);
-        }
-        break;
-      }
-      case "agent.summary":
-        updateAgent(message.agent);
-        break;
-      case "agent.telemetry":
-        updateTelemetry(message.agent_id, message.snapshot);
-        break;
-      case "agent.removed":
-        removeAgent(message.agent_id);
-        break;
-      case "config.updated":
-        if (message.agent_id !== selectedAgentId) {
-          break;
-        }
-        setAgentConfig(message.config);
-        setConfigError(undefined);
-        if (configDirty) {
-          setMessage("Remote configuration changed while editing; draft unchanged.");
-        } else {
-          setConfigDraft(formatConfigDraft(message.config));
-          setConfigDirty(false);
-        }
-        break;
-      default:
-        break;
-    }
-  }
-
+  // Update connection status periodically
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setAgents((prev) => {
+      setAgents((prev: AgentsMap) => {
         let changed = false;
         const next: AgentsMap = {};
         for (const [id, agent] of Object.entries(prev)) {
@@ -388,6 +384,32 @@ export default function App() {
       window.clearInterval(interval);
     };
   }, []);
+
+  const selectedAgent = selectedAgentId ? agents[selectedAgentId] : undefined;
+  const selectedAgentOnline = selectedAgent
+    ? selectedAgent.connected !== false
+    : false;
+
+  const batteries = useMemo(() => {
+    if (!selectedAgent) {
+      return [];
+    }
+    return Object.values(selectedAgent.telemetry).sort((a: TelemetrySnapshot, b: TelemetrySnapshot) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [selectedAgent]);
+
+  if (authenticated === null) {
+    return (
+      <div className="app">
+        <div className="empty-state">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   async function handleCommand(
     command: string,
