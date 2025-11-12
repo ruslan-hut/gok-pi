@@ -89,6 +89,9 @@ jobs:
             mkdir -p "${RELEASE_DIR}"
             tar -xzf "/tmp/release.tar.gz" -C "${RELEASE_DIR}"
             chmod +x "${RELEASE_DIR}/controlserver"
+            chown -R www-data:www-data "${RELEASE_DIR}/app"
+            find "${RELEASE_DIR}/app" -type d -print0 | xargs -0 chmod 755
+            find "${RELEASE_DIR}/app" -type f -print0 | xargs -0 chmod 644
             ln -sfn "${RELEASE_DIR}" "${DEPLOY_PATH}/current"
             rm -f "/tmp/release.tar.gz"
             if [ -n "${{ secrets.DEPLOY_RESTART_CMD }}" ]; then

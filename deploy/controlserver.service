@@ -1,0 +1,20 @@
+[Unit]
+Description=GOK Control Server
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{DEPLOY_USER}}
+Group={{DEPLOY_GROUP}}
+EnvironmentFile=-/etc/default/controlserver
+WorkingDirectory={{DEPLOY_PATH}}/current
+ExecStart={{DEPLOY_PATH}}/current/controlserver --config {{DEPLOY_PATH}}/current/config.yml
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
