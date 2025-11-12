@@ -19,6 +19,8 @@ type Config struct {
 	AgentBinary  string
 	VersionFile  string
 	ConfigStore  string
+	UIUsername   string
+	UIPassword   string
 }
 
 type TelemetrySnapshot struct {

@@ -1,8 +1,67 @@
 import type { AgentConfig, AgentSummary } from "./types";
 
-export async function fetchAgents(): Promise<Record<string, AgentSummary>> {
-  const res = await fetch("/api/agents");
+const AUTH_TOKEN_KEY = "gok-pi-auth-token";
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setAuthToken(token: string) {
+  if (token) {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  }
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+export interface LoginResponse {
+  token: string;
+  expires_at: string;
+}
+
+export async function login(
+  username: string,
+  password: string,
+): Promise<LoginResponse> {
+  const res = await fetch("/api/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ username, password }),
+  });
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("Invalid username or password");
+    }
+    throw new Error(`Login failed: ${res.statusText}`);
+  }
+  return (await res.json()) as LoginResponse;
+}
+
+const headerAuthToken = "X-Auth-Token";
+
+function getAuthHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  if (token) {
+    return { [headerAuthToken]: token };
+  }
+  return {};
+}
+
+export async function fetchAgents(): Promise<Record<string, AgentSummary>> {
+  const res = await fetch("/api/agents", {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      clearAuthToken();
+      throw new Error("Unauthorized. Please log in again.");
+    }
     throw new Error(`Failed to load agents: ${res.statusText}`);
   }
   const data = (await res.json()) as AgentSummary[];
@@ -30,10 +89,15 @@ export async function sendCommand(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
     },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      clearAuthToken();
+      throw new Error("Unauthorized. Please log in again.");
+    }
     const text = await res.text();
     throw new Error(text || "Command failed");
   }
@@ -47,6 +111,7 @@ export async function fetchAgentConfig(
     {
       headers: {
         "Accept": "application/json",
+        ...getAuthHeaders(),
       },
     },
   );
@@ -54,6 +119,10 @@ export async function fetchAgentConfig(
     return null;
   }
   if (!res.ok) {
+    if (res.status === 401) {
+      clearAuthToken();
+      throw new Error("Unauthorized. Please log in again.");
+    }
     throw new Error(`Failed to load config: ${res.statusText}`);
   }
   return (await res.json()) as AgentConfig;
@@ -75,11 +144,16 @@ export async function updateAgentConfig(
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
+        ...getAuthHeaders(),
       },
       body: JSON.stringify(payload),
     },
   );
   if (!res.ok) {
+    if (res.status === 401) {
+      clearAuthToken();
+      throw new Error("Unauthorized. Please log in again.");
+    }
     const text = await res.text();
     throw new Error(text || "Failed to update config");
   }

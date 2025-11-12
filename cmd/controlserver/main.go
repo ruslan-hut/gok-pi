@@ -12,6 +12,8 @@ import (
 const (
 	envAgentBinary = "GOK_CONTROL_AGENT_BINARY"
 	envVersionFile = "GOK_CONTROL_VERSION_FILE"
+	envUIUsername  = "GOK_UI_USERNAME"
+	envUIPassword  = "GOK_UI_PASSWORD"
 )
 
 func main() {
@@ -33,6 +35,8 @@ func main() {
 		AgentBinary:  strings.TrimSpace(*agentBinary),
 		VersionFile:  strings.TrimSpace(*versionFile),
 		ConfigStore:  strings.TrimSpace(*configStore),
+		UIUsername:   envOrDefault(envUIUsername, ""),
+		UIPassword:   envOrDefault(envUIPassword, ""),
 	}, logger)
 
 	if err := srv.ListenAndServe(*addr); err != nil {

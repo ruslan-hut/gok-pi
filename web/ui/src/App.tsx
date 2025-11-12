@@ -4,7 +4,11 @@ import {
   fetchAgents,
   sendCommand,
   updateAgentConfig,
+  getAuthToken,
+  setAuthToken,
+  clearAuthToken,
 } from "./api";
+import Login from "./Login";
 import type {
   AgentConfig,
   AgentSummary,
@@ -48,10 +52,16 @@ function computeConnectionStatus(agent: AgentSummary): boolean {
 function getWsUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const host = window.location.host;
-  return `${protocol}://${host}/api/ui`;
+  const token = getAuthToken();
+  const url = `${protocol}://${host}/api/ui`;
+  if (token) {
+    return `${url}?token=${encodeURIComponent(token)}`;
+  }
+  return url;
 }
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [agents, setAgents] = useState<AgentsMap>({});
   const [selectedAgentId, setSelectedAgentId] = useState<string>();
   const [connectionActive, setConnectionActive] = useState(false);
@@ -65,7 +75,50 @@ export default function App() {
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string>();
 
+  // Check authentication on mount
   useEffect(() => {
+    const token = getAuthToken();
+    if (token) {
+      // We have a token, assume authenticated
+      // If token is invalid, API calls will handle it
+      setAuthenticated(true);
+    } else {
+      // No token, show login form
+      // Login endpoint will handle case where auth is not configured
+      setAuthenticated(false);
+    }
+  }, []);
+
+  function handleLogin(token: string) {
+    setAuthToken(token);
+    setAuthenticated(true);
+  }
+
+  function handleLogout() {
+    clearAuthToken();
+    setAuthenticated(false);
+    setAgents({});
+    setSelectedAgentId(undefined);
+    setConnectionActive(false);
+  }
+
+  if (authenticated === null) {
+    return (
+      <div className="app">
+        <div className="empty-state">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+  useEffect(() => {
+    if (!authenticated) {
+      return;
+    }
+
     fetchAgents()
       .then((data) => {
         setAgents((prev) => {
@@ -86,11 +139,17 @@ export default function App() {
           }
         }
       })
-      .catch((err) => setMessage(err.message));
-  }, [selectedAgentId]);
+      .catch((err) => {
+        if (err.message.includes("Unauthorized")) {
+          handleLogout();
+        } else {
+          setMessage(err.message);
+        }
+      });
+  }, [selectedAgentId, authenticated]);
 
   useEffect(() => {
-    if (!selectedAgentId) {
+    if (!selectedAgentId || !authenticated) {
       setAgentConfig(null);
       setConfigDraft("");
       setConfigDirty(false);
@@ -106,21 +165,29 @@ export default function App() {
         setConfigError(undefined);
       })
       .catch((err) => {
-        setAgentConfig(null);
-        setConfigDraft(formatConfigDraft(null));
-        setConfigDirty(false);
-        setConfigError(err instanceof Error ? err.message : "Failed to load configuration");
+        if (err instanceof Error && err.message.includes("Unauthorized")) {
+          handleLogout();
+        } else {
+          setAgentConfig(null);
+          setConfigDraft(formatConfigDraft(null));
+          setConfigDirty(false);
+          setConfigError(err instanceof Error ? err.message : "Failed to load configuration");
+        }
       })
       .finally(() => setConfigLoading(false));
-  }, [selectedAgentId]);
+  }, [selectedAgentId, authenticated]);
 
   useEffect(() => {
+    if (!authenticated) {
+      return;
+    }
+
     let isActive = true;
     let retryMs = 1000;
     let socket: WebSocket | null = null;
 
     const connect = () => {
-      if (!isActive) return;
+      if (!isActive || !authenticated) return;
       socket = new WebSocket(getWsUrl());
       socket.onopen = () => {
         setConnectionActive(true);
@@ -133,7 +200,7 @@ export default function App() {
       };
       socket.onclose = () => {
         setConnectionActive(false);
-        if (!isActive) {
+        if (!isActive || !authenticated) {
           return;
         }
         setTimeout(() => {
@@ -154,7 +221,7 @@ export default function App() {
         socket.close();
       }
     };
-  }, []);
+  }, [authenticated]);
 
   const selectedAgent = selectedAgentId ? agents[selectedAgentId] : undefined;
   const selectedAgentOnline = selectedAgent
@@ -359,15 +426,20 @@ export default function App() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <h1>
-          GOK-Pi Dashboard
-          <span
-            className={`connection-dot ${connectionActive ? "online" : ""}`}
-            role="status"
-            aria-label={connectionActive ? "Live updates active" : "Reconnecting"}
-            title={connectionActive ? "Live updates active" : "Reconnecting"}
-          />
-        </h1>
+        <div className="sidebar-header">
+          <h1>
+            GOK-Pi Dashboard
+            <span
+              className={`connection-dot ${connectionActive ? "online" : ""}`}
+              role="status"
+              aria-label={connectionActive ? "Live updates active" : "Reconnecting"}
+              title={connectionActive ? "Live updates active" : "Reconnecting"}
+            />
+          </h1>
+          <button className="logout-button" onClick={handleLogout} title="Logout">
+            Logout
+          </button>
+        </div>
         <div className="agent-list">
           {Object.values(agents).map((agent) => (
             <button

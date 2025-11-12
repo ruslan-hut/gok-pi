@@ -31,6 +31,7 @@ type Server struct {
 	uiClient map[*uiConnection]struct{}
 
 	configs *ConfigStore
+	auth    *authManager
 }
 
 func New(cfg Config, log *slog.Logger) *Server {
@@ -53,15 +54,17 @@ func New(cfg Config, log *slog.Logger) *Server {
 		agents:   make(map[string]*agentConnection),
 		uiClient: make(map[*uiConnection]struct{}),
 		configs:  store,
+		auth:     newAuthManager(cfg.UIUsername, cfg.UIPassword, log),
 	}
 }
 
 func (s *Server) ListenAndServe(addr string) error {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/login", s.handleLogin)
 	mux.HandleFunc("/api/agent", s.handleAgentWS)
-	mux.HandleFunc("/api/ui", s.handleUIWS)
-	mux.HandleFunc("/api/agents", s.handleAgents)
-	mux.HandleFunc("/api/agents/", s.handleAgentRoutes)
+	mux.HandleFunc("/api/ui", s.requireAuthWS(s.handleUIWS))
+	mux.HandleFunc("/api/agents", s.requireAuth(s.handleAgents))
+	mux.HandleFunc("/api/agents/", s.requireAuth(s.handleAgentRoutes))
 
 	if s.cfg.UIStaticDir != "" {
 		fs := http.FileServer(http.Dir(s.cfg.UIStaticDir))
