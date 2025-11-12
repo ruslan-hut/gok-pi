@@ -371,10 +371,7 @@ func (c *Client) writeConfigSnapshot(ctx context.Context, conn *websocket.Conn, 
 	}{
 		Type:      messageTypeAgentConfig,
 		Timestamp: time.Now().UTC(),
-		Config: configPayload{
-			Batteries: snapshot.Batteries,
-			Schedules: snapshot.Schedules,
-		},
+		Config:    configPayload(snapshot),
 	}
 	if err := wsjson.Write(ctx, conn, msg); err != nil {
 		return fmt.Errorf("send config snapshot: %w", err)
