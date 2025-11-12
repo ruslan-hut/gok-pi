@@ -75,6 +75,7 @@ export default function App() {
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string>();
   const isLoggingOutRef = useRef(false);
+  const handleLogoutRef = useRef<() => void>();
 
   // Check authentication on mount
   useEffect(() => {
@@ -93,6 +94,7 @@ export default function App() {
   const handleLogin = useCallback((token: string) => {
     setAuthToken(token);
     setAuthenticated(true);
+    isLoggingOutRef.current = false;
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -103,11 +105,12 @@ export default function App() {
     setAgents({});
     setSelectedAgentId(undefined);
     setConnectionActive(false);
-    // Reset the flag after a short delay to allow state updates to complete
-    setTimeout(() => {
-      isLoggingOutRef.current = false;
-    }, 100);
   }, []);
+
+  // Store handleLogout in ref so we can use it in effects without adding to deps
+  useEffect(() => {
+    handleLogoutRef.current = handleLogout;
+  }, [handleLogout]);
 
   if (authenticated === null) {
     return (
@@ -152,7 +155,7 @@ export default function App() {
       .catch((err) => {
         if (cancelled || isLoggingOutRef.current) return;
         if (err.message.includes("Unauthorized")) {
-          handleLogout();
+          handleLogoutRef.current?.();
         } else {
           setMessage(err.message);
         }
@@ -161,7 +164,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedAgentId, authenticated, handleLogout]);
+  }, [selectedAgentId, authenticated]);
 
   useEffect(() => {
     if (!selectedAgentId || !authenticated || isLoggingOutRef.current) {
@@ -186,7 +189,7 @@ export default function App() {
       .catch((err) => {
         if (cancelled || isLoggingOutRef.current) return;
         if (err instanceof Error && err.message.includes("Unauthorized")) {
-          handleLogout();
+          handleLogoutRef.current?.();
         } else {
           setAgentConfig(null);
           setConfigDraft(formatConfigDraft(null));
@@ -203,7 +206,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedAgentId, authenticated, handleLogout]);
+  }, [selectedAgentId, authenticated]);
 
   useEffect(() => {
     if (!authenticated) {
