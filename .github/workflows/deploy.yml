@@ -78,7 +78,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: DEPLOY_PATH,DEPLOY_RESTART_CMD
+          envs: DEPLOY_PATH,DEPLOY_RESTART_CMD,GITHUB_SHA
           script: |
             set -euo pipefail
             if [ -z "${DEPLOY_PATH}" ]; then
