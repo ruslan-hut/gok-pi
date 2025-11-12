@@ -1,4 +1,4 @@
-import type { AgentSummary } from "./types";
+import type { AgentConfig, AgentSummary } from "./types";
 
 export async function fetchAgents(): Promise<Record<string, AgentSummary>> {
   const res = await fetch("/api/agents");
@@ -26,7 +26,7 @@ export async function sendCommand(
   if (payload !== undefined) {
     body.payload = payload;
   }
-  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/command`, {
+  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -37,5 +37,52 @@ export async function sendCommand(
     const text = await res.text();
     throw new Error(text || "Command failed");
   }
+}
+
+export async function fetchAgentConfig(
+  agentId: string,
+): Promise<AgentConfig | null> {
+  const res = await fetch(
+    `/api/agents/${encodeURIComponent(agentId)}/config`,
+    {
+      headers: {
+        "Accept": "application/json",
+      },
+    },
+  );
+  if (res.status === 404) {
+    return null;
+  }
+  if (!res.ok) {
+    throw new Error(`Failed to load config: ${res.statusText}`);
+  }
+  return (await res.json()) as AgentConfig;
+}
+
+export interface AgentConfigPayload {
+  revision: number;
+  batteries: AgentConfig["batteries"];
+  schedules: AgentConfig["schedules"];
+}
+
+export async function updateAgentConfig(
+  agentId: string,
+  payload: AgentConfigPayload,
+): Promise<AgentConfig> {
+  const res = await fetch(
+    `/api/agents/${encodeURIComponent(agentId)}/config`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to update config");
+  }
+  return (await res.json()) as AgentConfig;
 }
 

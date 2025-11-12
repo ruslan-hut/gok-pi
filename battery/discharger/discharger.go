@@ -8,6 +8,7 @@ import (
 	"gok-pi/internal/lib/timer"
 	"gok-pi/metrics/observers"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -26,6 +27,7 @@ const (
 	CommandStopDischarge  CommandType = "stop_discharge"
 	CommandSetLimits      CommandType = "set_limits"
 	CommandForceMode      CommandType = "force_mode"
+	CommandUpdateConfig   CommandType = "update_config"
 )
 
 type OperatingMode string
@@ -40,9 +42,16 @@ type ControlCommand struct {
 	Power  int
 	Limits *CommandLimits
 	Mode   OperatingMode
+	Config *ConfigUpdate
 }
 
 type CommandLimits struct {
+	PowerLimit *int
+	SocLimit   *int
+}
+
+type ConfigUpdate struct {
+	Schedules  []entity.Schedule
 	PowerLimit *int
 	SocLimit   *int
 }
@@ -66,6 +75,9 @@ type Discharge struct {
 	log              *slog.Logger
 	commands         chan ControlCommand
 	manualOverride   bool
+	stop             chan struct{}
+	stopped          chan struct{}
+	stopOnce         sync.Once
 }
 
 func New(name string, client Client, log *slog.Logger) (*Discharge, error) {
@@ -74,6 +86,8 @@ func New(name string, client Client, log *slog.Logger) (*Discharge, error) {
 		client:   client,
 		log:      log.With(sl.Module("battery.discharge")),
 		commands: make(chan ControlCommand, 16),
+		stop:     make(chan struct{}),
+		stopped:  make(chan struct{}),
 	}, nil
 }
 
@@ -102,6 +116,7 @@ func (d *Discharge) SubmitCommand(cmd ControlCommand) error {
 func (d *Discharge) Run() error {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
+	defer close(d.stopped)
 
 	for {
 		select {
@@ -136,6 +151,8 @@ func (d *Discharge) Run() error {
 					d.log.With(sl.Err(err)).Error("stopping discharge")
 				}
 			}
+		case <-d.stop:
+			return nil
 		}
 	}
 }
@@ -340,9 +357,44 @@ func (d *Discharge) processControlCommand(cmd ControlCommand) error {
 		default:
 			return fmt.Errorf("unknown operating mode: %s", cmd.Mode)
 		}
+	case CommandUpdateConfig:
+		if cmd.Config == nil {
+			return fmt.Errorf("missing config payload")
+		}
+		d.schedules = cloneSchedules(cmd.Config.Schedules)
+		d.manualOverride = false
+
+		if cmd.Config.PowerLimit != nil {
+			d.powerLimit = *cmd.Config.PowerLimit
+			log = log.With(slog.Int("power_limit", d.powerLimit))
+		}
+		if cmd.Config.SocLimit != nil {
+			d.socLimit = float64(*cmd.Config.SocLimit)
+			log = log.With(slog.Int("soc_limit", *cmd.Config.SocLimit))
+		}
+		d.readyToDischarge = false
+		log.Info("applied runtime config update")
+		return nil
 	default:
 		return fmt.Errorf("unsupported command type: %s", cmd.Type)
 	}
+}
+
+// Stop gracefully terminates the discharge worker loop.
+func (d *Discharge) Stop() {
+	d.stopOnce.Do(func() {
+		close(d.stop)
+	})
+	<-d.stopped
+}
+
+func cloneSchedules(in []entity.Schedule) []entity.Schedule {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]entity.Schedule, len(in))
+	copy(out, in)
+	return out
 }
 
 // calculate discharge rate as Wh/h
@@ -352,7 +404,7 @@ func (d *Discharge) calculateRate() {
 	if estimate <= 0 {
 		return
 	}
-	remainingTime := d.stopTime.Sub(time.Now())
+	remainingTime := time.Until(d.stopTime)
 	if remainingTime <= 0 {
 		return
 	}

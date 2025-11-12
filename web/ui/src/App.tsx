@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchAgents, sendCommand } from "./api";
+import {
+  fetchAgentConfig,
+  fetchAgents,
+  sendCommand,
+  updateAgentConfig,
+} from "./api";
 import type {
+  AgentConfig,
   AgentSummary,
   DashboardMessage,
   TelemetrySnapshot,
@@ -19,6 +25,15 @@ const defaultCommandState: CommandState = {
   powerLimit: 500,
   socLimit: 50,
 };
+
+function formatConfigDraft(config: AgentConfig | null): string {
+  const payload = {
+    revision: config?.revision ?? 0,
+    batteries: config?.batteries ?? [],
+    schedules: config?.schedules ?? [],
+  };
+  return JSON.stringify(payload, null, 2);
+}
 
 const OFFLINE_GRACE_MS = 2 * 60 * 1000;
 
@@ -43,6 +58,12 @@ export default function App() {
   const [commandState, setCommandState] =
     useState<CommandState>(defaultCommandState);
   const [message, setMessage] = useState<string>();
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
+  const [configDraft, setConfigDraft] = useState<string>("");
+  const [configDirty, setConfigDirty] = useState(false);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configError, setConfigError] = useState<string>();
 
   useEffect(() => {
     fetchAgents()
@@ -66,6 +87,31 @@ export default function App() {
         }
       })
       .catch((err) => setMessage(err.message));
+  }, [selectedAgentId]);
+
+  useEffect(() => {
+    if (!selectedAgentId) {
+      setAgentConfig(null);
+      setConfigDraft("");
+      setConfigDirty(false);
+      setConfigError(undefined);
+      return;
+    }
+    setConfigLoading(true);
+    fetchAgentConfig(selectedAgentId)
+      .then((cfg) => {
+        setAgentConfig(cfg);
+        setConfigDraft(formatConfigDraft(cfg));
+        setConfigDirty(false);
+        setConfigError(undefined);
+      })
+      .catch((err) => {
+        setAgentConfig(null);
+        setConfigDraft(formatConfigDraft(null));
+        setConfigDirty(false);
+        setConfigError(err instanceof Error ? err.message : "Failed to load configuration");
+      })
+      .finally(() => setConfigLoading(false));
   }, [selectedAgentId]);
 
   useEffect(() => {
@@ -206,6 +252,19 @@ export default function App() {
       case "agent.removed":
         removeAgent(message.agent_id);
         break;
+      case "config.updated":
+        if (message.agent_id !== selectedAgentId) {
+          break;
+        }
+        setAgentConfig(message.config);
+        setConfigError(undefined);
+        if (configDirty) {
+          setMessage("Remote configuration changed while editing; draft unchanged.");
+        } else {
+          setConfigDraft(formatConfigDraft(message.config));
+          setConfigDirty(false);
+        }
+        break;
       default:
         break;
     }
@@ -248,6 +307,53 @@ export default function App() {
         setMessage("Failed to send command");
       }
     }
+  }
+
+  async function handleConfigSave() {
+    if (!selectedAgentId) {
+      return;
+    }
+    try {
+      setConfigSaving(true);
+      setConfigError(undefined);
+      const parsed = JSON.parse(configDraft) as Partial<AgentConfig>;
+      const revision =
+        typeof parsed.revision === "number"
+          ? parsed.revision
+          : agentConfig?.revision ?? 0;
+      const batteries = Array.isArray(parsed.batteries)
+        ? parsed.batteries
+        : [];
+      const schedules = Array.isArray(parsed.schedules)
+        ? parsed.schedules
+        : [];
+
+      const updated = await updateAgentConfig(selectedAgentId, {
+        revision,
+        batteries,
+        schedules,
+      });
+      setAgentConfig(updated);
+      setConfigDraft(formatConfigDraft(updated));
+      setConfigDirty(false);
+      setMessage("Configuration saved");
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        setConfigError("Configuration JSON is invalid");
+      } else if (err instanceof Error) {
+        setConfigError(err.message);
+      } else {
+        setConfigError("Failed to update configuration");
+      }
+    } finally {
+      setConfigSaving(false);
+    }
+  }
+
+  function handleConfigReset() {
+    setConfigDraft(formatConfigDraft(agentConfig));
+    setConfigDirty(false);
+    setConfigError(undefined);
   }
 
   return (
@@ -341,6 +447,20 @@ export default function App() {
                 />
               ))}
             </section>
+            <ConfigEditor
+              config={agentConfig}
+              draft={configDraft}
+              loading={configLoading}
+              saving={configSaving}
+              dirty={configDirty}
+              error={configError}
+              onDraftChange={(value) => {
+                setConfigDraft(value);
+                setConfigDirty(true);
+              }}
+              onSave={handleConfigSave}
+              onReset={handleConfigReset}
+            />
           </>
         ) : (
           <div className="empty-state">
@@ -487,6 +607,70 @@ function BatteryCard({
         </div>
       </div>
     </div>
+  );
+}
+
+interface ConfigEditorProps {
+  config: AgentConfig | null;
+  draft: string;
+  loading: boolean;
+  saving: boolean;
+  dirty: boolean;
+  error?: string;
+  onDraftChange: (value: string) => void;
+  onSave: () => void;
+  onReset: () => void;
+}
+
+function ConfigEditor({
+  config,
+  draft,
+  loading,
+  saving,
+  dirty,
+  error,
+  onDraftChange,
+  onSave,
+  onReset,
+}: ConfigEditorProps) {
+  return (
+    <section className="config-panel">
+      <div className="config-panel-header">
+        <h3>Remote configuration</h3>
+        {config ? <span className="badge">Revision {config.revision}</span> : null}
+      </div>
+      {loading ? (
+        <p>Loading configuration…</p>
+      ) : (
+        <>
+          <p className="config-meta">
+            {config
+              ? `Last updated ${new Date(config.updated_at).toLocaleString()}`
+              : "No remote configuration stored yet. Edit the JSON below and save to push new settings."}
+          </p>
+          <textarea
+            className="config-editor"
+            value={draft}
+            onChange={(event) => onDraftChange(event.target.value)}
+            disabled={saving}
+            spellCheck={false}
+          />
+          {error ? <div className="config-error">{error}</div> : null}
+          <div className="config-actions">
+            <button onClick={onReset} disabled={!dirty || saving}>
+              Reset
+            </button>
+            <button
+              className="primary"
+              onClick={onSave}
+              disabled={saving || !dirty}
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

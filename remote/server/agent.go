@@ -16,6 +16,8 @@ const (
 	agentMessageTelemetry = "agent.telemetry"
 	agentMessageHeartbeat = "agent.heartbeat"
 	agentMessageCommand   = "agent.command"
+
+	serverMessageConfigPush = "server.config.push"
 )
 
 type agentConnection struct {
@@ -181,6 +183,24 @@ func (a *agentConnection) updateHeartbeat(msg AgentHeartbeat) {
 	a.lastSeen = msg.Timestamp
 	a.mu.Unlock()
 	a.s.onAgentSummary(a.id)
+}
+
+func (a *agentConnection) pushConfig(cfg AgentConfig) error {
+	payload := ConfigPush{
+		Type:    serverMessageConfigPush,
+		AgentID: a.id,
+		Config:  cfg,
+		SentAt:  time.Now().UTC(),
+	}
+
+	select {
+	case <-a.done:
+		return fmt.Errorf("agent connection closed")
+	case a.send <- payload:
+		return nil
+	default:
+		return fmt.Errorf("agent send buffer full")
+	}
 }
 
 func (a *agentConnection) summary() AgentSummary {

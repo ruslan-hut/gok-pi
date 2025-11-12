@@ -26,6 +26,30 @@ export interface AgentSummary {
   connected?: boolean;
 }
 
+export interface BatteryConfig {
+  name: string;
+  url: string;
+  token: string;
+  enabled: boolean;
+  capacity_limit: number;
+}
+
+export interface ScheduleConfig {
+  start_time: string;
+  stop_time: string;
+  battery_name: string;
+  enabled: boolean;
+  power_limit: number;
+  soc_limit: number;
+}
+
+export interface AgentConfig {
+  revision: number;
+  updated_at: string;
+  batteries: BatteryConfig[];
+  schedules: ScheduleConfig[];
+}
+
 export interface AgentsSnapshotMessage {
   type: "agents.snapshot";
   agents: AgentSummary[];
@@ -47,9 +71,18 @@ export interface AgentRemovedMessage {
   agent_id: string;
 }
 
+export interface ConfigUpdatedMessage {
+  type: "config.updated";
+  agent_id: string;
+  config: AgentConfig;
+  sent_at: string;
+  message: string;
+}
+
 export type DashboardMessage =
   | AgentsSnapshotMessage
   | AgentTelemetryMessage
   | AgentSummaryMessage
-  | AgentRemovedMessage;
+  | AgentRemovedMessage
+  | ConfigUpdatedMessage;
 

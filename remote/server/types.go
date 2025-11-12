@@ -16,6 +16,7 @@ type Config struct {
 	UIStaticDir  string
 	AgentBinary  string
 	VersionFile  string
+	ConfigStore  string
 }
 
 type TelemetrySnapshot struct {
@@ -74,6 +75,22 @@ type OutgoingCommand struct {
 	Target    string          `json:"target"`
 	RequestID string          `json:"request_id"`
 	Payload   json.RawMessage `json:"payload,omitempty"`
+}
+
+type ConfigPush struct {
+	Type    string      `json:"type"`
+	AgentID string      `json:"agent_id"`
+	Config  AgentConfig `json:"config"`
+	SentAt  time.Time   `json:"sent_at"`
+	Request string      `json:"request_id,omitempty"`
+}
+
+type UIConfigUpdate struct {
+	Type    string      `json:"type"`
+	AgentID string      `json:"agent_id"`
+	Config  AgentConfig `json:"config"`
+	SentAt  time.Time   `json:"sent_at"`
+	Message string      `json:"message"`
 }
 
 type AgentSummary struct {

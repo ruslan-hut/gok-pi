@@ -47,6 +47,7 @@ go run ./cmd/controlserver \
 
 - `-secret` must match the agent `remote_control.shared_secret`.
 - `-static` is optional; when provided the built React dashboard is hosted under `/app`.
+- `-config-store` points to the JSON file used to persist per-agent configuration overrides (defaults to `data/agent-configs.json`).
 - Agents connect to `/api/agent`, while the web UI consumes `/api/ui` for live updates.
 
 Example nginx snippet for TLS termination:
@@ -80,6 +81,12 @@ npm run build
 ```
 
 During development, run `npm run dev` (served on `http://localhost:5173`) with the built-in proxy to the Go control server at `http://localhost:8080`.
+
+#### Remote Configuration Overrides
+
+Each agent now supports live configuration updates pushed from the control server. The dashboard exposes a JSON editor per agent under **Remote configuration** where you can manage the authoritative `batteries` and `schedules` arrays. Saving changes stores the content in the control server's config store and immediately forwards the update to any connected agent over its WebSocket session. Agents fall back to their local `config.yml` when no override exists; otherwise the remote definition replaces the static file until another override is saved.
+
+The editor enforces optimistic locking via the `revision` field—every successful save bumps the revision, and stale drafts are rejected with a conflict error. Config overrides persist on disk (see the `-config-store` flag) so agents that reconnect later receive the latest version automatically.
 
 ### Deployment Workflow
 

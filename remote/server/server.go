@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,9 +29,17 @@ type Server struct {
 
 	uiMu     sync.RWMutex
 	uiClient map[*uiConnection]struct{}
+
+	configs *ConfigStore
 }
 
 func New(cfg Config, log *slog.Logger) *Server {
+	store, err := NewConfigStore(cfg.ConfigStore)
+	if err != nil {
+		log.With(slog.Any("error", err), slog.String("path", cfg.ConfigStore)).Error("initializing config store; falling back to in-memory")
+		store, _ = NewConfigStore("")
+	}
+
 	return &Server{
 		cfg: cfg,
 		log: log,
@@ -43,6 +52,7 @@ func New(cfg Config, log *slog.Logger) *Server {
 		},
 		agents:   make(map[string]*agentConnection),
 		uiClient: make(map[*uiConnection]struct{}),
+		configs:  store,
 	}
 }
 
@@ -51,7 +61,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/agent", s.handleAgentWS)
 	mux.HandleFunc("/api/ui", s.handleUIWS)
 	mux.HandleFunc("/api/agents", s.handleAgents)
-	mux.HandleFunc("/api/agents/", s.handleAgentCommand)
+	mux.HandleFunc("/api/agents/", s.handleAgentRoutes)
 
 	if s.cfg.UIStaticDir != "" {
 		fs := http.FileServer(http.Dir(s.cfg.UIStaticDir))
@@ -129,18 +139,48 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleAgentCommand(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/agents/")
+	if path == "" {
+		http.Error(w, "agent id required", http.StatusBadRequest)
 		return
 	}
 
-	agentID := filepath.Base(r.URL.Path)
+	segments := strings.Split(path, "/")
+	agentID := segments[0]
+
 	if agentID == "" {
 		http.Error(w, "agent id required", http.StatusBadRequest)
 		return
 	}
 
+	if len(segments) == 1 || (len(segments) == 2 && segments[1] == "command") {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleAgentCommand(w, r, agentID)
+		return
+	}
+
+	if len(segments) == 2 && segments[1] == "config" {
+		switch r.Method {
+		case http.MethodGet:
+			s.handleAgentConfigGet(w, r, agentID)
+			return
+		case http.MethodPut:
+			s.handleAgentConfigPut(w, r, agentID)
+			return
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+	}
+
+	http.Error(w, "not found", http.StatusNotFound)
+}
+
+func (s *Server) handleAgentCommand(w http.ResponseWriter, r *http.Request, agentID string) {
 	var req CommandRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
@@ -166,12 +206,64 @@ func (s *Server) handleAgentCommand(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
+func (s *Server) handleAgentConfigGet(w http.ResponseWriter, _ *http.Request, agentID string) {
+	cfg, ok := s.configs.Get(agentID)
+	if !ok {
+		http.Error(w, "config not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(cfg); err != nil {
+		s.log.With(slog.Any("error", err)).Error("encode agent config response")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleAgentConfigPut(w http.ResponseWriter, r *http.Request, agentID string) {
+	var req AgentConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	cfg, err := s.configs.Save(agentID, req)
+	if err != nil {
+		if errors.Is(err, ErrConfigConflict) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		s.log.With(slog.Any("error", err)).Error("saving agent config")
+		http.Error(w, "failed to persist config", http.StatusInternalServerError)
+		return
+	}
+
+	s.broadcastConfigUpdated(agentID, cfg)
+	if err := s.pushConfigToAgent(agentID, cfg); err != nil {
+		s.log.With(slog.String("agent", agentID), slog.Any("error", err)).Warn("push config to agent")
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(cfg); err != nil {
+		s.log.With(slog.Any("error", err)).Error("encode agent config response")
+	}
+}
+
 func (s *Server) registerAgent(ac *agentConnection) {
 	s.agentsMu.Lock()
 	s.agents[ac.id] = ac
 	s.agentsMu.Unlock()
 
 	s.broadcastAgentSnapshot(ac.summary())
+
+	if cfg, ok := s.configs.Get(ac.id); ok {
+		if err := ac.pushConfig(cfg); err != nil {
+			s.log.With(
+				slog.String("agent", ac.id),
+				slog.Any("error", err),
+			).Warn("failed to push config to agent on registration")
+		}
+	}
 }
 
 func (s *Server) unregisterAgent(id string) {
@@ -294,6 +386,29 @@ func (s *Server) broadcastUI(message interface{}) {
 	for client := range s.uiClient {
 		client.sendJSON(message)
 	}
+}
+
+func (s *Server) broadcastConfigUpdated(agentID string, cfg AgentConfig) {
+	payload := UIConfigUpdate{
+		Type:    "config.updated",
+		AgentID: agentID,
+		Config:  cfg,
+		SentAt:  time.Now().UTC(),
+		Message: "agent config updated",
+	}
+	s.broadcastUI(payload)
+}
+
+func (s *Server) pushConfigToAgent(agentID string, cfg AgentConfig) error {
+	s.agentsMu.RLock()
+	agent, ok := s.agents[agentID]
+	s.agentsMu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("agent %s not connected", agentID)
+	}
+
+	return agent.pushConfig(cfg)
 }
 
 func (s *Server) handleVersionManifest(downloadPath string) http.Handler {

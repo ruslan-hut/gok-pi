@@ -151,6 +151,47 @@ body {
   margin-top: 0.5rem;
 }
 
+.config-panel {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 16px;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.config-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.config-meta {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.config-editor {
+  min-height: 220px;
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular,
+    Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.config-error {
+  color: #fca5a5;
+  font-size: 0.9rem;
+}
+
 .control-row {
   display: flex;
   gap: 0.5rem;
@@ -158,7 +199,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.3);
   background: rgba(15, 23, 42, 0.6);

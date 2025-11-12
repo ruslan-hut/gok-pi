@@ -20,6 +20,7 @@ func main() {
 	staticDir := flag.String("static", "", "path to serve pre-built React UI assets")
 	agentBinary := flag.String("agent-binary", envOrDefault(envAgentBinary, ""), "filename of the agent binary inside the downloads directory")
 	versionFile := flag.String("version-file", envOrDefault(envVersionFile, "VERSION"), "filename served under /downloads that contains the agent hash manifest")
+	configStore := flag.String("config-store", "data/agent-configs.json", "path to persisted agent configuration store")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -31,6 +32,7 @@ func main() {
 		UIStaticDir:  *staticDir,
 		AgentBinary:  strings.TrimSpace(*agentBinary),
 		VersionFile:  strings.TrimSpace(*versionFile),
+		ConfigStore:  strings.TrimSpace(*configStore),
 	}, logger)
 
 	if err := srv.ListenAndServe(*addr); err != nil {

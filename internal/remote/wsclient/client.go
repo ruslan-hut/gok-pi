@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gok-pi/battery/entity"
 	"gok-pi/internal/config"
 	"gok-pi/internal/lib/sl"
 	"gok-pi/metrics/observers"
@@ -26,6 +27,10 @@ const (
 
 	defaultHeartbeatInterval = 30 * time.Second
 	defaultDialTimeout       = 10 * time.Second
+)
+
+const (
+	messageTypeConfigPush = "server.config.push"
 )
 
 type AgentMetadata struct {
@@ -85,6 +90,7 @@ type Client struct {
 	startOnce   sync.Once
 	telemetryCh chan observers.Snapshot
 	commands    chan Command
+	configs     chan ConfigUpdate
 }
 
 func New(cfg config.RemoteControl, meta AgentMetadata, log *slog.Logger) *Client {
@@ -109,11 +115,16 @@ func New(cfg config.RemoteControl, meta AgentMetadata, log *slog.Logger) *Client
 		},
 		telemetryCh: make(chan observers.Snapshot, 64),
 		commands:    make(chan Command, 32),
+		configs:     make(chan ConfigUpdate, 8),
 	}
 }
 
 func (c *Client) Commands() <-chan Command {
 	return c.commands
+}
+
+func (c *Client) ConfigUpdates() <-chan ConfigUpdate {
+	return c.configs
 }
 
 func (c *Client) Run(ctx context.Context) {
@@ -124,6 +135,7 @@ func (c *Client) Run(ctx context.Context) {
 
 func (c *Client) run(ctx context.Context) {
 	defer close(c.commands)
+	defer close(c.configs)
 
 	cancelObserver := observers.RegisterListener(func(snapshot observers.Snapshot) {
 		c.enqueueSnapshot(snapshot)
@@ -225,14 +237,30 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 
 func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn) error {
 	for {
-		var msg IncomingMessage
-		if err := wsjson.Read(ctx, conn, &msg); err != nil {
+		var raw json.RawMessage
+		if err := wsjson.Read(ctx, conn, &raw); err != nil {
 			return fmt.Errorf("read message: %w", err)
 		}
-		if msg.Type == "" {
+		var envelope struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			return fmt.Errorf("decode message envelope: %w", err)
+		}
+		if envelope.Type == "" {
 			continue
 		}
-		c.dispatchCommand(msg)
+		switch envelope.Type {
+		case messageTypeConfigPush:
+			c.handleConfigPush(raw)
+		default:
+			var msg IncomingMessage
+			if err := json.Unmarshal(raw, &msg); err != nil {
+				c.log.With(sl.Err(err)).Warn("decode incoming command")
+				continue
+			}
+			c.dispatchCommand(msg)
+		}
 	}
 }
 
@@ -321,6 +349,44 @@ func (c *Client) dispatchCommand(msg IncomingMessage) {
 			slog.String("command", msg.Command),
 		).Warn("command dropped; buffer full")
 	}
+}
+
+func (c *Client) handleConfigPush(raw json.RawMessage) {
+	var payload struct {
+		Type    string      `json:"type"`
+		AgentID string      `json:"agent_id"`
+		Config  AgentConfig `json:"config"`
+		SentAt  time.Time   `json:"sent_at"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		c.log.With(sl.Err(err)).Error("decode config push")
+		return
+	}
+
+	update := ConfigUpdate{
+		AgentID: payload.AgentID,
+		Config:  payload.Config,
+		SentAt:  payload.SentAt,
+	}
+
+	select {
+	case c.configs <- update:
+	default:
+		c.log.With(slog.String("component", "config"), slog.String("agent", payload.AgentID)).Warn("config update dropped; buffer full")
+	}
+}
+
+type AgentConfig struct {
+	Revision  int                    `json:"revision"`
+	UpdatedAt time.Time              `json:"updated_at"`
+	Batteries []entity.BatteryConfig `json:"batteries"`
+	Schedules []entity.Schedule      `json:"schedules"`
+}
+
+type ConfigUpdate struct {
+	AgentID string
+	Config  AgentConfig
+	SentAt  time.Time
 }
 
 func detectVersion() string {
