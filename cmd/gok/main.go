@@ -14,8 +14,11 @@ import (
 	"gok-pi/internal/remote/wsclient"
 	"gok-pi/metrics/server"
 	"log/slog"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 func main() {
@@ -41,8 +44,7 @@ func main() {
 	).Info("loaded batteries config")
 
 	if len(batteries) == 0 {
-		lg.Warn("no batteries enabled")
-		return
+		lg.Warn("no batteries enabled; agent will still connect if remote control is enabled")
 	}
 
 	// filter enabled schedules
@@ -69,6 +71,15 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Set up signal handling for graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		sig := <-sigCh
+		lg.Info("received signal, shutting down", slog.String("signal", sig.String()))
+		cancel()
+	}()
 
 	var wg sync.WaitGroup
 	manager := newWorkerManager()
@@ -107,9 +118,23 @@ func main() {
 				}
 			}
 		}()
-	}
 
-	wg.Wait()
+		// If remote control is enabled, keep the agent running even without batteries
+		// Wait for context cancellation (e.g., SIGINT/SIGTERM)
+		if len(batteries) == 0 {
+			lg.Info("agent running with remote control enabled; waiting for context cancellation")
+			<-ctx.Done()
+		} else {
+			wg.Wait()
+		}
+	} else {
+		// If no remote control and no batteries, exit immediately
+		if len(batteries) == 0 {
+			lg.Warn("no batteries enabled and remote control disabled; exiting")
+			return
+		}
+		wg.Wait()
+	}
 
 	lg.Info("gok-pi stopped")
 }
