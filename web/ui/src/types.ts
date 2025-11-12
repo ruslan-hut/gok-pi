@@ -23,6 +23,7 @@ export interface AgentSummary {
   agent: AgentDescriptor;
   last_seen: string;
   telemetry: Record<string, TelemetrySnapshot>;
+  connected?: boolean;
 }
 
 export interface AgentsSnapshotMessage {

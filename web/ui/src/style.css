@@ -60,6 +60,27 @@ body {
   transform: translateX(4px);
 }
 
+.agent-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.agent-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0.25rem 0;
+}
+
+.agent-last-seen {
+  font-style: italic;
+}
+
 .content {
   padding: 2rem 3rem;
   display: flex;
@@ -153,6 +174,23 @@ button:hover {
   background: rgba(14, 116, 144, 0.3);
 }
 
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.3);
+}
+
+button:disabled:hover {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.3);
+}
+
+input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 button.primary {
   border-color: #38bdf8;
   background: rgba(14, 116, 144, 0.4);
@@ -181,6 +219,21 @@ button.primary {
 .badge.offline {
   color: #f87171;
   border-color: rgba(248, 113, 113, 0.4);
+}
+
+.agent-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.offline-warning {
+  border: 1px dashed rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.08);
+  color: #fecaca;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
 }
 
 .connection {

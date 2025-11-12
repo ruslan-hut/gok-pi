@@ -37,7 +37,17 @@ export default function App() {
   useEffect(() => {
     fetchAgents()
       .then((data) => {
-        setAgents(data);
+        setAgents((prev) => {
+          const next: AgentsMap = { ...prev };
+          Object.entries(data).forEach(([id, agent]) => {
+            next[id] = {
+              ...(prev[id] ?? agent),
+              ...agent,
+              connected: agent.connected ?? true,
+            };
+          });
+          return next;
+        });
         if (!selectedAgentId) {
           const firstAgent = Object.values(data)[0];
           if (firstAgent) {
@@ -91,6 +101,9 @@ export default function App() {
   }, []);
 
   const selectedAgent = selectedAgentId ? agents[selectedAgentId] : undefined;
+  const selectedAgentOnline = selectedAgent
+    ? selectedAgent.connected !== false
+    : false;
 
   const batteries = useMemo(() => {
     if (!selectedAgent) {
@@ -104,7 +117,7 @@ export default function App() {
   function updateAgent(agent: AgentSummary) {
     setAgents((prev) => ({
       ...prev,
-      [agent.agent.id]: agent,
+      [agent.agent.id]: { ...agent, connected: true },
     }));
   }
 
@@ -128,24 +141,44 @@ export default function App() {
   }
 
   function removeAgent(agentId: string) {
+    let wasConnected = false;
     setAgents((prev) => {
       const next = { ...prev };
-      delete next[agentId];
+      const current = next[agentId];
+      if (!current) {
+        return prev;
+      }
+      wasConnected = current.connected !== false;
+      next[agentId] = { ...current, connected: false };
       return next;
     });
-    if (selectedAgentId === agentId) {
-      setSelectedAgentId(undefined);
+    if (wasConnected) {
+      setMessage(`Agent ${agentId} disconnected`);
     }
   }
 
   function handleMessage(message: DashboardMessage) {
     switch (message.type) {
       case "agents.snapshot": {
-        const map: AgentsMap = {};
-        message.agents.forEach((agent) => {
-          map[agent.agent.id] = agent;
+        setAgents((prev) => {
+          const next: AgentsMap = { ...prev };
+          const seen = new Set<string>();
+          message.agents.forEach((agent) => {
+            seen.add(agent.agent.id);
+            const existing = prev[agent.agent.id];
+            next[agent.agent.id] = {
+              ...(existing ?? agent),
+              ...agent,
+              connected: true,
+            };
+          });
+          Object.keys(next).forEach((id) => {
+            if (!seen.has(id)) {
+              next[id] = { ...next[id], connected: false };
+            }
+          });
+          return next;
         });
-        setAgents(map);
         if (!selectedAgentId && message.agents.length > 0) {
           setSelectedAgentId(message.agents[0].agent.id);
         }
@@ -204,15 +237,27 @@ export default function App() {
               }`}
               onClick={() => setSelectedAgentId(agent.agent.id)}
             >
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <div className="agent-card-header">
                 <strong>{agent.agent.id}</strong>
                 <span
                   className={`badge ${
-                    connectionActive ? "online" : "offline"
+                    agent.connected === false ? "offline" : "online"
                   }`}
                 >
-                  {agent.agent.env}
+                  {agent.connected === false ? "Offline" : "Online"}
                 </span>
+              </div>
+              <div className="agent-card-meta">
+                <span>{agent.agent.env}</span>
+                {agent.connected === false ? (
+                  <span className="agent-last-seen">
+                    Last seen{" "}
+                    {new Date(agent.last_seen).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                ) : null}
               </div>
               <small>{agent.agent.hostname}</small>
             </button>
@@ -225,7 +270,16 @@ export default function App() {
         {selectedAgent ? (
           <>
             <header>
-              <h2>{selectedAgent.agent.hostname}</h2>
+              <div className="agent-header">
+                <h2>{selectedAgent.agent.hostname}</h2>
+                <span
+                  className={`badge ${
+                    selectedAgentOnline ? "online" : "offline"
+                  }`}
+                >
+                  {selectedAgentOnline ? "Connected" : "Offline"}
+                </span>
+              </div>
               <div className="status-bar">
                 <span>
                   Last contact:{" "}
@@ -236,6 +290,11 @@ export default function App() {
                 </span>
               </div>
             </header>
+            {!selectedAgentOnline && (
+              <div className="offline-warning">
+                Agent is offline. Commands are disabled until it reconnects.
+              </div>
+            )}
             <section className="metrics-grid">
               {batteries.map((battery) => (
                 <BatteryCard
@@ -244,6 +303,7 @@ export default function App() {
                   commandState={commandState}
                   onCommandStateChange={setCommandState}
                   onCommand={handleCommand}
+                  isOnline={selectedAgentOnline}
                 />
               ))}
             </section>
@@ -268,6 +328,7 @@ interface BatteryCardProps {
   commandState: CommandState;
   onCommandStateChange: (state: CommandState) => void;
   onCommand: (command: string, target: string, payload?: unknown) => void;
+  isOnline: boolean;
 }
 
 function BatteryCard({
@@ -275,8 +336,10 @@ function BatteryCard({
   commandState,
   onCommandStateChange,
   onCommand,
+  isOnline,
 }: BatteryCardProps) {
   const { name } = snapshot;
+  const controlsDisabled = !isOnline;
 
   return (
     <div className="card">
@@ -306,6 +369,7 @@ function BatteryCard({
           <input
             type="number"
             value={commandState.power}
+            disabled={controlsDisabled}
             onChange={(event) =>
               onCommandStateChange({
                 ...commandState,
@@ -316,6 +380,7 @@ function BatteryCard({
           />
           <button
             className="primary"
+            disabled={controlsDisabled}
             onClick={() =>
               onCommand("start_discharge", snapshot.name, {
                 power: commandState.power,
@@ -324,7 +389,10 @@ function BatteryCard({
           >
             Start
           </button>
-          <button onClick={() => onCommand("stop_discharge", snapshot.name)}>
+          <button
+            disabled={controlsDisabled}
+            onClick={() => onCommand("stop_discharge", snapshot.name)}
+          >
             Stop
           </button>
         </div>
@@ -332,6 +400,7 @@ function BatteryCard({
           <input
             type="number"
             value={commandState.powerLimit}
+            disabled={controlsDisabled}
             onChange={(event) =>
               onCommandStateChange({
                 ...commandState,
@@ -343,6 +412,7 @@ function BatteryCard({
           <input
             type="number"
             value={commandState.socLimit}
+            disabled={controlsDisabled}
             onChange={(event) =>
               onCommandStateChange({
                 ...commandState,
@@ -352,6 +422,7 @@ function BatteryCard({
             placeholder="SoC limit"
           />
           <button
+            disabled={controlsDisabled}
             onClick={() =>
               onCommand("set_limits", snapshot.name, {
                 power_limit: commandState.powerLimit,
@@ -363,10 +434,20 @@ function BatteryCard({
           </button>
         </div>
         <div className="control-row">
-          <button onClick={() => onCommand("force_mode", snapshot.name, { mode: "manual" })}>
+          <button
+            disabled={controlsDisabled}
+            onClick={() =>
+              onCommand("force_mode", snapshot.name, { mode: "manual" })
+            }
+          >
             Force Manual
           </button>
-          <button onClick={() => onCommand("force_mode", snapshot.name, { mode: "auto" })}>
+          <button
+            disabled={controlsDisabled}
+            onClick={() =>
+              onCommand("force_mode", snapshot.name, { mode: "auto" })
+            }
+          >
             Force Auto
           </button>
         </div>

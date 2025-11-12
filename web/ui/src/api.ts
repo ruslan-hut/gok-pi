@@ -8,7 +8,7 @@ export async function fetchAgents(): Promise<Record<string, AgentSummary>> {
   const data = (await res.json()) as AgentSummary[];
   const map: Record<string, AgentSummary> = {};
   for (const agent of data) {
-    map[agent.agent.id] = agent;
+    map[agent.agent.id] = { ...agent, connected: true };
   }
   return map;
 }
