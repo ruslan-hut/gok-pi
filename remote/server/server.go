@@ -1,12 +1,16 @@
 package server
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,8 +59,13 @@ func (s *Server) ListenAndServe(addr string) error {
 
 		downloadPath := filepath.Join(s.cfg.UIStaticDir, "downloads")
 		if info, err := os.Stat(downloadPath); err == nil && info.IsDir() {
+			versionFile := s.versionFilename()
+			mux.Handle("/downloads/"+versionFile, s.handleVersionManifest(downloadPath))
+
 			downloadFS := http.FileServer(http.Dir(downloadPath))
 			mux.Handle("/downloads/", http.StripPrefix("/downloads/", downloadFS))
+		} else if err != nil {
+			s.log.With(slog.String("path", downloadPath), slog.Any("error", err)).Warn("downloads directory unavailable")
 		}
 	}
 
@@ -285,4 +294,124 @@ func (s *Server) broadcastUI(message interface{}) {
 	for client := range s.uiClient {
 		client.sendJSON(message)
 	}
+}
+
+func (s *Server) handleVersionManifest(downloadPath string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead:
+		default:
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		hash, err := s.computeAgentHash(downloadPath)
+		if err != nil {
+			s.log.With(
+				slog.String("downloads", downloadPath),
+				slog.Any("error", err),
+			).Error("compute agent hash for VERSION")
+			http.Error(w, "version unavailable", http.StatusServiceUnavailable)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		if r.Method == http.MethodHead {
+			return
+		}
+
+		if _, err := fmt.Fprintln(w, hash); err != nil {
+			s.log.With(slog.Any("error", err)).Warn("write VERSION response")
+		}
+	})
+}
+
+func (s *Server) computeAgentHash(downloadPath string) (string, error) {
+	binaryPath, err := s.resolveAgentBinary(downloadPath)
+	if err != nil {
+		return "", err
+	}
+
+	file, err := os.Open(binaryPath)
+	if err != nil {
+		return "", fmt.Errorf("open agent binary: %w", err)
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return "", fmt.Errorf("hash agent binary: %w", err)
+	}
+
+	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
+}
+
+func (s *Server) resolveAgentBinary(downloadPath string) (string, error) {
+	if name := strings.TrimSpace(s.cfg.AgentBinary); name != "" {
+		candidate := filepath.Join(downloadPath, name)
+		info, err := os.Stat(candidate)
+		if err != nil {
+			return "", fmt.Errorf("stat agent binary %s: %w", candidate, err)
+		}
+		if info.IsDir() {
+			return "", fmt.Errorf("agent binary is a directory: %s", candidate)
+		}
+		return candidate, nil
+	}
+
+	entries, err := os.ReadDir(downloadPath)
+	if err != nil {
+		return "", fmt.Errorf("read downloads directory: %w", err)
+	}
+
+	versionName := strings.ToLower(s.versionFilename())
+	var candidates []string
+	var fallbacks []string
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		lower := strings.ToLower(name)
+
+		if lower == versionName {
+			continue
+		}
+		if strings.HasSuffix(lower, ".sha256") {
+			continue
+		}
+
+		fallbacks = append(fallbacks, name)
+
+		if strings.Contains(lower, "updater") {
+			continue
+		}
+
+		candidates = append(candidates, name)
+	}
+
+	var chosen string
+	switch {
+	case len(candidates) > 0:
+		sort.Strings(candidates)
+		chosen = candidates[0]
+	case len(fallbacks) > 0:
+		sort.Strings(fallbacks)
+		chosen = fallbacks[0]
+	default:
+		return "", fmt.Errorf("no candidate binaries available in %s", downloadPath)
+	}
+
+	return filepath.Join(downloadPath, chosen), nil
+}
+
+func (s *Server) versionFilename() string {
+	name := strings.TrimSpace(s.cfg.VersionFile)
+	if name == "" {
+		return "VERSION"
+	}
+	return name
 }

@@ -107,7 +107,7 @@ Trigger the workflow by pushing to `main` or manually via *Actions → Deploy Co
 
 ### Agent Release Artifacts
 
-The agent consumes a `gok` binary and a neighbouring `VERSION` file that stores the SHA-256 hash of that binary. Publish both artifacts during each deploy so devices can discover updates without downloading the entire binary every time.
+The agent consumes a `gok` binary and a neighbouring `VERSION` manifest containing the SHA-256 hash of that binary. The control server now renders this manifest automatically by hashing the binary exposed under `/downloads`, so you only need to publish the binaries themselves during each deploy.
 
 Build a release locally with the helper script:
 
@@ -117,7 +117,7 @@ Build a release locally with the helper script:
   --binary-name gok-pi-agent-linux-arm64
 ```
 
-The script produces `/tmp/gok-release/gok-pi-agent-linux-arm64`, `/tmp/gok-release/VERSION`, and `/tmp/gok-release/agentupdater`. Upload these files to the hosting location exposed to agents (for example, the `/downloads` directory served by the control server). Pass `--upload 'scp "$1" "$2" "$3" user@host:/srv/downloads/'` to run a custom publish command automatically.
+The script produces `/tmp/gok-release/gok-pi-agent-linux-arm64`, `/tmp/gok-release/VERSION`, and `/tmp/gok-release/agentupdater`. Upload the binaries (`gok-pi-agent-linux-arm64` and `agentupdater`) to the hosting location exposed to agents (for example, the `/downloads` directory served by the control server). Pass `--upload 'scp "$1" "$2" "$3" user@host:/srv/downloads/'` to run a custom publish command automatically. The control server will expose `/downloads/VERSION` based on the uploaded agent binary.
 
 With the GitHub Actions workflow, the ARM64 agent binary, updater, and manifest are exposed at `/downloads/gok-pi-agent-linux-arm64`, `/downloads/gok-agent-updater-linux-arm64`, and `/downloads/VERSION`. Devices can fetch them directly:
 

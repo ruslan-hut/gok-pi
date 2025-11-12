@@ -14,6 +14,8 @@ const (
 type Config struct {
 	SharedSecret string
 	UIStaticDir  string
+	AgentBinary  string
+	VersionFile  string
 }
 
 type TelemetrySnapshot struct {
