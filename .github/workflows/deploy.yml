@@ -43,7 +43,7 @@ jobs:
           mkdir -p out
           go build -o out/gok ./cmd/controlserver
 
-      - name: Build agent binary (linux/arm64)
+      - name: Build agent binaries (linux/arm64)
         env:
           CGO_ENABLED: "0"
           GOOS: linux
@@ -51,15 +51,18 @@ jobs:
         run: |
           mkdir -p out/downloads
           go build -o out/downloads/gok-pi-agent-linux-arm64 ./cmd/gok
+          go build -o out/downloads/gok-agent-updater-linux-arm64 ./cmd/agentupdater
 
       - name: Prepare deployment bundle
         run: |
           mkdir -p deploy/app/downloads
           cp -r web/ui/dist/. deploy/app/
           cp out/downloads/gok-pi-agent-linux-arm64 deploy/app/downloads/
+          cp out/downloads/gok-agent-updater-linux-arm64 deploy/app/downloads/
           cp out/gok deploy/gok
           sha256sum deploy/gok > deploy/SHASUMS
           sha256sum deploy/app/downloads/gok-pi-agent-linux-arm64 >> deploy/SHASUMS
+          sha256sum deploy/app/downloads/gok-agent-updater-linux-arm64 >> deploy/SHASUMS
           echo "${GITHUB_SHA}" > deploy/version.txt
           tar -czf release.tar.gz -C deploy .
 

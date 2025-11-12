@@ -117,21 +117,23 @@ Build a release locally with the helper script:
   --binary-name gok-pi-agent-linux-arm64
 ```
 
-The script produces `/tmp/gok-release/gok-pi-agent-linux-arm64` and `/tmp/gok-release/VERSION`. Upload both files to the hosting location exposed to agents (for example, the `/downloads` directory served by the control server). Pass `--upload 'scp "$1" "$2" user@host:/srv/downloads/'` to run a custom publish command automatically.
+The script produces `/tmp/gok-release/gok-pi-agent-linux-arm64`, `/tmp/gok-release/VERSION`, and `/tmp/gok-release/agentupdater`. Upload these files to the hosting location exposed to agents (for example, the `/downloads` directory served by the control server). Pass `--upload 'scp "$1" "$2" "$3" user@host:/srv/downloads/'` to run a custom publish command automatically.
 
-With the GitHub Actions workflow, the ARM64 agent binary is exposed at `/downloads/gok-pi-agent-linux-arm64` and the manifest at `/downloads/VERSION`. Devices can fetch them directly:
+With the GitHub Actions workflow, the ARM64 agent binary, updater, and manifest are exposed at `/downloads/gok-pi-agent-linux-arm64`, `/downloads/gok-agent-updater-linux-arm64`, and `/downloads/VERSION`. Devices can fetch them directly:
 
 ```bash
 curl -o gok-pi-agent-linux-arm64 https://control.example.com/downloads/gok-pi-agent-linux-arm64
 curl -o VERSION https://control.example.com/downloads/VERSION
+curl -o agentupdater https://control.example.com/downloads/gok-agent-updater-linux-arm64
 chmod +x gok-pi-agent-linux-arm64
+chmod +x agentupdater
 ```
 
 The React sidebar also surfaces a download button once the deployment workflow publishes the artifacts.
 
 ### Agent Auto Update
 
-Install the updater binary on the device (for example, under `/opt/gok-pi/bin/agentupdater`) and configure a systemd unit to check for new releases on a schedule.
+Install the updater binary on the device (for example, under `/opt/gok-pi/bin/agentupdater`) and configure a systemd unit to check for new releases on a schedule. When using the default deploy workflow, `agentupdater` is served alongside the agent binary under `/downloads/gok-agent-updater-linux-arm64`.
 
 1. Copy the sample units:
 

@@ -14,13 +14,14 @@ usage() {
 Usage: $(basename "$0") [flags]
 
 Flags:
-  -o, --output DIR       Output directory for build artifacts (default: \$ROOT_DIR/dist/agent)
-      --binary-name NAME Binary filename to generate (default: gok)
-      --goos GOOS        GOOS for cross compilation (default: linux)
-      --goarch GOARCH    GOARCH for cross compilation (default: arm64)
-      --upload CMD       Optional shell command to run after build; receives binary
-                         path as \$1 and VERSION path as \$2.
-  -h, --help             Show this help message.
+  -o, --output DIR         Output directory for build artifacts (default: \$ROOT_DIR/dist/agent)
+      --binary-name NAME   Agent binary filename to generate (default: gok)
+      --updater-name NAME  Updater binary filename to generate (default: agentupdater)
+      --goos GOOS          GOOS for cross compilation (default: linux)
+      --goarch GOARCH      GOARCH for cross compilation (default: arm64)
+      --upload CMD         Optional shell command to run after build; receives agent binary
+                           path as \$1, VERSION path as \$2, and updater binary path as \$3.
+  -h, --help               Show this help message.
 
 Environment:
   CGO_ENABLED            Defaults to 0 for reproducible static builds.
@@ -33,6 +34,7 @@ EOF
 
 OUTPUT_DIR="$ROOT_DIR/dist/agent"
 BINARY_NAME="gok"
+UPDATER_NAME="agentupdater"
 GOOS="${GOOS:-linux}"
 GOARCH="${GOARCH:-arm64}"
 UPLOAD_CMD=""
@@ -45,6 +47,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --binary-name)
       BINARY_NAME="$2"
+      shift 2
+      ;;
+    --updater-name)
+      UPDATER_NAME="$2"
       shift 2
       ;;
     --goos)
@@ -78,13 +84,20 @@ export CGO_ENABLED
 
 OUTPUT_BIN="${OUTPUT_DIR}/${BINARY_NAME}"
 VERSION_FILE="${OUTPUT_DIR}/VERSION"
+UPDATER_BIN="${OUTPUT_DIR}/${UPDATER_NAME}"
 
-echo "[build] GOOS=${GOOS} GOARCH=${GOARCH} -> ${OUTPUT_BIN}"
-GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "-s -w" -o "$OUTPUT_BIN" "$ROOT_DIR/cmd/gok"
+build_binary() {
+  local target="$1"
+  local pkg="$2"
+  echo "[build] GOOS=${GOOS} GOARCH=${GOARCH} -> ${target}"
+  GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "-s -w" -o "$target" "$pkg"
+  if [[ ! -x "$target" ]]; then
+    chmod +x "$target"
+  fi
+}
 
-if [[ ! -x "$OUTPUT_BIN" ]]; then
-  chmod +x "$OUTPUT_BIN"
-fi
+build_binary "$OUTPUT_BIN" "$ROOT_DIR/cmd/gok"
+build_binary "$UPDATER_BIN" "$ROOT_DIR/cmd/agentupdater"
 
 compute_sha256() {
   local target="$1"
@@ -108,8 +121,9 @@ echo "[build] VERSION -> ${VERSION_FILE}"
 if [[ -n "$UPLOAD_CMD" ]]; then
   echo "[upload] ${UPLOAD_CMD}"
   # shellcheck disable=SC2086
-  eval "$UPLOAD_CMD" '"$OUTPUT_BIN"' '"$VERSION_FILE"'
+  eval "$UPLOAD_CMD" '"$OUTPUT_BIN"' '"$VERSION_FILE"' '"$UPDATER_BIN"'
 fi
 
-echo "[done] Binary hash: $HASH"
+echo "[done] Agent binary hash: $HASH"
+echo "[done] Updater binary: ${UPDATER_BIN}"
 
