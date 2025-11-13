@@ -286,6 +286,11 @@ button.primary {
   border-color: rgba(248, 113, 113, 0.4);
 }
 
+.badge.disabled {
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
 .agent-header {
   display: flex;
   justify-content: space-between;

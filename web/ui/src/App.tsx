@@ -645,7 +645,7 @@ function BatteryCard({
       case "Disconnected":
         return "offline";
       case "Disabled":
-        return "offline";
+        return "disabled";
       default:
         return "offline";
     }
