@@ -179,6 +179,13 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  user-select: none;
+}
+
+.config-toggle {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  transition: transform 0.2s ease;
 }
 
 .config-meta {

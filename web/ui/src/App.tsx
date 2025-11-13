@@ -776,41 +776,54 @@ function ConfigEditor({
   onSave,
   onReset,
 }: ConfigEditorProps) {
+  const [collapsed, setCollapsed] = useState(true);
+
   return (
     <section className="config-panel">
-      <div className="config-panel-header">
+      <div 
+        className="config-panel-header"
+        onClick={() => setCollapsed(!collapsed)}
+        style={{ cursor: "pointer" }}
+      >
         <h3>Remote configuration</h3>
-        {config ? <span className="badge">Revision {config.revision}</span> : null}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          {config ? <span className="badge">Revision {config.revision}</span> : null}
+          <span className="config-toggle">{collapsed ? "▶" : "▼"}</span>
+        </div>
       </div>
-      {loading ? (
-        <p>Loading configuration…</p>
-      ) : (
+      {!collapsed && (
         <>
-          <p className="config-meta">
-            {config
-              ? `Last updated ${new Date(config.updated_at).toLocaleString()}`
-              : "No remote configuration stored yet. Edit the JSON below and save to push new settings."}
-          </p>
-          <textarea
-            className="config-editor"
-            value={draft}
-            onChange={(event) => onDraftChange(event.target.value)}
-            disabled={saving}
-            spellCheck={false}
-          />
-          {error ? <div className="config-error">{error}</div> : null}
-          <div className="config-actions">
-            <button onClick={onReset} disabled={!dirty || saving}>
-              Reset
-            </button>
-            <button
-              className="primary"
-              onClick={onSave}
-              disabled={saving || !dirty}
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
+          {loading ? (
+            <p>Loading configuration…</p>
+          ) : (
+            <>
+              <p className="config-meta">
+                {config
+                  ? `Last updated ${new Date(config.updated_at).toLocaleString()}`
+                  : "No remote configuration stored yet. Edit the JSON below and save to push new settings."}
+              </p>
+              <textarea
+                className="config-editor"
+                value={draft}
+                onChange={(event) => onDraftChange(event.target.value)}
+                disabled={saving}
+                spellCheck={false}
+              />
+              {error ? <div className="config-error">{error}</div> : null}
+              <div className="config-actions">
+                <button onClick={onReset} disabled={!dirty || saving}>
+                  Reset
+                </button>
+                <button
+                  className="primary"
+                  onClick={onSave}
+                  disabled={saving || !dirty}
+                >
+                  {saving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </>
+          )}
         </>
       )}
     </section>
