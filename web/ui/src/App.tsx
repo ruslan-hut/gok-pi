@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import {
   fetchAgentConfig,
   fetchAgents,
@@ -74,6 +75,7 @@ export default function App() {
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string>();
+  const [expandedBatteries, setExpandedBatteries] = useState<Set<string>>(new Set());
   const isLoggingOutRef = useRef(false);
   const handleLogoutRef = useRef<() => void>();
   const selectedAgentIdRef = useRef<string | undefined>();
@@ -569,6 +571,18 @@ export default function App() {
                   onCommandStateChange={setCommandState}
                   onCommand={handleCommand}
                   isOnline={selectedAgentOnline}
+                  expanded={expandedBatteries.has(battery.name)}
+                  onToggle={() => {
+                    setExpandedBatteries((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(battery.name)) {
+                        next.delete(battery.name);
+                      } else {
+                        next.add(battery.name);
+                      }
+                      return next;
+                    });
+                  }}
                 />
               ))}
             </section>
@@ -608,6 +622,8 @@ interface BatteryCardProps {
   onCommandStateChange: (state: CommandState) => void;
   onCommand: (command: string, target: string, payload?: unknown) => void;
   isOnline: boolean;
+  expanded: boolean;
+  onToggle: () => void;
 }
 
 function BatteryCard({
@@ -616,6 +632,8 @@ function BatteryCard({
   onCommandStateChange,
   onCommand,
   isOnline,
+  expanded,
+  onToggle,
 }: BatteryCardProps) {
   const { name } = snapshot;
   const controlsDisabled = !isOnline;
@@ -633,8 +651,24 @@ function BatteryCard({
     }
   };
 
+  const handleCardClick = (e: MouseEvent) => {
+    // Only toggle on mobile, and only if clicking on the card itself, not on interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('.controls') || target.closest('button') || target.closest('input')) {
+      return;
+    }
+    onToggle();
+  };
+
+  const handleControlClick = (e: MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="card">
+    <div 
+      className={`card battery-card ${expanded ? "expanded" : ""}`}
+      onClick={handleCardClick}
+    >
       <h2>
         {name}
         <span
@@ -661,7 +695,7 @@ function BatteryCard({
         <Metric label="Pac" value={`${snapshot.pac_total_w} W`} />
         <Metric label="Op Mode" value={snapshot.operating_mode || "n/a"} />
       </div>
-      <div className="controls">
+      <div className="controls" onClick={handleControlClick}>
         <div className="control-row">
           <input
             type="number"

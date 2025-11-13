@@ -429,8 +429,28 @@ button.primary {
     grid-template-columns: 1fr;
   }
 
-  .controls {
+  .battery-card {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+
+  .battery-card:active {
+    transform: scale(0.98);
+  }
+
+  .battery-card .controls {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.3s ease, opacity 0.3s ease, margin-top 0.3s ease;
+    margin-top: 0;
     gap: 0.5rem;
+  }
+
+  .battery-card.expanded .controls {
+    max-height: 1000px;
+    opacity: 1;
+    margin-top: 0.5rem;
   }
 
   .control-row {
