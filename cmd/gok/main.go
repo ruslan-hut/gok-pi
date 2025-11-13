@@ -12,6 +12,7 @@ import (
 	"gok-pi/internal/lib/logger"
 	"gok-pi/internal/lib/sl"
 	"gok-pi/internal/remote/wsclient"
+	"gok-pi/metrics/observers"
 	"gok-pi/metrics/server"
 	"log/slog"
 	"os"
@@ -81,6 +82,13 @@ func main() {
 		cancel()
 	}()
 
+	// Set status for all batteries (including disabled ones) before starting workers
+	for _, b := range conf.Batteries {
+		if !b.Enabled {
+			observers.UpdateStatus(b.Name, "Disabled")
+		}
+	}
+
 	var wg sync.WaitGroup
 	manager := newWorkerManager()
 	manager.Apply(ctx, &wg, batteries, schedules, lg)
@@ -114,6 +122,12 @@ func main() {
 						slog.Time("sent_at", update.SentAt),
 					).Info("applying remote configuration")
 
+					// Set status for all batteries (including disabled ones) before applying config
+					for _, b := range update.Config.Batteries {
+						if !b.Enabled {
+							observers.UpdateStatus(b.Name, "Disabled")
+						}
+					}
 					manager.Apply(ctx, &wg, filterEnabledBatteries(update.Config.Batteries), filterEnabledSchedules(update.Config.Schedules), lg)
 				}
 			}
@@ -201,9 +215,14 @@ func (m *workerManager) Get(name string) (*discharger.Discharge, bool) {
 
 func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries []entity.BatteryConfig, schedules []entity.Schedule, log *slog.Logger) {
 	desired := make(map[string]entity.BatteryConfig)
+	allBatteries := make(map[string]entity.BatteryConfig)
 	for _, b := range batteries {
+		allBatteries[b.Name] = b
 		if b.Enabled {
 			desired[b.Name] = b
+		} else {
+			// Set status to Disabled for disabled batteries
+			observers.UpdateStatus(b.Name, "Disabled")
 		}
 	}
 
@@ -218,6 +237,10 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 		}
 		if removed, ok := m.remove(name); ok {
 			log.With(slog.String("battery", name)).Info("stopping discharge worker (no longer configured)")
+			// Set status to Disabled if battery is disabled, otherwise it will be set when removed from config
+			if battery, exists := allBatteries[name]; exists && !battery.Enabled {
+				observers.UpdateStatus(name, "Disabled")
+			}
 			go removed.worker.Stop()
 		}
 	}
@@ -313,6 +336,9 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 			case <-stopCh:
 			}
 		}()
+
+		// Set initial status - will be updated on first Status() call
+		observers.UpdateStatus(battery.Name, "Disconnected")
 
 		if err := worker.Run(); err != nil {
 			workerLog.Error("running discharge worker", sl.Err(err))

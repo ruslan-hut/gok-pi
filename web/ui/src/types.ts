@@ -16,6 +16,7 @@ export interface TelemetrySnapshot {
   battery_discharging_set: boolean;
   operating_mode: string;
   operating_mode_set: boolean;
+  status: string;
   updated_at: string;
 }
 

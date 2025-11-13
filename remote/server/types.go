@@ -34,6 +34,7 @@ type TelemetrySnapshot struct {
 	BatteryDischargingSet bool      `json:"battery_discharging_set"`
 	OperatingMode         string    `json:"operating_mode"`
 	OperatingModeSet      bool      `json:"operating_mode_set"`
+	Status                string    `json:"status"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }
 

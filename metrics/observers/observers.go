@@ -1,9 +1,10 @@
 package observers
 
 import (
+	"strconv"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"strconv"
 )
 
 var socGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
@@ -104,5 +105,11 @@ func UpdateOpMode(name string, value string) {
 	updateSnapshot(name, func(snapshot *Snapshot) {
 		snapshot.OperatingMode = value
 		snapshot.OperatingModeSet = true
+	})
+}
+
+func UpdateStatus(name string, status string) {
+	updateSnapshot(name, func(snapshot *Snapshot) {
+		snapshot.Status = status
 	})
 }

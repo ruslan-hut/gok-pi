@@ -128,8 +128,10 @@ func (d *Discharge) Run() error {
 			status, err := d.client.Status()
 			if err != nil {
 				d.log.With(sl.Err(err)).Error("checking battery status")
+				observers.UpdateStatus(d.name, "Disconnected")
 				continue
 			}
+			observers.UpdateStatus(d.name, "Connected")
 			d.observeStatus(status)
 
 			if len(d.schedules) == 0 {

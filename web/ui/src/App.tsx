@@ -620,10 +620,28 @@ function BatteryCard({
   const { name } = snapshot;
   const controlsDisabled = !isOnline;
 
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case "Connected":
+        return "online";
+      case "Disconnected":
+        return "offline";
+      case "Disabled":
+        return "offline";
+      default:
+        return "offline";
+    }
+  };
+
   return (
     <div className="card">
       <h2>
         {name}
+        <span
+          className={`badge ${getStatusBadgeClass(snapshot.status || "Disconnected")}`}
+        >
+          {snapshot.status || "Disconnected"}
+        </span>
         <span
           className={`badge ${
             snapshot.battery_discharging ? "online" : "offline"
