@@ -134,13 +134,17 @@ export default function App() {
 
   // Helper functions for message handling
   const updateAgent = useCallback((agent: AgentSummary) => {
-    setAgents((prev: AgentsMap) => ({
-      ...prev,
-      [agent.agent.id]: {
-        ...agent,
-        connected: computeConnectionStatus(agent),
-      },
-    }));
+    setAgents((prev: AgentsMap) => {
+      const existing = prev[agent.agent.id];
+      return {
+        ...prev,
+        [agent.agent.id]: {
+          ...agent,
+          connected: computeConnectionStatus(agent),
+          device_name: existing?.device_name, // Preserve device_name
+        },
+      };
+    });
   }, []);
 
   const updateTelemetry = useCallback((agentId: string, snapshot: TelemetrySnapshot) => {
@@ -192,6 +196,7 @@ export default function App() {
               ...(existing ?? agent),
               ...agent,
               connected: computeConnectionStatus(agent),
+              device_name: existing?.device_name, // Preserve device_name
             };
           });
           Object.keys(next).forEach((id) => {
