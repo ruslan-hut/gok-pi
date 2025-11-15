@@ -161,3 +161,35 @@ export async function updateAgentConfig(
   return (await res.json()) as AgentConfig;
 }
 
+export interface LogRequest {
+  lines?: number;
+  stream?: string; // "agent" or "updater"
+}
+
+export async function fetchAgentLogs(
+  agentId: string,
+  options?: LogRequest,
+): Promise<string> {
+  const params = new URLSearchParams();
+  if (options?.lines !== undefined) {
+    params.set("lines", options.lines.toString());
+  }
+  if (options?.stream) {
+    params.set("stream", options.stream);
+  }
+
+  const url = `/api/agents/${encodeURIComponent(agentId)}/logs${params.toString() ? `?${params.toString()}` : ""}`;
+  const res = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      clearAuthToken();
+      throw new Error("Unauthorized. Please log in again.");
+    }
+    const text = await res.text();
+    throw new Error(text || "Failed to fetch logs");
+  }
+  return await res.text();
+}
+

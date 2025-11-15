@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -178,6 +179,15 @@ func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+	}
+
+	if len(segments) == 2 && segments[1] == "logs" {
+		if r.Method != http.MethodGet && r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleAgentLogs(w, r, agentID)
+		return
 	}
 
 	http.Error(w, "not found", http.StatusNotFound)
@@ -553,4 +563,54 @@ func (s *Server) versionFilename() string {
 		return "VERSION"
 	}
 	return name
+}
+
+func (s *Server) handleAgentLogs(w http.ResponseWriter, r *http.Request, agentID string) {
+	s.agentsMu.RLock()
+	agent, ok := s.agents[agentID]
+	s.agentsMu.RUnlock()
+
+	if !ok {
+		http.Error(w, "agent not connected", http.StatusNotFound)
+		return
+	}
+
+	req := LogRequest{
+		Lines:  500, // default to last 500 lines
+		Stream: "agent", // default to agent logs
+	}
+
+	if r.Method == http.MethodPost {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid payload", http.StatusBadRequest)
+			return
+		}
+	} else {
+		// GET request with query params
+		if linesStr := r.URL.Query().Get("lines"); linesStr != "" {
+			if lines, err := strconv.Atoi(linesStr); err == nil && lines > 0 {
+				req.Lines = lines
+			}
+		}
+		if stream := r.URL.Query().Get("stream"); stream != "" {
+			req.Stream = stream
+		}
+	}
+
+	resp, err := agent.requestLogs(req, 10*time.Second)
+	if err != nil {
+		s.log.With(slog.String("agent", agentID), slog.Any("error", err)).Error("requesting logs from agent")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if resp.Error != "" {
+		http.Error(w, resp.Error, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	if _, err := w.Write([]byte(resp.Logs)); err != nil {
+		s.log.With(slog.Any("error", err)).Warn("write logs response")
+	}
 }

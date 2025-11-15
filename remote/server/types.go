@@ -114,3 +114,16 @@ type AgentConfigSync struct {
 	Config AgentConfigSnapshot `json:"config"`
 	SentAt time.Time           `json:"sent_at"`
 }
+
+type AgentLogResponse struct {
+	Type      string    `json:"type"`
+	RequestID string    `json:"request_id"`
+	Logs      string    `json:"logs"`
+	Error     string    `json:"error,omitempty"`
+	SentAt    time.Time `json:"sent_at"`
+}
+
+type LogRequest struct {
+	Lines  int    `json:"lines,omitempty"`
+	Stream string `json:"stream,omitempty"` // "agent" or "updater"
+}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import {
   fetchAgentConfig,
+  fetchAgentLogs,
   fetchAgents,
   sendCommand,
   updateAgentConfig,
@@ -83,6 +84,12 @@ export default function App() {
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string>();
   const [expandedBatteries, setExpandedBatteries] = useState<Set<string>>(new Set());
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logs, setLogs] = useState<string>("");
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string>();
+  const [logStream, setLogStream] = useState<string>("agent");
+  const [logLines, setLogLines] = useState<number>(500);
   const isLoggingOutRef = useRef(false);
   const handleLogoutRef = useRef<() => void>();
   const selectedAgentIdRef = useRef<string | undefined>();
@@ -536,6 +543,23 @@ export default function App() {
     setConfigError(undefined);
   }
 
+  const handleLogRefresh = useCallback(async () => {
+    if (!selectedAgentId) return;
+    setLogsLoading(true);
+    setLogsError(undefined);
+    try {
+      const logContent = await fetchAgentLogs(selectedAgentId, {
+        stream: logStream,
+        lines: logLines,
+      });
+      setLogs(logContent);
+    } catch (err) {
+      setLogsError(err instanceof Error ? err.message : "Failed to fetch logs");
+    } finally {
+      setLogsLoading(false);
+    }
+  }, [selectedAgentId, logStream, logLines]);
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -682,6 +706,20 @@ export default function App() {
               }}
               onSave={handleConfigSave}
               onReset={handleConfigReset}
+            />
+            <LogViewer
+              agentId={selectedAgentId}
+              isOpen={logsOpen}
+              logs={logs}
+              loading={logsLoading}
+              error={logsError}
+              stream={logStream}
+              lines={logLines}
+              onToggle={() => setLogsOpen(!logsOpen)}
+              onRefresh={handleLogRefresh}
+              onStreamChange={setLogStream}
+              onLinesChange={setLogLines}
+              disabled={!selectedAgentOnline}
             />
           </>
         ) : (
@@ -1354,6 +1392,147 @@ function Metric({ label, value }: MetricProps) {
       <span>{label}</span>
       <span>{value}</span>
     </div>
+  );
+}
+
+interface LogViewerProps {
+  agentId?: string;
+  isOpen: boolean;
+  logs: string;
+  loading: boolean;
+  error?: string;
+  stream: string;
+  lines: number;
+  onToggle: () => void;
+  onRefresh: () => Promise<void>;
+  onStreamChange: (stream: string) => void;
+  onLinesChange: (lines: number) => void;
+  disabled: boolean;
+}
+
+function LogViewer({
+  agentId,
+  isOpen,
+  logs,
+  loading,
+  error,
+  stream,
+  lines,
+  onToggle,
+  onRefresh,
+  onStreamChange,
+  onLinesChange,
+  disabled,
+}: LogViewerProps) {
+  const logContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when logs update
+  useEffect(() => {
+    if (isOpen && logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [logs, isOpen]);
+
+  // Fetch logs when opened or settings change
+  useEffect(() => {
+    if (isOpen && agentId && !disabled) {
+      onRefresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, agentId, stream, lines, disabled]);
+
+  return (
+    <section className="config-panel">
+      <div
+        className="config-panel-header"
+        onClick={onToggle}
+        style={{ cursor: "pointer" }}
+      >
+        <h3>Agent Logs</h3>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span className="config-toggle">{isOpen ? "▼" : "▶"}</span>
+        </div>
+      </div>
+      {isOpen && (
+        <>
+          {disabled && (
+            <div className="offline-warning" style={{ marginBottom: "1rem" }}>
+              Agent is offline. Logs cannot be fetched.
+            </div>
+          )}
+          <div className="config-section">
+            <div className="config-form-grid" style={{ marginBottom: "1rem" }}>
+              <div className="form-field">
+                <label htmlFor="log-stream">Log Stream</label>
+                <select
+                  id="log-stream"
+                  value={stream}
+                  onChange={(e) => onStreamChange(e.target.value)}
+                  disabled={disabled || loading}
+                >
+                  <option value="agent">Agent Logs</option>
+                  <option value="updater">Autoupdater Logs</option>
+                </select>
+              </div>
+              <div className="form-field">
+                <label htmlFor="log-lines">Lines</label>
+                <input
+                  id="log-lines"
+                  type="number"
+                  value={lines}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    if (!isNaN(val) && val > 0) {
+                      onLinesChange(Math.min(val, 10000));
+                    }
+                  }}
+                  disabled={disabled || loading}
+                  min="1"
+                  max="10000"
+                />
+              </div>
+              <div className="form-field" style={{ display: "flex", alignItems: "flex-end" }}>
+                <button
+                  onClick={onRefresh}
+                  disabled={disabled || loading}
+                  className="primary"
+                >
+                  {loading ? "Loading..." : "Refresh"}
+                </button>
+              </div>
+            </div>
+          </div>
+          {error && <div className="config-error">{error}</div>}
+          {loading && logs === "" ? (
+            <div className="config-loading">
+              <div className="spinner"></div>
+              <p>Loading logs…</p>
+            </div>
+          ) : (
+            <div
+              ref={logContainerRef}
+              className="log-viewer"
+              style={{
+                backgroundColor: "#0a0e1a",
+                border: "1px solid rgba(148, 163, 184, 0.2)",
+                borderRadius: "0.5rem",
+                padding: "1rem",
+                maxHeight: "600px",
+                overflow: "auto",
+                fontFamily: "Monaco, 'Courier New', monospace",
+                fontSize: "0.875rem",
+                lineHeight: "1.5",
+                color: "#e2e8f0",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
+              {logs || "No logs available"}
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

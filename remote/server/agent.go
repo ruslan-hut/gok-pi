@@ -17,8 +17,10 @@ const (
 	agentMessageHeartbeat = "agent.heartbeat"
 	agentMessageCommand   = "agent.command"
 	agentMessageConfig    = "agent.config"
+	agentMessageLogResponse = "agent.log.response"
 
 	serverMessageConfigPush = "server.config.push"
+	serverMessageLogRequest = "server.log.request"
 )
 
 type agentConnection struct {
@@ -35,16 +37,20 @@ type agentConnection struct {
 
 	mu        sync.RWMutex
 	telemetry map[string]TelemetrySnapshot
+
+	logRequestsMu sync.RWMutex
+	logRequests   map[string]chan AgentLogResponse
 }
 
 func newAgentConnection(conn *websocket.Conn, r *http.Request, s *Server) *agentConnection {
 	return &agentConnection{
-		conn:      conn,
-		req:       r,
-		s:         s,
-		send:      make(chan interface{}, 32),
-		done:      make(chan struct{}),
-		telemetry: make(map[string]TelemetrySnapshot),
+		conn:        conn,
+		req:         r,
+		s:           s,
+		send:        make(chan interface{}, 32),
+		done:        make(chan struct{}),
+		telemetry:   make(map[string]TelemetrySnapshot),
+		logRequests: make(map[string]chan AgentLogResponse),
 	}
 }
 
@@ -172,6 +178,13 @@ func (a *agentConnection) handleMessage(message []byte) {
 			return
 		}
 		a.s.onAgentConfigSync(a.id, cfg)
+	case agentMessageLogResponse:
+		var logResp AgentLogResponse
+		if err := json.Unmarshal(message, &logResp); err != nil {
+			a.log().With(slog.Any("error", err)).Warn("decode log response")
+			return
+		}
+		a.handleLogResponse(logResp)
 	default:
 		a.log().With(slog.String("type", base.Type)).Debug("received unhandled agent message")
 	}
@@ -241,6 +254,79 @@ func (a *agentConnection) sendCommand(req CommandRequest) error {
 		return nil
 	default:
 		return fmt.Errorf("agent command buffer full")
+	}
+}
+
+func (a *agentConnection) requestLogs(req LogRequest, timeout time.Duration) (AgentLogResponse, error) {
+	requestID := fmt.Sprintf("%s-logs-%d", a.id, time.Now().UnixNano())
+	
+	ch := make(chan AgentLogResponse, 1)
+	a.logRequestsMu.Lock()
+	a.logRequests[requestID] = ch
+	a.logRequestsMu.Unlock()
+
+	payload := struct {
+		Type      string     `json:"type"`
+		RequestID string     `json:"request_id"`
+		Lines     int        `json:"lines,omitempty"`
+		Stream    string     `json:"stream,omitempty"`
+		SentAt    time.Time  `json:"sent_at"`
+	}{
+		Type:      serverMessageLogRequest,
+		RequestID: requestID,
+		Lines:     req.Lines,
+		Stream:    req.Stream,
+		SentAt:    time.Now().UTC(),
+	}
+
+	select {
+	case <-a.done:
+		a.logRequestsMu.Lock()
+		delete(a.logRequests, requestID)
+		close(ch)
+		a.logRequestsMu.Unlock()
+		return AgentLogResponse{}, fmt.Errorf("agent connection closed")
+	case a.send <- payload:
+		// Wait for response with timeout
+		select {
+		case resp := <-ch:
+			return resp, nil
+		case <-time.After(timeout):
+			a.logRequestsMu.Lock()
+			delete(a.logRequests, requestID)
+			close(ch)
+			a.logRequestsMu.Unlock()
+			return AgentLogResponse{}, fmt.Errorf("log request timed out")
+		case <-a.done:
+			a.logRequestsMu.Lock()
+			delete(a.logRequests, requestID)
+			close(ch)
+			a.logRequestsMu.Unlock()
+			return AgentLogResponse{}, fmt.Errorf("agent connection closed")
+		}
+	default:
+		a.logRequestsMu.Lock()
+		delete(a.logRequests, requestID)
+		close(ch)
+		a.logRequestsMu.Unlock()
+		return AgentLogResponse{}, fmt.Errorf("agent send buffer full")
+	}
+}
+
+func (a *agentConnection) handleLogResponse(resp AgentLogResponse) {
+	a.logRequestsMu.Lock()
+	ch, ok := a.logRequests[resp.RequestID]
+	if ok {
+		delete(a.logRequests, resp.RequestID)
+	}
+	a.logRequestsMu.Unlock()
+
+	if ok {
+		select {
+		case ch <- resp:
+		default:
+		}
+		close(ch)
 	}
 }
 

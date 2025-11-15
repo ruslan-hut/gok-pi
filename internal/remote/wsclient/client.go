@@ -1,6 +1,7 @@
 package wsclient
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,7 +13,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +35,8 @@ const (
 const (
 	messageTypeConfigPush  = "server.config.push"
 	messageTypeAgentConfig = "agent.config"
+	messageTypeLogRequest  = "server.log.request"
+	messageTypeLogResponse = "agent.log.response"
 )
 
 type AgentMetadata struct {
@@ -273,6 +278,8 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn) error {
 		switch envelope.Type {
 		case messageTypeConfigPush:
 			c.handleConfigPush(raw)
+		case messageTypeLogRequest:
+			c.handleLogRequest(ctx, conn, raw)
 		default:
 			var msg IncomingMessage
 			if err := json.Unmarshal(raw, &msg); err != nil {
@@ -422,6 +429,103 @@ func (c *Client) handleConfigPush(raw json.RawMessage) {
 	default:
 		c.log.With(slog.String("component", "config"), slog.String("agent", payload.AgentID)).Warn("config update dropped; buffer full")
 	}
+}
+
+func (c *Client) handleLogRequest(ctx context.Context, conn *websocket.Conn, raw json.RawMessage) {
+	var req struct {
+		Type      string    `json:"type"`
+		RequestID string    `json:"request_id"`
+		Lines     int       `json:"lines,omitempty"`
+		Stream    string    `json:"stream,omitempty"`
+		SentAt    time.Time `json:"sent_at"`
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		c.log.With(sl.Err(err)).Error("decode log request")
+		return
+	}
+
+	logs, err := c.readLogs(req.Stream, req.Lines)
+	
+	resp := struct {
+		Type      string    `json:"type"`
+		RequestID string    `json:"request_id"`
+		Logs      string    `json:"logs,omitempty"`
+		Error     string    `json:"error,omitempty"`
+		SentAt    time.Time `json:"sent_at"`
+	}{
+		Type:      messageTypeLogResponse,
+		RequestID: req.RequestID,
+		SentAt:    time.Now().UTC(),
+	}
+
+	if err != nil {
+		resp.Error = err.Error()
+	} else {
+		resp.Logs = logs
+	}
+
+	if err := wsjson.Write(ctx, conn, resp); err != nil {
+		c.log.With(sl.Err(err)).Error("send log response")
+	}
+}
+
+func (c *Client) readLogs(stream string, lines int) (string, error) {
+	if lines <= 0 {
+		lines = 500
+	}
+	if lines > 10000 {
+		lines = 10000 // cap at 10k lines
+	}
+
+	var logPath string
+	switch stream {
+	case "updater", "agent-updater":
+		// Autoupdater logs are at /var/log/gok/gok-pi.log (same as agent)
+		// In practice, we could differentiate by checking GOK_UPDATE_LOG_DIR
+		logPath = "/var/log/gok/gok-pi.log"
+		if envDir := os.Getenv("GOK_UPDATE_LOG_DIR"); envDir != "" {
+			logPath = filepath.Join(envDir, "gok-pi.log")
+		}
+	case "agent", "":
+		// Agent logs - check environment variable first
+		logPath = "/var/log/gok/gok-pi.log"
+		if envDir := os.Getenv("GOK_UPDATE_LOG_DIR"); envDir != "" {
+			// This might be set by the updater, but we check anyway
+			logPath = filepath.Join(envDir, "gok-pi.log")
+		}
+		// Also check common log locations
+		for _, dir := range []string{"/var/log/gok", "/var/log"} {
+			candidate := filepath.Join(dir, "gok-pi.log")
+			if _, err := os.Stat(candidate); err == nil {
+				logPath = candidate
+				break
+			}
+		}
+	default:
+		return "", fmt.Errorf("unknown log stream: %s", stream)
+	}
+
+	file, err := os.Open(logPath)
+	if err != nil {
+		return "", fmt.Errorf("open log file: %w", err)
+	}
+	defer file.Close()
+
+	var allLines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		allLines = append(allLines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("read log file: %w", err)
+	}
+
+	// Return last N lines
+	start := 0
+	if len(allLines) > lines {
+		start = len(allLines) - lines
+	}
+	return strings.Join(allLines[start:], "\n"), nil
 }
 
 type AgentConfig struct {
