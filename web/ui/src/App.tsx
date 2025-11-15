@@ -13,7 +13,9 @@ import Login from "./Login";
 import type {
   AgentConfig,
   AgentSummary,
+  BatteryConfig,
   DashboardMessage,
+  ScheduleConfig,
   TelemetrySnapshot,
 } from "./types";
 
@@ -495,6 +497,20 @@ export default function App() {
             Logout
           </button>
         </div>
+        <div className="agent-select-mobile">
+          <select
+            value={selectedAgentId || ""}
+            onChange={(e) => setSelectedAgentId(e.target.value || undefined)}
+            className="agent-select"
+          >
+            <option value="">Select agent...</option>
+            {Object.values(agents).map((agent) => (
+              <option key={agent.agent.id} value={agent.agent.id}>
+                {agent.agent.id} ({agent.connected === false ? "Offline" : "Online"})
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="agent-list">
           {Object.values(agents).map((agent) => (
             <button
@@ -533,7 +549,18 @@ export default function App() {
       </aside>
 
       <main className="content">
-        {message && <div className="badge">{message}</div>}
+        {message && (
+          <div className="message-banner">
+            {message}
+            <button
+              className="message-close"
+              onClick={() => setMessage(undefined)}
+              aria-label="Dismiss message"
+            >
+              ×
+            </button>
+          </div>
+        )}
         {selectedAgent ? (
           <>
             <header>
@@ -811,6 +838,89 @@ function ConfigEditor({
   onReset,
 }: ConfigEditorProps) {
   const [collapsed, setCollapsed] = useState(true);
+  const [showJson, setShowJson] = useState(false);
+  const [localConfig, setLocalConfig] = useState<AgentConfig | null>(null);
+
+  // Parse draft into local config state
+  useEffect(() => {
+    if (draft) {
+      try {
+        const parsed = JSON.parse(draft) as Partial<AgentConfig>;
+        setLocalConfig({
+          revision: parsed.revision ?? config?.revision ?? 0,
+          updated_at: config?.updated_at ?? new Date().toISOString(),
+          batteries: Array.isArray(parsed.batteries) ? parsed.batteries : [],
+          schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+        });
+      } catch {
+        // Invalid JSON, keep current state
+      }
+    } else {
+      setLocalConfig(config);
+    }
+  }, [draft, config]);
+
+  const handleConfigChange = (newConfig: AgentConfig) => {
+    setLocalConfig(newConfig);
+    onDraftChange(formatConfigDraft(newConfig));
+  };
+
+  const handleBatteryChange = (index: number, battery: BatteryConfig) => {
+    if (!localConfig) return;
+    const newBatteries = [...localConfig.batteries];
+    newBatteries[index] = battery;
+    handleConfigChange({ ...localConfig, batteries: newBatteries });
+  };
+
+  const handleBatteryAdd = () => {
+    if (!localConfig) return;
+    const newBattery: BatteryConfig = {
+      name: "",
+      url: "",
+      token: "",
+      enabled: true,
+      capacity_limit: 0,
+    };
+    handleConfigChange({
+      ...localConfig,
+      batteries: [...localConfig.batteries, newBattery],
+    });
+  };
+
+  const handleBatteryRemove = (index: number) => {
+    if (!localConfig) return;
+    const newBatteries = localConfig.batteries.filter((_, i) => i !== index);
+    handleConfigChange({ ...localConfig, batteries: newBatteries });
+  };
+
+  const handleScheduleChange = (index: number, schedule: ScheduleConfig) => {
+    if (!localConfig) return;
+    const newSchedules = [...localConfig.schedules];
+    newSchedules[index] = schedule;
+    handleConfigChange({ ...localConfig, schedules: newSchedules });
+  };
+
+  const handleScheduleAdd = () => {
+    if (!localConfig) return;
+    const newSchedule: ScheduleConfig = {
+      start_time: "00:00",
+      stop_time: "23:59",
+      battery_name: "",
+      enabled: true,
+      power_limit: 0,
+      soc_limit: 0,
+    };
+    handleConfigChange({
+      ...localConfig,
+      schedules: [...localConfig.schedules, newSchedule],
+    });
+  };
+
+  const handleScheduleRemove = (index: number) => {
+    if (!localConfig) return;
+    const newSchedules = localConfig.schedules.filter((_, i) => i !== index);
+    handleConfigChange({ ...localConfig, schedules: newSchedules });
+  };
 
   return (
     <section className="config-panel">
@@ -822,27 +932,107 @@ function ConfigEditor({
         <h3>Remote configuration</h3>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {config ? <span className="badge">Revision {config.revision}</span> : null}
+          {dirty && <span className="badge" style={{ borderColor: "#fbbf24", color: "#fbbf24" }}>Unsaved</span>}
           <span className="config-toggle">{collapsed ? "▶" : "▼"}</span>
         </div>
       </div>
       {!collapsed && (
         <>
           {loading ? (
-            <p>Loading configuration…</p>
+            <div className="config-loading">
+              <div className="spinner"></div>
+              <p>Loading configuration…</p>
+            </div>
           ) : (
             <>
               <p className="config-meta">
                 {config
                   ? `Last updated ${new Date(config.updated_at).toLocaleString()}`
-                  : "No remote configuration stored yet. Edit the JSON below and save to push new settings."}
+                  : "No remote configuration stored yet. Configure batteries and schedules below."}
               </p>
-              <textarea
-                className="config-editor"
-                value={draft}
-                onChange={(event) => onDraftChange(event.target.value)}
-                disabled={saving}
-                spellCheck={false}
-              />
+              
+              {!showJson ? (
+                <div className="config-forms">
+                  <div className="config-section">
+                    <div className="config-section-header">
+                      <h4>Batteries</h4>
+                      <button 
+                        type="button" 
+                        className="button-small"
+                        onClick={handleBatteryAdd}
+                        disabled={saving || !localConfig}
+                      >
+                        + Add Battery
+                      </button>
+                    </div>
+                    {localConfig?.batteries.length === 0 ? (
+                      <p className="config-empty">No batteries configured. Click "Add Battery" to create one.</p>
+                    ) : (
+                      <div className="config-items">
+                        {localConfig?.batteries.map((battery, index) => (
+                          <BatteryConfigForm
+                            key={`battery-${index}-${battery.name || 'new'}`}
+                            battery={battery}
+                            onChange={(b) => handleBatteryChange(index, b)}
+                            onRemove={() => handleBatteryRemove(index)}
+                            disabled={saving}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="config-section">
+                    <div className="config-section-header">
+                      <h4>Schedules</h4>
+                      <button 
+                        type="button" 
+                        className="button-small"
+                        onClick={handleScheduleAdd}
+                        disabled={saving || !localConfig}
+                      >
+                        + Add Schedule
+                      </button>
+                    </div>
+                    {localConfig?.schedules.length === 0 ? (
+                      <p className="config-empty">No schedules configured. Click "Add Schedule" to create one.</p>
+                    ) : (
+                      <div className="config-items">
+                        {localConfig?.schedules.map((schedule, index) => (
+                          <ScheduleConfigForm
+                            key={`schedule-${index}-${schedule.battery_name || 'new'}`}
+                            schedule={schedule}
+                            batteryNames={localConfig?.batteries.map(b => b.name) || []}
+                            onChange={(s) => handleScheduleChange(index, s)}
+                            onRemove={() => handleScheduleRemove(index)}
+                            disabled={saving}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <textarea
+                  className="config-editor"
+                  value={draft}
+                  onChange={(event) => onDraftChange(event.target.value)}
+                  disabled={saving}
+                  spellCheck={false}
+                />
+              )}
+
+              <div className="config-view-toggle">
+                <button
+                  type="button"
+                  className="button-link"
+                  onClick={() => setShowJson(!showJson)}
+                  disabled={saving}
+                >
+                  {showJson ? "← Back to Forms" : "Advanced: Edit JSON"}
+                </button>
+              </div>
+
               {error ? <div className="config-error">{error}</div> : null}
               <div className="config-actions">
                 <button onClick={onReset} disabled={!dirty || saving}>
@@ -853,7 +1043,14 @@ function ConfigEditor({
                   onClick={onSave}
                   disabled={saving || !dirty}
                 >
-                  {saving ? "Saving..." : "Save"}
+                  {saving ? (
+                    <>
+                      <span className="spinner-small"></span>
+                      Saving...
+                    </>
+                  ) : (
+                    "Save"
+                  )}
                 </button>
               </div>
             </>
@@ -861,6 +1058,199 @@ function ConfigEditor({
         </>
       )}
     </section>
+  );
+}
+
+interface BatteryConfigFormProps {
+  battery: BatteryConfig;
+  onChange: (battery: BatteryConfig) => void;
+  onRemove: () => void;
+  disabled?: boolean;
+}
+
+function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryConfigFormProps) {
+  return (
+    <div className="config-item">
+      <div className="config-item-header">
+        <h5>{battery.name || "Unnamed Battery"}</h5>
+        <button
+          type="button"
+          className="button-icon"
+          onClick={onRemove}
+          disabled={disabled}
+          title="Remove battery"
+        >
+          ×
+        </button>
+      </div>
+      <div className="config-form-grid">
+        <div className="form-field">
+          <label htmlFor={`battery-name-${battery.name || 'new'}`}>Name *</label>
+          <input
+            id={`battery-name-${battery.name || 'new'}`}
+            type="text"
+            value={battery.name}
+            onChange={(e) => onChange({ ...battery, name: e.target.value })}
+            disabled={disabled}
+            required
+            placeholder="battery-1"
+          />
+        </div>
+        <div className="form-field">
+          <label htmlFor={`battery-url-${battery.name || 'new'}`}>URL *</label>
+          <input
+            id={`battery-url-${battery.name || 'new'}`}
+            type="url"
+            value={battery.url}
+            onChange={(e) => onChange({ ...battery, url: e.target.value })}
+            disabled={disabled}
+            required
+            placeholder="http://192.168.1.100"
+          />
+        </div>
+        <div className="form-field">
+          <label htmlFor={`battery-token-${battery.name || 'new'}`}>Token *</label>
+          <input
+            id={`battery-token-${battery.name || 'new'}`}
+            type="password"
+            value={battery.token}
+            onChange={(e) => onChange({ ...battery, token: e.target.value })}
+            disabled={disabled}
+            required
+            placeholder="API token"
+          />
+        </div>
+        <div className="form-field">
+          <label htmlFor={`battery-capacity-${battery.name || 'new'}`}>Capacity Limit (Wh)</label>
+          <input
+            id={`battery-capacity-${battery.name || 'new'}`}
+            type="number"
+            value={battery.capacity_limit}
+            onChange={(e) => onChange({ ...battery, capacity_limit: Number(e.target.value) })}
+            disabled={disabled}
+            min="0"
+            step="1"
+          />
+        </div>
+        <div className="form-field form-field-checkbox">
+          <label>
+            <input
+              type="checkbox"
+              checked={battery.enabled}
+              onChange={(e) => onChange({ ...battery, enabled: e.target.checked })}
+              disabled={disabled}
+            />
+            <span>Enabled</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ScheduleConfigFormProps {
+  schedule: ScheduleConfig;
+  batteryNames: string[];
+  onChange: (schedule: ScheduleConfig) => void;
+  onRemove: () => void;
+  disabled?: boolean;
+}
+
+function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabled }: ScheduleConfigFormProps) {
+  return (
+    <div className="config-item">
+      <div className="config-item-header">
+        <h5>{schedule.battery_name || "Unnamed Schedule"}</h5>
+        <button
+          type="button"
+          className="button-icon"
+          onClick={onRemove}
+          disabled={disabled}
+          title="Remove schedule"
+        >
+          ×
+        </button>
+      </div>
+      <div className="config-form-grid">
+        <div className="form-field">
+          <label htmlFor={`schedule-battery-${schedule.battery_name || 'new'}`}>Battery Name *</label>
+          <select
+            id={`schedule-battery-${schedule.battery_name || 'new'}`}
+            value={schedule.battery_name}
+            onChange={(e) => onChange({ ...schedule, battery_name: e.target.value })}
+            disabled={disabled}
+            required
+          >
+            <option value="">Select battery...</option>
+            {batteryNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-field">
+          <label htmlFor={`schedule-start-${schedule.battery_name || 'new'}`}>Start Time *</label>
+          <input
+            id={`schedule-start-${schedule.battery_name || 'new'}`}
+            type="time"
+            value={schedule.start_time}
+            onChange={(e) => onChange({ ...schedule, start_time: e.target.value })}
+            disabled={disabled}
+            required
+          />
+        </div>
+        <div className="form-field">
+          <label htmlFor={`schedule-stop-${schedule.battery_name || 'new'}`}>Stop Time *</label>
+          <input
+            id={`schedule-stop-${schedule.battery_name || 'new'}`}
+            type="time"
+            value={schedule.stop_time}
+            onChange={(e) => onChange({ ...schedule, stop_time: e.target.value })}
+            disabled={disabled}
+            required
+          />
+        </div>
+        <div className="form-field">
+          <label htmlFor={`schedule-power-${schedule.battery_name || 'new'}`}>Power Limit (W) *</label>
+          <input
+            id={`schedule-power-${schedule.battery_name || 'new'}`}
+            type="number"
+            value={schedule.power_limit}
+            onChange={(e) => onChange({ ...schedule, power_limit: Number(e.target.value) })}
+            disabled={disabled}
+            required
+            min="0"
+            step="1"
+          />
+        </div>
+        <div className="form-field">
+          <label htmlFor={`schedule-soc-${schedule.battery_name || 'new'}`}>SoC Limit (%) *</label>
+          <input
+            id={`schedule-soc-${schedule.battery_name || 'new'}`}
+            type="number"
+            value={schedule.soc_limit}
+            onChange={(e) => onChange({ ...schedule, soc_limit: Number(e.target.value) })}
+            disabled={disabled}
+            required
+            min="0"
+            max="100"
+            step="0.1"
+          />
+        </div>
+        <div className="form-field form-field-checkbox">
+          <label>
+            <input
+              type="checkbox"
+              checked={schedule.enabled}
+              onChange={(e) => onChange({ ...schedule, enabled: e.target.checked })}
+              disabled={disabled}
+            />
+            <span>Enabled</span>
+          </label>
+        </div>
+      </div>
+    </div>
   );
 }
 
