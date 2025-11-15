@@ -11,6 +11,11 @@ WorkingDirectory={{AGENT_PATH}}/current
 Environment=GOK_UPDATE_AGENT_ROOT={{AGENT_PATH}}/current
 Environment=GOK_UPDATE_LOG_DIR=/var/log/gok
 EnvironmentFile=-/etc/default/gok-agent-updater
+# Note: To enable automatic agent restart after update, ensure the user has permission
+# to run 'systemctl restart agent.service'. This may require:
+# - Adding the user to the 'systemd-journal' group, or
+# - Configuring polkit rules, or
+# - Running the updater service as root (not recommended)
 ExecStart={{AGENT_PATH}}/bin/agentupdater -version-url=${GOK_UPDATE_VERSION_URL}
 SyslogIdentifier=gok-agent-updater
 

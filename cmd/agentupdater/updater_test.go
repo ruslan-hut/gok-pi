@@ -46,12 +46,14 @@ func TestRun_UpToDateSkipsDownload(t *testing.T) {
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := Config{
-		AgentRoot:  tempDir,
-		BinaryName: "gok",
-		VersionURL: server.URL + "/VERSION",
-		BinaryURL:  server.URL + "/gok",
-		Timeout:    time.Second,
-		Client:     server.Client(),
+		AgentRoot:      tempDir,
+		BinaryName:     "gok",
+		VersionURL:     server.URL + "/VERSION",
+		BinaryURL:      server.URL + "/gok",
+		Timeout:        time.Second,
+		Client:         server.Client(),
+		RestartService: "",
+		RestartEnabled: false,
 	}
 
 	if err := Run(context.Background(), cfg, log); err != nil {
@@ -104,12 +106,14 @@ func TestRun_PerformsBinarySwap(t *testing.T) {
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := Config{
-		AgentRoot:  tempDir,
-		BinaryName: "gok",
-		VersionURL: server.URL + "/VERSION",
-		BinaryURL:  server.URL + "/gok",
-		Timeout:    time.Second,
-		Client:     server.Client(),
+		AgentRoot:      tempDir,
+		BinaryName:     "gok",
+		VersionURL:     server.URL + "/VERSION",
+		BinaryURL:      server.URL + "/gok",
+		Timeout:        time.Second,
+		Client:         server.Client(),
+		RestartService: "",
+		RestartEnabled: false,
 	}
 
 	if err := Run(context.Background(), cfg, log); err != nil {

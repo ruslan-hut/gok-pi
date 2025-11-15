@@ -11,13 +11,15 @@ import (
 )
 
 const (
-	envVersionURL = "GOK_UPDATE_VERSION_URL"
-	envBinaryURL  = "GOK_UPDATE_BINARY_URL"
-	envAgentRoot  = "GOK_UPDATE_AGENT_ROOT"
-	envBinaryName = "GOK_UPDATE_BINARY_NAME"
-	envTimeout    = "GOK_UPDATE_TIMEOUT"
-	envLogEnv     = "GOK_UPDATE_LOG_ENV"
-	envLogDir     = "GOK_UPDATE_LOG_DIR"
+	envVersionURL      = "GOK_UPDATE_VERSION_URL"
+	envBinaryURL       = "GOK_UPDATE_BINARY_URL"
+	envAgentRoot       = "GOK_UPDATE_AGENT_ROOT"
+	envBinaryName      = "GOK_UPDATE_BINARY_NAME"
+	envTimeout         = "GOK_UPDATE_TIMEOUT"
+	envLogEnv          = "GOK_UPDATE_LOG_ENV"
+	envLogDir          = "GOK_UPDATE_LOG_DIR"
+	envRestartService  = "GOK_UPDATE_RESTART_SERVICE"
+	envRestartEnabled  = "GOK_UPDATE_RESTART_ENABLED"
 )
 
 func main() {
@@ -30,6 +32,8 @@ func main() {
 	timeout := flag.Duration("timeout", defaults.Timeout, "HTTP timeout for remote fetch operations")
 	logEnv := flag.String("log-env", defaults.LogEnv, "Logger environment: local, dev, or prod")
 	logDir := flag.String("log-dir", defaults.LogDir, "Directory for JSON log output when log-env is dev or prod")
+	restartService := flag.String("restart-service", defaults.RestartService, "Systemd service name to restart after successful update (empty to disable)")
+	restartEnabled := flag.Bool("restart-enabled", defaults.RestartEnabled, "Enable automatic restart of agent service after successful update")
 
 	flag.Parse()
 
@@ -42,11 +46,13 @@ func main() {
 	}
 
 	cfg := Config{
-		AgentRoot:  *agentRoot,
-		BinaryName: *binaryName,
-		VersionURL: *versionURL,
-		BinaryURL:  *binaryURL,
-		Timeout:    *timeout,
+		AgentRoot:      *agentRoot,
+		BinaryName:     *binaryName,
+		VersionURL:     *versionURL,
+		BinaryURL:      *binaryURL,
+		Timeout:        *timeout,
+		RestartService: *restartService,
+		RestartEnabled: *restartEnabled,
 	}
 
 	if err := Run(context.Background(), cfg, log); err != nil {
@@ -58,13 +64,15 @@ func main() {
 }
 
 type defaults struct {
-	VersionURL string
-	BinaryURL  string
-	AgentRoot  string
-	BinaryName string
-	Timeout    time.Duration
-	LogEnv     string
-	LogDir     string
+	VersionURL     string
+	BinaryURL      string
+	AgentRoot      string
+	BinaryName     string
+	Timeout        time.Duration
+	LogEnv         string
+	LogDir         string
+	RestartService string
+	RestartEnabled bool
 }
 
 func loadDefaults() defaults {
@@ -95,13 +103,25 @@ func loadDefaults() defaults {
 		logDir = "/var/log/gok"
 	}
 
+	restartService := os.Getenv(envRestartService)
+	if restartService == "" {
+		restartService = "agent.service"
+	}
+
+	restartEnabled := true
+	if val := os.Getenv(envRestartEnabled); val != "" {
+		restartEnabled = val == "true" || val == "1" || val == "yes"
+	}
+
 	return defaults{
-		VersionURL: os.Getenv(envVersionURL),
-		BinaryURL:  os.Getenv(envBinaryURL),
-		AgentRoot:  agentRoot,
-		BinaryName: binaryName,
-		Timeout:    timeout,
-		LogEnv:     logEnv,
-		LogDir:     logDir,
+		VersionURL:     os.Getenv(envVersionURL),
+		BinaryURL:      os.Getenv(envBinaryURL),
+		AgentRoot:      agentRoot,
+		BinaryName:     binaryName,
+		Timeout:        timeout,
+		LogEnv:         logEnv,
+		LogDir:         logDir,
+		RestartService: restartService,
+		RestartEnabled: restartEnabled,
 	}
 }

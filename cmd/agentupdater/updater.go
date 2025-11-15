@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -19,12 +20,14 @@ import (
 
 // Config configures the updater workflow.
 type Config struct {
-	AgentRoot  string
-	BinaryName string
-	VersionURL string
-	BinaryURL  string
-	Timeout    time.Duration
-	Client     *http.Client
+	AgentRoot      string
+	BinaryName     string
+	VersionURL     string
+	BinaryURL      string
+	Timeout        time.Duration
+	Client         *http.Client
+	RestartService string
+	RestartEnabled bool
 }
 
 // Run performs the update check and binary swap if necessary.
@@ -81,6 +84,17 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 	}
 
 	log.Info("agent binary updated successfully", "version", remoteVersion)
+
+	// Restart agent service if enabled
+	if cfg.RestartEnabled && cfg.RestartService != "" {
+		if err := restartService(ctx, cfg.RestartService, log); err != nil {
+			// Log error but don't fail the update - the binary is already installed
+			log.Warn("failed to restart agent service after update", slog.String("service", cfg.RestartService), slog.Any("error", err))
+		} else {
+			log.Info("agent service restarted successfully", slog.String("service", cfg.RestartService))
+		}
+	}
+
 	return nil
 }
 
@@ -280,5 +294,22 @@ func validateHash(hash string) error {
 		}
 		return fmt.Errorf("invalid hex character %q", c)
 	}
+	return nil
+}
+
+// restartService restarts a systemd service using systemctl.
+func restartService(ctx context.Context, serviceName string, log *slog.Logger) error {
+	// Validate service name to prevent command injection
+	if strings.ContainsAny(serviceName, " \t\n\r;&|$`\"'<>") {
+		return fmt.Errorf("invalid service name: contains forbidden characters")
+	}
+
+	cmd := exec.CommandContext(ctx, "systemctl", "restart", serviceName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("systemctl restart failed: %w, output: %s", err, string(output))
+	}
+
+	log.Debug("systemctl restart completed", slog.String("service", serviceName), slog.String("output", string(output)))
 	return nil
 }
