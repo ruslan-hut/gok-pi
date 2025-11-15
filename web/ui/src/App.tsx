@@ -448,6 +448,23 @@ export default function App() {
     );
   }, [selectedAgent]);
 
+  const handleLogRefresh = useCallback(async () => {
+    if (!selectedAgentId) return;
+    setLogsLoading(true);
+    setLogsError(undefined);
+    try {
+      const logContent = await fetchAgentLogs(selectedAgentId, {
+        stream: logStream,
+        lines: logLines,
+      });
+      setLogs(logContent);
+    } catch (err) {
+      setLogsError(err instanceof Error ? err.message : "Failed to fetch logs");
+    } finally {
+      setLogsLoading(false);
+    }
+  }, [selectedAgentId, logStream, logLines]);
+
   if (authenticated === null) {
     return (
       <div className="app">
@@ -542,23 +559,6 @@ export default function App() {
     setConfigDirty(false);
     setConfigError(undefined);
   }
-
-  const handleLogRefresh = useCallback(async () => {
-    if (!selectedAgentId) return;
-    setLogsLoading(true);
-    setLogsError(undefined);
-    try {
-      const logContent = await fetchAgentLogs(selectedAgentId, {
-        stream: logStream,
-        lines: logLines,
-      });
-      setLogs(logContent);
-    } catch (err) {
-      setLogsError(err instanceof Error ? err.message : "Failed to fetch logs");
-    } finally {
-      setLogsLoading(false);
-    }
-  }, [selectedAgentId, logStream, logLines]);
 
   return (
     <div className="app">
