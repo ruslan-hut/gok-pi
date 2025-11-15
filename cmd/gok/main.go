@@ -129,6 +129,19 @@ func main() {
 						}
 					}
 					manager.Apply(ctx, &wg, filterEnabledBatteries(update.Config.Batteries), filterEnabledSchedules(update.Config.Schedules), lg)
+
+					// Persist remote configuration to local config.yml
+					config.UpdateBatteriesAndSchedules(update.Config.Batteries, update.Config.Schedules)
+					if err := config.Save(); err != nil {
+						lg.With(
+							slog.Int("revision", update.Config.Revision),
+							sl.Err(err),
+						).Warn("failed to persist remote configuration to local config file")
+					} else {
+						lg.With(
+							slog.Int("revision", update.Config.Revision),
+						).Info("persisted remote configuration to local config file")
+					}
 				}
 			}
 		}()
