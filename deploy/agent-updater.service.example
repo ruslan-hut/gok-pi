@@ -1,0 +1,67 @@
+[Unit]
+Description=GOK Agent Auto Updater
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User={{AGENT_USER}}
+Group={{AGENT_GROUP}}
+WorkingDirectory={{AGENT_PATH}}/current
+
+# Option 1: Using environment variables (recommended - currently active)
+# This allows easy overrides via EnvironmentFile
+Environment=GOK_UPDATE_AGENT_ROOT={{AGENT_PATH}}/current
+Environment=GOK_UPDATE_LOG_DIR=/var/log/gok
+Environment=GOK_UPDATE_VERSION_URL=https://example.com/releases/latest/VERSION
+EnvironmentFile=-/etc/default/gok-agent-updater
+ExecStart={{AGENT_PATH}}/bin/agentupdater -version-url=${GOK_UPDATE_VERSION_URL}
+
+# Option 2: All parameters via command line (simple but less flexible)
+# ExecStart={{AGENT_PATH}}/bin/agentupdater \
+#   -version-url=https://example.com/releases/latest/VERSION \
+#   -binary-url=https://example.com/releases/latest/gok \
+#   -agent-root={{AGENT_PATH}}/current \
+#   -binary-name=gok \
+#   -timeout=30s \
+#   -log-env=prod \
+#   -log-dir=/var/log/gok
+
+# Option 3: Mix of environment variables and command line parameters
+# Environment=GOK_UPDATE_AGENT_ROOT={{AGENT_PATH}}/current
+# Environment=GOK_UPDATE_LOG_DIR=/var/log/gok
+# EnvironmentFile=-/etc/default/gok-agent-updater
+# ExecStart={{AGENT_PATH}}/bin/agentupdater \
+#   -version-url=${GOK_UPDATE_VERSION_URL} \
+#   -agent-root=${GOK_UPDATE_AGENT_ROOT} \
+#   -log-dir=${GOK_UPDATE_LOG_DIR} \
+#   -timeout=45s \
+#   -log-env=prod
+
+# Option 4: Minimal configuration (only required parameter)
+# ExecStart={{AGENT_PATH}}/bin/agentupdater \
+#   -version-url=https://example.com/releases/latest/VERSION
+
+# Option 5: Full configuration with all optional parameters
+# Environment=GOK_UPDATE_AGENT_ROOT={{AGENT_PATH}}/current
+# Environment=GOK_UPDATE_BINARY_NAME=gok
+# Environment=GOK_UPDATE_TIMEOUT=30s
+# Environment=GOK_UPDATE_LOG_ENV=prod
+# Environment=GOK_UPDATE_LOG_DIR=/var/log/gok
+# EnvironmentFile=-/etc/default/gok-agent-updater
+# ExecStart={{AGENT_PATH}}/bin/agentupdater \
+#   -version-url=${GOK_UPDATE_VERSION_URL} \
+#   -binary-url=${GOK_UPDATE_BINARY_URL} \
+#   -agent-root=${GOK_UPDATE_AGENT_ROOT} \
+#   -binary-name=${GOK_UPDATE_BINARY_NAME} \
+#   -timeout=${GOK_UPDATE_TIMEOUT} \
+#   -log-env=${GOK_UPDATE_LOG_ENV} \
+#   -log-dir=${GOK_UPDATE_LOG_DIR}
+
+SyslogIdentifier=gok-agent-updater
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

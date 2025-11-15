@@ -1,0 +1,38 @@
+[Unit]
+Description=GOK Agent
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{AGENT_USER}}
+Group={{AGENT_GROUP}}
+
+# Option 1: Using command line parameters directly
+# ExecStart={{AGENT_PATH}}/current/gok -conf=/opt/gok/config.yml -log=/var/log/gok
+
+# Option 2: Using environment variables (recommended)
+Environment=GOK_CONF={{AGENT_PATH}}/config.yml
+Environment=GOK_LOG_DIR=/var/log/gok
+ExecStart={{AGENT_PATH}}/current/gok -conf=${GOK_CONF} -log=${GOK_LOG_DIR}
+
+# Option 3: Using EnvironmentFile for overrides
+# This allows overriding values from /etc/default/gok-agent
+EnvironmentFile=-/etc/default/gok-agent
+
+# Option 4: Hardcoded paths (simple but less flexible)
+# ExecStart={{AGENT_PATH}}/current/gok -conf={{AGENT_PATH}}/config.yml -log=/var/log/gok
+
+# Option 5: Using absolute paths with command line parameters
+# ExecStart=/opt/gok/current/gok -conf=/opt/gok/config.yml -log=/var/log/gok
+
+WorkingDirectory={{AGENT_PATH}}/current
+Restart=on-failure
+RestartSec=5s
+SyslogIdentifier=gok-agent
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

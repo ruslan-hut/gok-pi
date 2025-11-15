@@ -478,31 +478,48 @@ func (c *Client) readLogs(stream string, lines int) (string, error) {
 	}
 
 	var logPath string
+	var candidates []string
 	switch stream {
 	case "updater", "agent-updater":
-		// Autoupdater logs are at /var/log/gok/gok-pi.log (same as agent)
-		// In practice, we could differentiate by checking GOK_UPDATE_LOG_DIR
-		logPath = "/var/log/gok/gok-pi.log"
+		// Autoupdater logs - check environment variable first, then common locations
 		if envDir := os.Getenv("GOK_UPDATE_LOG_DIR"); envDir != "" {
-			logPath = filepath.Join(envDir, "gok-pi.log")
+			candidates = append(candidates, filepath.Join(envDir, "gok-pi.log"))
 		}
+		// Check common updater log locations
+		candidates = append(candidates,
+			"/var/log/gok-updater/gok-pi.log",
+			"/var/log/gok/gok-pi.log",
+			"/var/log/gok-pi.log",
+		)
 	case "agent", "":
 		// Agent logs - check environment variable first
-		logPath = "/var/log/gok/gok-pi.log"
-		if envDir := os.Getenv("GOK_UPDATE_LOG_DIR"); envDir != "" {
-			// This might be set by the updater, but we check anyway
-			logPath = filepath.Join(envDir, "gok-pi.log")
+		if envDir := os.Getenv("GOK_LOG_DIR"); envDir != "" {
+			candidates = append(candidates, filepath.Join(envDir, "gok-pi.log"))
 		}
-		// Also check common log locations
-		for _, dir := range []string{"/var/log/gok", "/var/log"} {
-			candidate := filepath.Join(dir, "gok-pi.log")
-			if _, err := os.Stat(candidate); err == nil {
-				logPath = candidate
-				break
-			}
-		}
+		// Check common agent log locations
+		candidates = append(candidates,
+			"/var/log/gok/gok-pi.log",
+			"/var/log/gok-pi.log",
+		)
 	default:
 		return "", fmt.Errorf("unknown log stream: %s", stream)
+	}
+
+	// Find the first existing log file
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			logPath = candidate
+			break
+		}
+	}
+
+	// If no log file found, use the first candidate (will return error on open)
+	if logPath == "" {
+		if len(candidates) > 0 {
+			logPath = candidates[0]
+		} else {
+			return "", fmt.Errorf("no log path configured for stream: %s", stream)
+		}
 	}
 
 	file, err := os.Open(logPath)
