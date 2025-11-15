@@ -1425,6 +1425,12 @@ function LogViewer({
   disabled,
 }: LogViewerProps) {
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const onRefreshRef = useRef(onRefresh);
+
+  // Keep ref in sync
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
 
   // Auto-scroll to bottom when logs update
   useEffect(() => {
@@ -1436,9 +1442,8 @@ function LogViewer({
   // Fetch logs when opened or settings change
   useEffect(() => {
     if (isOpen && agentId && !disabled) {
-      onRefresh();
+      onRefreshRef.current();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, agentId, stream, lines, disabled]);
 
   return (
