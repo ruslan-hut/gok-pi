@@ -134,10 +134,10 @@ The GOK-Pi system consists of three main executables and several core components
 ### Component Interaction
 
 ```
-┌─────────────┐         ┌──────────────┐         ┌─────────────┐
-│   Agent     │◄───────►│ Control      │◄───────►│  Web UI     │
+┌─────────────┐          ┌──────────────┐          ┌─────────────┐
+│   Agent     │◄────────►│ Control      │◄────────►│  Web UI     │
 │  (Device)   │ WebSocket│   Server     │ WebSocket│  (Browser)  │
-└──────┬──────┘         └──────────────┘         └─────────────┘
+└──────┬──────┘          └──────────────┘          └─────────────┘
        │
        │ HTTP API
        ▼
