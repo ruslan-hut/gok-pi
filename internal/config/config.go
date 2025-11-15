@@ -69,6 +69,20 @@ func UpdateBatteriesAndSchedules(batteries []entity.BatteryConfig, schedules []e
 	}
 }
 
+// UpdateFromRemoteConfig updates the config instance with all fields from a remote configuration.
+// This includes device_name, batteries, and schedules. This is thread-safe.
+func UpdateFromRemoteConfig(deviceName string, batteries []entity.BatteryConfig, schedules []entity.Schedule) {
+	mu.Lock()
+	defer mu.Unlock()
+	if instance != nil {
+		if deviceName != "" {
+			instance.DeviceName = deviceName
+		}
+		instance.Batteries = batteries
+		instance.Schedules = schedules
+	}
+}
+
 // Save persists the current config instance to the YAML file it was loaded from.
 // Returns an error if the config was not loaded or if writing fails.
 // Preserves existing file permissions if the file exists, otherwise uses 0600 (rw-------)

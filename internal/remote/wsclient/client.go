@@ -425,10 +425,11 @@ func (c *Client) handleConfigPush(raw json.RawMessage) {
 }
 
 type AgentConfig struct {
-	Revision  int                    `json:"revision"`
-	UpdatedAt time.Time              `json:"updated_at"`
-	Batteries []entity.BatteryConfig `json:"batteries"`
-	Schedules []entity.Schedule      `json:"schedules"`
+	DeviceName string                 `json:"device_name,omitempty"`
+	Revision   int                    `json:"revision"`
+	UpdatedAt  time.Time              `json:"updated_at"`
+	Batteries  []entity.BatteryConfig `json:"batteries"`
+	Schedules  []entity.Schedule      `json:"schedules"`
 }
 
 type ConfigUpdate struct {
