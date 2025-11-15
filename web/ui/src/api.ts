@@ -129,6 +129,7 @@ export async function fetchAgentConfig(
 }
 
 export interface AgentConfigPayload {
+  device_name?: string;
   revision: number;
   batteries: AgentConfig["batteries"];
   schedules: AgentConfig["schedules"];

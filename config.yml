@@ -1,5 +1,5 @@
 ---
-
+device_name: My Battery Controller
 env: local
 metrics:
   enabled: false
@@ -29,19 +29,22 @@ batteries:
     enabled: true
     capacity_limit: 5000
 schedules:
-  - start_time: 20:00
+  - name: Evening Discharge 1
+    start_time: 20:00
     stop_time: 00:00
     battery_name: battery1
     enabled: true
     power_limit: 500
     soc_limit: 50
-  - start_time: 20:00
+  - name: Evening Discharge 2
+    start_time: 20:00
     stop_time: 00:00
     battery_name: battery2
     enabled: false
     power_limit: 500
     soc_limit: 50
-  - start_time: 20:00
+  - name: Evening Discharge 3
+    start_time: 20:00
     stop_time: 00:00
     battery_name: battery3
     enabled: true

@@ -19,17 +19,19 @@ var (
 
 // AgentConfig represents the persisted configuration overrides for a gok-pi agent.
 type AgentConfig struct {
-	Revision  int                    `json:"revision"`
-	UpdatedAt time.Time              `json:"updated_at"`
-	Batteries []entity.BatteryConfig `json:"batteries"`
-	Schedules []entity.Schedule      `json:"schedules"`
+	DeviceName string                 `json:"device_name,omitempty"`
+	Revision   int                    `json:"revision"`
+	UpdatedAt  time.Time              `json:"updated_at"`
+	Batteries  []entity.BatteryConfig `json:"batteries"`
+	Schedules  []entity.Schedule      `json:"schedules"`
 }
 
 // AgentConfigRequest is the payload accepted by the HTTP API when a config is updated.
 type AgentConfigRequest struct {
-	Revision  int                    `json:"revision"`
-	Batteries []entity.BatteryConfig `json:"batteries"`
-	Schedules []entity.Schedule      `json:"schedules"`
+	DeviceName string                 `json:"device_name,omitempty"`
+	Revision   int                    `json:"revision"`
+	Batteries  []entity.BatteryConfig `json:"batteries"`
+	Schedules  []entity.Schedule      `json:"schedules"`
 }
 
 type configSnapshot map[string]AgentConfig
@@ -110,10 +112,11 @@ func (cs *ConfigStore) Save(agentID string, req AgentConfigRequest) (AgentConfig
 	}
 
 	next := AgentConfig{
-		Revision:  1,
-		UpdatedAt: time.Now().UTC(),
-		Batteries: cloneBatteryConfigs(req.Batteries),
-		Schedules: cloneSchedules(req.Schedules),
+		DeviceName: req.DeviceName,
+		Revision:   1,
+		UpdatedAt:  time.Now().UTC(),
+		Batteries:  cloneBatteryConfigs(req.Batteries),
+		Schedules:  cloneSchedules(req.Schedules),
 	}
 
 	if exists {
@@ -140,10 +143,11 @@ func (cs *ConfigStore) Seed(agentID string, batteries []entity.BatteryConfig, sc
 	}
 
 	cfg := AgentConfig{
-		Revision:  1,
-		UpdatedAt: ts.UTC(),
-		Batteries: cloneBatteryConfigs(batteries),
-		Schedules: cloneSchedules(schedules),
+		DeviceName: "",
+		Revision:   1,
+		UpdatedAt:  ts.UTC(),
+		Batteries:  cloneBatteryConfigs(batteries),
+		Schedules:  cloneSchedules(schedules),
 	}
 	if cfg.UpdatedAt.IsZero() {
 		cfg.UpdatedAt = time.Now().UTC()
@@ -208,10 +212,11 @@ func (cs *ConfigStore) persistLocked() error {
 
 func cloneAgentConfig(in AgentConfig) AgentConfig {
 	return AgentConfig{
-		Revision:  in.Revision,
-		UpdatedAt: in.UpdatedAt,
-		Batteries: cloneBatteryConfigs(in.Batteries),
-		Schedules: cloneSchedules(in.Schedules),
+		DeviceName: in.DeviceName,
+		Revision:   in.Revision,
+		UpdatedAt:  in.UpdatedAt,
+		Batteries:  cloneBatteryConfigs(in.Batteries),
+		Schedules:  cloneSchedules(in.Schedules),
 	}
 }
 

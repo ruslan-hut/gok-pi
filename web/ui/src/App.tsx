@@ -35,6 +35,7 @@ const defaultCommandState: CommandState = {
 
 function formatConfigDraft(config: AgentConfig | null): string {
   const payload = {
+    device_name: config?.device_name ?? "",
     revision: config?.revision ?? 0,
     batteries: config?.batteries ?? [],
     schedules: config?.schedules ?? [],
@@ -445,6 +446,9 @@ export default function App() {
         typeof parsed.revision === "number"
           ? parsed.revision
           : agentConfig?.revision ?? 0;
+      const device_name = typeof parsed.device_name === "string"
+        ? parsed.device_name
+        : agentConfig?.device_name ?? "";
       const batteries = Array.isArray(parsed.batteries)
         ? parsed.batteries
         : [];
@@ -453,6 +457,7 @@ export default function App() {
         : [];
 
       const updated = await updateAgentConfig(selectedAgentId, {
+        device_name,
         revision,
         batteries,
         schedules,
@@ -565,7 +570,7 @@ export default function App() {
           <>
             <header>
               <div className="agent-header">
-                <h2>{selectedAgent.agent.hostname}</h2>
+                <h2>{agentConfig?.device_name || selectedAgent.agent.hostname}</h2>
                 <span
                   className={`badge ${
                     selectedAgentOnline ? "online" : "offline"
@@ -847,6 +852,7 @@ function ConfigEditor({
       try {
         const parsed = JSON.parse(draft) as Partial<AgentConfig>;
         setLocalConfig({
+          device_name: parsed.device_name ?? config?.device_name ?? "",
           revision: parsed.revision ?? config?.revision ?? 0,
           updated_at: config?.updated_at ?? new Date().toISOString(),
           batteries: Array.isArray(parsed.batteries) ? parsed.batteries : [],
@@ -903,6 +909,7 @@ function ConfigEditor({
   const handleScheduleAdd = () => {
     if (!localConfig) return;
     const newSchedule: ScheduleConfig = {
+      name: "",
       start_time: "00:00",
       stop_time: "23:59",
       battery_name: "",
@@ -953,6 +960,26 @@ function ConfigEditor({
               
               {!showJson ? (
                 <div className="config-forms">
+                  <div className="config-section">
+                    <h4>Device Name</h4>
+                    <div className="config-form-grid">
+                      <div className="form-field">
+                        <label htmlFor="device-name">Device Name</label>
+                        <input
+                          id="device-name"
+                          type="text"
+                          value={localConfig?.device_name ?? ""}
+                          onChange={(e) => {
+                            if (!localConfig) return;
+                            handleConfigChange({ ...localConfig, device_name: e.target.value });
+                          }}
+                          disabled={saving}
+                          placeholder="My Battery Controller"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="config-section">
                     <div className="config-section-header">
                       <h4>Batteries</h4>
@@ -1160,7 +1187,7 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
   return (
     <div className="config-item">
       <div className="config-item-header">
-        <h5>{schedule.battery_name || "Unnamed Schedule"}</h5>
+        <h5>{schedule.name || schedule.battery_name || "Unnamed Schedule"}</h5>
         <button
           type="button"
           className="button-icon"
@@ -1172,6 +1199,17 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
         </button>
       </div>
       <div className="config-form-grid">
+        <div className="form-field">
+          <label htmlFor={`schedule-name-${schedule.battery_name || 'new'}`}>Schedule Name</label>
+          <input
+            id={`schedule-name-${schedule.battery_name || 'new'}`}
+            type="text"
+            value={schedule.name ?? ""}
+            onChange={(e) => onChange({ ...schedule, name: e.target.value })}
+            disabled={disabled}
+            placeholder="Evening Discharge"
+          />
+        </div>
         <div className="form-field">
           <label htmlFor={`schedule-battery-${schedule.battery_name || 'new'}`}>Battery Name *</label>
           <select

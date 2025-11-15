@@ -36,6 +36,7 @@ export interface BatteryConfig {
 }
 
 export interface ScheduleConfig {
+  name?: string;
   start_time: string;
   stop_time: string;
   battery_name: string;
@@ -45,6 +46,7 @@ export interface ScheduleConfig {
 }
 
 export interface AgentConfig {
+  device_name?: string;
   revision: number;
   updated_at: string;
   batteries: BatteryConfig[];

@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	DeviceName    string                 `yaml:"device_name" env-default:""`
 	Env           string                 `yaml:"env" env-default:"local" env-required:"true"`
 	Metrics       MetricsServer          `yaml:"metrics"`
 	RemoteControl RemoteControl          `yaml:"remote_control"`
