@@ -13,6 +13,141 @@ With the increasing importance of sustainable energy, battery storage and manage
 
 This service could be utilized in residential, commercial, or utility-scale settings where Sonnen battery systems are installed. Potential uses include renewable energy storage, backup power, load shifting, and more.
 
+## Architecture Overview
+
+The GOK-Pi system consists of three main executables and several core components that work together to provide automated battery management with optional remote monitoring and control.
+
+### Executables
+
+1. **Agent (`cmd/gok/main.go`)** - The primary battery control service that runs on each device (e.g., Raspberry Pi) near the battery installation. It:
+   - Manages one or more battery systems through the Sonnen API
+   - Executes scheduled discharge operations based on time windows and limits
+   - Monitors battery status (SoC, capacity, consumption, etc.) every 10 seconds
+   - Optionally connects to a remote control server for telemetry and remote commands
+   - Exposes Prometheus metrics when enabled
+   - Supports dynamic configuration updates via remote control or local config file
+
+2. **Control Server (`cmd/controlserver/main.go`)** - Central server for remote monitoring and management. It:
+   - Maintains WebSocket connections with multiple agents
+   - Aggregates telemetry from all connected agents
+   - Brokers commands from the web UI to agents
+   - Manages per-agent configuration overrides with optimistic locking
+   - Serves the React web dashboard
+   - Hosts agent binaries and version manifests for auto-updates
+   - Provides REST API endpoints for agent management
+
+3. **Agent Updater (`cmd/agentupdater/main.go`)** - Standalone service for automatic agent updates. It:
+   - Periodically checks for new agent binary versions
+   - Compares remote SHA-256 hash with local version
+   - Downloads and replaces the agent binary atomically
+   - Optionally restarts the agent service after successful updates
+
+### Core Components
+
+#### Battery Management (`battery/`)
+
+- **Discharger (`battery/discharger/discharger.go`)** - Core discharge control logic:
+  - Implements scheduled discharge windows with configurable start/stop times
+  - Calculates optimal discharge rates based on remaining capacity and time constraints
+  - Enforces power and SoC limits per schedule
+  - Supports manual override mode for remote commands
+  - Manages operating mode transitions (auto/manual) with the battery controller
+  - Processes control commands (start/stop discharge, set limits, force mode, update config)
+
+- **API Client (`battery/api-client/api-client.go`)** - HTTP client for Sonnen battery API:
+  - Retrieves battery status and system information
+  - Controls discharge operations (start/stop with power settings)
+  - Manages operating mode (auto/manual)
+  - Implements retry logic with exponential backoff
+  - Handles authentication via API tokens
+
+- **Entities (`battery/entity/`)** - Data structures:
+  - `BatteryConfig` - Configuration for individual battery systems
+  - `Schedule` - Time-based discharge schedules with power and SoC limits
+  - `SystemStatus` - Real-time battery status from the API
+  - `BatteryInfo` - Battery metadata and capabilities
+
+#### Remote Control (`internal/remote/wsclient/` and `remote/server/`)
+
+- **WebSocket Client (`internal/remote/wsclient/client.go`)** - Agent-side remote control:
+  - Establishes persistent WebSocket connection to control server
+  - Streams telemetry snapshots at regular intervals
+  - Receives and processes remote commands (discharge control, config updates)
+  - Implements exponential backoff reconnection logic
+  - Handles authentication via shared secret header
+  - Publishes initial configuration snapshot on connection
+
+- **WebSocket Server (`remote/server/server.go`)** - Control server-side:
+  - Manages agent and UI WebSocket connections
+  - Routes commands from UI to specific agents
+  - Broadcasts telemetry updates to all connected UI clients
+  - Handles agent registration and disconnection
+  - Implements authentication for both agents and UI clients
+
+- **Config Store (`remote/server/config_store.go`)** - Persistent configuration management:
+  - Stores per-agent configuration overrides in JSON format
+  - Implements optimistic locking via revision numbers
+  - Seeds initial config from agent snapshots when missing
+  - Provides thread-safe access to configuration data
+
+#### Metrics (`metrics/`)
+
+- **Observers (`metrics/observers/observers.go`)** - Metrics collection:
+  - Exposes Prometheus gauges for battery metrics (SoC, capacity, consumption, etc.)
+  - Maintains in-memory snapshots for telemetry streaming
+  - Updates metrics atomically as battery status changes
+  - Tracks battery connection status
+
+- **Server (`metrics/server/server.go`)** - Metrics HTTP endpoint:
+  - Serves Prometheus metrics at `/metrics`
+  - Runs as optional background service when enabled in config
+
+#### Configuration (`internal/config/`)
+
+- **Config Manager (`internal/config/config.go`)** - Configuration management:
+  - Loads YAML configuration files with environment variable overrides
+  - Provides thread-safe access to configuration
+  - Supports runtime configuration updates from remote control
+  - Persists configuration changes back to YAML file atomically
+  - Handles file permissions securely (0600 for sensitive configs)
+
+#### Web UI (`web/ui/`)
+
+- **React Dashboard** - Modern web interface:
+  - Real-time visualization of connected agents and battery status
+  - Remote command interface (start/stop discharge, set limits, force mode)
+  - JSON editor for per-agent configuration overrides
+  - Agent log viewer with streaming support
+  - Download interface for agent binaries and updater
+  - Authentication support for secure access
+
+### Data Flow
+
+1. **Local Operation**: Agent reads `config.yml`, starts discharge workers for each enabled battery, polls Sonnen API every 10 seconds, and executes scheduled discharge operations.
+
+2. **Remote Monitoring**: When remote control is enabled, agent establishes WebSocket connection, streams telemetry snapshots, and receives commands. Control server aggregates telemetry and broadcasts to UI clients.
+
+3. **Configuration Updates**: UI sends config update → Control server validates and stores → Pushes to connected agent → Agent applies changes and persists to local `config.yml`.
+
+4. **Metrics Collection**: Discharger updates observers → Observers update Prometheus gauges and snapshots → Metrics server exposes `/metrics` endpoint → Telemetry snapshots streamed to control server.
+
+### Component Interaction
+
+```
+┌─────────────┐         ┌──────────────┐         ┌─────────────┐
+│   Agent     │◄───────►│ Control      │◄───────►│  Web UI     │
+│  (Device)   │ WebSocket│   Server     │ WebSocket│  (Browser)  │
+└──────┬──────┘         └──────────────┘         └─────────────┘
+       │
+       │ HTTP API
+       ▼
+┌─────────────┐
+│   Sonnen    │
+│  Battery    │
+│  Controller │
+└─────────────┘
+```
+
 ## Flexibility & Deployment
 
 This service is designed with a versatile deployment nature. It can run on various platforms, hence making it adaptable to different use case scenarios:
@@ -45,10 +180,14 @@ go run ./cmd/controlserver \
   -static ./web/ui/dist
 ```
 
-- `-secret` must match the agent `remote_control.shared_secret`.
-- `-static` is optional; when provided the built React dashboard is hosted under `/app`.
-- `-config-store` points to the JSON file used to persist per-agent configuration overrides (defaults to `data/agent-configs.json`).
-- Agents connect to `/api/agent`, while the web UI consumes `/api/ui` for live updates.
+- `-addr` - Address to bind the control server (defaults to `:8080`)
+- `-secret` - Shared secret required from agents (must match the agent `remote_control.shared_secret`)
+- `-static` - Optional path to serve pre-built React UI assets (when provided, dashboard is hosted under `/app`)
+- `-config-store` - Path to JSON file for per-agent configuration overrides (defaults to `data/agent-configs.json`)
+- `-agent-binary` - Filename of agent binary in downloads directory (auto-detected if not provided)
+- `-version-file` - Filename for version manifest served under `/downloads` (defaults to `VERSION`)
+
+Agents connect to `/api/agent`, while the web UI consumes `/api/ui` for live updates.
 
 Example nginx snippet for TLS termination:
 
@@ -109,8 +248,13 @@ Configure the following repository secrets before running the workflow:
 Trigger the workflow by pushing to `main` or manually via *Actions → Deploy Control Server → Run workflow*. The control server should be started with:
 
 ```bash
-./gok -addr :8080 -secret "<shared-secret>" -static /opt/gok-pi/current/app
+./controlserver -addr :8080 -secret "<shared-secret>" -static /opt/gok-pi/current/app
 ```
+
+Additional optional flags:
+- `-agent-binary <filename>` - Specify the agent binary filename in the downloads directory (auto-detected if not provided)
+- `-version-file <filename>` - Filename for the version manifest (defaults to `VERSION`)
+- `-config-store <path>` - Path to the agent configuration store JSON file (defaults to `data/agent-configs.json`)
 
 ### Agent Release Artifacts
 
@@ -159,6 +303,8 @@ Install the updater binary on the device (for example, under `/opt/gok-pi/bin/ag
    # GOK_UPDATE_BINARY_URL=https://control.example.com/downloads/gok-pi-agent-linux-arm64
    # GOK_UPDATE_BINARY_NAME=gok
    # GOK_UPDATE_TIMEOUT=45s
+   # GOK_UPDATE_RESTART_SERVICE=gok-agent.service
+   # GOK_UPDATE_RESTART_ENABLED=true
    ```
 
 4. Reload systemd and activate the timer:
