@@ -19,7 +19,11 @@ import type {
   TelemetrySnapshot,
 } from "./types";
 
-type AgentsMap = Record<string, AgentSummary>;
+type AgentSummaryWithDeviceName = AgentSummary & {
+  device_name?: string;
+};
+
+type AgentsMap = Record<string, AgentSummaryWithDeviceName>;
 
 interface CommandState {
   power: number;
@@ -215,6 +219,20 @@ export default function App() {
         removeAgent(message.agent_id);
         break;
       case "config.updated":
+        // Update device_name in agents map
+        setAgents((prev: AgentsMap) => {
+          const agent = prev[message.agent_id];
+          if (agent) {
+            return {
+              ...prev,
+              [message.agent_id]: {
+                ...agent,
+                device_name: message.config.device_name,
+              },
+            };
+          }
+          return prev;
+        });
         if (message.agent_id !== selectedAgentIdRef.current) {
           break;
         }
@@ -298,6 +316,20 @@ export default function App() {
         setConfigDraft(formatConfigDraft(cfg));
         setConfigDirty(false);
         setConfigError(undefined);
+        // Update device_name in agents map
+        setAgents((prev: AgentsMap) => {
+          const agent = prev[selectedAgentId];
+          if (agent) {
+            return {
+              ...prev,
+              [selectedAgentId]: {
+                ...agent,
+                device_name: cfg.device_name,
+              },
+            };
+          }
+          return prev;
+        });
       })
       .catch((err) => {
         if (cancelled || isLoggingOutRef.current) return;
@@ -465,6 +497,20 @@ export default function App() {
       setAgentConfig(updated);
       setConfigDraft(formatConfigDraft(updated));
       setConfigDirty(false);
+      // Update device_name in agents map
+      setAgents((prev: AgentsMap) => {
+        const agent = prev[selectedAgentId];
+        if (agent) {
+          return {
+            ...prev,
+            [selectedAgentId]: {
+              ...agent,
+              device_name: updated.device_name,
+            },
+          };
+        }
+        return prev;
+      });
       setMessage("Configuration saved");
     } catch (err) {
       if (err instanceof SyntaxError) {
@@ -511,7 +557,7 @@ export default function App() {
             <option value="">Select agent...</option>
             {Object.values(agents).map((agent) => (
               <option key={agent.agent.id} value={agent.agent.id}>
-                {agent.agent.id} ({agent.connected === false ? "Offline" : "Online"})
+                {agent.device_name || agent.agent.hostname || agent.agent.id} ({agent.connected === false ? "Offline" : "Online"})
               </option>
             ))}
           </select>
@@ -526,7 +572,7 @@ export default function App() {
               onClick={() => setSelectedAgentId(agent.agent.id)}
             >
               <div className="agent-card-header">
-                <strong>{agent.agent.id}</strong>
+                <strong>{agent.device_name || agent.agent.hostname || agent.agent.id}</strong>
                 <span
                   className={`badge ${
                     agent.connected === false ? "offline" : "online"
@@ -547,7 +593,7 @@ export default function App() {
                   </span>
                 ) : null}
               </div>
-              <small>{agent.agent.hostname}</small>
+              <small>{agent.device_name ? agent.agent.id : agent.agent.hostname}</small>
             </button>
           ))}
         </div>
