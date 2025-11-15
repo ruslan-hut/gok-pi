@@ -2,12 +2,13 @@ package config
 
 import (
 	"fmt"
-	"github.com/ilyakaznacheev/cleanenv"
 	"gok-pi/battery/entity"
-	"gopkg.in/yaml.v3"
 	"log"
 	"os"
 	"sync"
+
+	"github.com/ilyakaznacheev/cleanenv"
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -70,6 +71,8 @@ func UpdateBatteriesAndSchedules(batteries []entity.BatteryConfig, schedules []e
 
 // Save persists the current config instance to the YAML file it was loaded from.
 // Returns an error if the config was not loaded or if writing fails.
+// Preserves existing file permissions if the file exists, otherwise uses 0600 (rw-------)
+// for security since config files may contain sensitive data like tokens and secrets.
 func Save() error {
 	// Copy the config and path while holding the lock, then release it before I/O
 	mu.RLock()
@@ -81,7 +84,7 @@ func Save() error {
 		mu.RUnlock()
 		return fmt.Errorf("config path not set")
 	}
-	
+
 	// Create a copy of the config to marshal outside the lock
 	cfgCopy := *instance
 	path := instancePath
@@ -92,9 +95,15 @@ func Save() error {
 		return fmt.Errorf("marshal config to YAML: %w", err)
 	}
 
+	// Determine file permissions: preserve existing if file exists, otherwise use 0600
+	var fileMode os.FileMode = 0600 // rw------- (secure default for config with sensitive data)
+	if info, err := os.Stat(path); err == nil {
+		fileMode = info.Mode().Perm() // Preserve existing permissions
+	}
+
 	// Write to a temporary file first, then rename for atomicity
 	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+	if err := os.WriteFile(tmpPath, data, fileMode); err != nil {
 		return fmt.Errorf("write config file: %w", err)
 	}
 
