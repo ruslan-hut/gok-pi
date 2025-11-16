@@ -92,6 +92,7 @@ export default function App() {
   const [logLines, setLogLines] = useState<number>(500);
   const isLoggingOutRef = useRef(false);
   const handleLogoutRef = useRef<() => void>();
+  const prefetchedConfigAgentsRef = useRef<Set<string>>(new Set());
   const selectedAgentIdRef = useRef<string | undefined>();
   const configDirtyRef = useRef(false);
 
@@ -140,6 +141,33 @@ export default function App() {
   }, [handleLogout]);
 
   // Helper functions for message handling
+  const prefetchAgentConfig = useCallback((agentId: string) => {
+    // Only prefetch once per agent and only when authenticated
+    if (!authenticated) return;
+    if (prefetchedConfigAgentsRef.current.has(agentId)) return;
+    prefetchedConfigAgentsRef.current.add(agentId);
+
+    fetchAgentConfig(agentId)
+      .then((cfg) => {
+        if (!cfg || isLoggingOutRef.current) return;
+        // Only use config to improve display name, avoid touching config editor state here
+        setAgents((prev: AgentsMap) => {
+          const agent = prev[agentId];
+          if (!agent) return prev;
+          return {
+            ...prev,
+            [agentId]: {
+              ...agent,
+              device_name: cfg.device_name,
+            },
+          };
+        });
+      })
+      .catch(() => {
+        // Best-effort; ignore errors from background prefetch
+      });
+  }, [authenticated]);
+
   const updateAgent = useCallback((agent: AgentSummary) => {
     setAgents((prev: AgentsMap) => {
       const existing = prev[agent.agent.id];
@@ -152,7 +180,9 @@ export default function App() {
         },
       };
     });
-  }, []);
+    // Background fetch to populate device_name for new/unknown agents
+    prefetchAgentConfig(agent.agent.id);
+  }, [prefetchAgentConfig]);
 
   const updateTelemetry = useCallback((agentId: string, snapshot: TelemetrySnapshot) => {
     setAgents((prev: AgentsMap) => {
@@ -212,6 +242,10 @@ export default function App() {
             }
           });
           return next;
+        });
+        // Prefetch configs so device names appear in selectors as soon as agents come online
+        message.agents.forEach((agent) => {
+          prefetchAgentConfig(agent.agent.id);
         });
         setSelectedAgentId((current: string | undefined) => {
           if (!current && message.agents.length > 0) {
