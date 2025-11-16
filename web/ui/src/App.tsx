@@ -785,6 +785,21 @@ function BatteryCard({
     e.stopPropagation();
   };
 
+  const renderOperatingMode = (mode: string | undefined | null): string => {
+    if (mode === undefined || mode === null || mode === "") {
+      return "n/a";
+    }
+
+    switch (mode) {
+      case "1":
+        return "MANUAL";
+      case "2":
+        return "AUTO";
+      default:
+        return mode;
+    }
+  };
+
   return (
     <div 
       className={`card battery-card ${expanded ? "expanded" : ""}`}
@@ -814,7 +829,7 @@ function BatteryCard({
         />
         <Metric label="Consumption" value={`${snapshot.consumption_w} W`} />
         <Metric label="Pac" value={`${snapshot.pac_total_w} W`} />
-        <Metric label="Op Mode" value={snapshot.operating_mode || "n/a"} />
+        <Metric label="Op Mode" value={renderOperatingMode(snapshot.operating_mode)} />
       </div>
       <div className="controls" onClick={handleControlClick}>
         <div className="control-row">
