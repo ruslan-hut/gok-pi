@@ -1,2 +1,4 @@
 /config-local.yml
 .idea
+/web/ui/dist
+/web/ui/node_modules

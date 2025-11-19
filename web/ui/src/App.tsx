@@ -477,10 +477,17 @@ export default function App() {
     if (!selectedAgent) {
       return [];
     }
-    return Object.values(selectedAgent.telemetry).sort((a: TelemetrySnapshot, b: TelemetrySnapshot) =>
-      a.name.localeCompare(b.name),
+    // Get configured battery names from agent config
+    const configuredBatteryNames = new Set(
+      (agentConfig?.batteries || []).map((b) => b.name)
     );
-  }, [selectedAgent]);
+    // Filter telemetry to only show configured batteries
+    return Object.values(selectedAgent.telemetry)
+      .filter((snapshot: TelemetrySnapshot) => configuredBatteryNames.has(snapshot.name))
+      .sort((a: TelemetrySnapshot, b: TelemetrySnapshot) =>
+        a.name.localeCompare(b.name),
+      );
+  }, [selectedAgent, agentConfig]);
 
   const handleLogRefresh = useCallback(async () => {
     if (!selectedAgentId) return;
