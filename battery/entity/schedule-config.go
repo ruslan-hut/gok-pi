@@ -2,6 +2,7 @@ package entity
 
 type Schedule struct {
 	Name        string `yaml:"name" json:"name" env-default:""`
+	Type        string `yaml:"type" json:"type" env-default:"discharge"` // "charge" or "discharge"
 	StartTime   string `yaml:"start_time" json:"start_time" env-default:"18:00"`
 	StopTime    string `yaml:"stop_time" json:"stop_time" env-default:"22:00"`
 	BatteryName string `yaml:"battery_name" json:"battery_name" env-required:"battery1"`

@@ -60,17 +60,6 @@ func main() {
 		slog.Int("schedules", len(schedules)),
 	).Info("loaded schedules")
 
-	// filter enabled charge schedules
-	var chargeSchedules []entity.Schedule
-	for _, s := range conf.ChargeSchedules {
-		if s.Enabled {
-			chargeSchedules = append(chargeSchedules, s)
-		}
-	}
-	lg.With(
-		slog.Int("charge_schedules", len(chargeSchedules)),
-	).Info("loaded charge schedules")
-
 	if conf.Metrics.Enabled {
 		lg.Info("starting metrics server", slog.String("bind", conf.Metrics.Bind), slog.String("port", conf.Metrics.Port))
 		go func() {
@@ -103,7 +92,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	manager := newWorkerManager()
-	manager.Apply(ctx, &wg, batteries, schedules, chargeSchedules, lg)
+	manager.Apply(ctx, &wg, batteries, schedules, lg)
 
 	if conf.RemoteControl.Enabled {
 		lg.Info("starting remote control client", slog.String("url", conf.RemoteControl.ServerURL))
@@ -112,7 +101,7 @@ func main() {
 			Env: conf.Env,
 		}, lg)
 		remoteClient.Run(ctx)
-		remoteClient.PublishConfigSnapshot(conf.Batteries, conf.Schedules, conf.ChargeSchedules)
+		remoteClient.PublishConfigSnapshot(conf.Batteries, conf.Schedules)
 		go handleRemoteCommands(ctx, remoteClient.Commands(), manager, lg)
 
 		go func() {
@@ -140,10 +129,10 @@ func main() {
 							observers.UpdateStatus(b.Name, "Disabled")
 						}
 					}
-					manager.Apply(ctx, &wg, filterEnabledBatteries(update.Config.Batteries), filterEnabledSchedules(update.Config.Schedules), filterEnabledSchedules(update.Config.ChargeSchedules), lg)
+					manager.Apply(ctx, &wg, filterEnabledBatteries(update.Config.Batteries), filterEnabledSchedules(update.Config.Schedules), lg)
 
 					// Persist remote configuration to local config.yml
-					config.UpdateFromRemoteConfig(update.Config.DeviceName, update.Config.Batteries, update.Config.Schedules, update.Config.ChargeSchedules)
+					config.UpdateFromRemoteConfig(update.Config.DeviceName, update.Config.Batteries, update.Config.Schedules)
 					if err := config.Save(); err != nil {
 						lg.With(
 							slog.Int("revision", update.Config.Revision),
@@ -272,7 +261,7 @@ func (m *workerManager) GetCharger(name string) (*charger.Charger, bool) {
 	return entry.chargerWorker, true
 }
 
-func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries []entity.BatteryConfig, schedules []entity.Schedule, chargeSchedules []entity.Schedule, log *slog.Logger) {
+func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries []entity.BatteryConfig, schedules []entity.Schedule, log *slog.Logger) {
 	desired := make(map[string]entity.BatteryConfig)
 	allBatteries := make(map[string]entity.BatteryConfig)
 	for _, b := range batteries {
@@ -286,7 +275,6 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 	}
 
 	scheduleByBattery := groupSchedules(schedules)
-	chargeScheduleByBattery := groupSchedules(chargeSchedules)
 
 	current := m.snapshot()
 
@@ -328,7 +316,7 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 					_ = entry.chargerWorker.SubmitCommand(charger.ControlCommand{
 						Type: charger.CommandUpdateConfig,
 						Config: &charger.ConfigUpdate{
-							Schedules: chargeScheduleByBattery[name],
+							Schedules: scheduleByBattery[name],
 						},
 					})
 				}
@@ -345,7 +333,7 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 			}
 		}
 
-		entry, err := startWorker(ctx, wg, cfg, scheduleByBattery[name], chargeScheduleByBattery[name], log)
+		entry, err := startWorker(ctx, wg, cfg, scheduleByBattery[name], log)
 		if err != nil {
 			log.With(slog.String("battery", name), sl.Err(err)).Error("starting workers")
 			continue
@@ -390,7 +378,7 @@ func (m *workerManager) remove(name string) (*workerEntry, bool) {
 	return entry, ok
 }
 
-func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.BatteryConfig, schedules []entity.Schedule, chargeSchedules []entity.Schedule, log *slog.Logger) (*workerEntry, error) {
+func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.BatteryConfig, schedules []entity.Schedule, log *slog.Logger) (*workerEntry, error) {
 	workerLog := log.With(slog.String("battery", battery.Name))
 	api := apiclient.New(battery.Url, battery.Token, workerLog)
 
@@ -398,8 +386,19 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		config: battery,
 	}
 
-	// Create discharger worker
-	if len(schedules) > 0 {
+	// Check if we have discharge or charge schedules
+	hasDischargeSchedules := false
+	hasChargeSchedules := false
+	for _, schedule := range schedules {
+		if schedule.Type == "charge" {
+			hasChargeSchedules = true
+		} else {
+			hasDischargeSchedules = true
+		}
+	}
+
+	// Create discharger worker if we have discharge schedules
+	if hasDischargeSchedules {
 		dischargerWorker, err := discharger.New(battery.Name, api, workerLog)
 		if err != nil {
 			return nil, fmt.Errorf("creating discharge worker: %w", err)
@@ -433,8 +432,8 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}()
 	}
 
-	// Create charger worker
-	if len(chargeSchedules) > 0 {
+	// Create charger worker if we have charge schedules
+	if hasChargeSchedules {
 		chargerWorker, err := charger.New(battery.Name, api, workerLog)
 		if err != nil {
 			// If discharger was created, we should still return it
@@ -444,7 +443,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 			return nil, fmt.Errorf("creating charge worker: %w", err)
 		}
 
-		for _, schedule := range chargeSchedules {
+		for _, schedule := range schedules {
 			chargerWorker.AddSchedule(schedule)
 		}
 

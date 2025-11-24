@@ -189,7 +189,7 @@ func (d *Discharge) isTimeToDischarge(start, stop string) bool {
 func (d *Discharge) checkTime() {
 
 	for _, schedule := range d.schedules {
-		if schedule.Enabled {
+		if schedule.Enabled && (schedule.Type == "" || schedule.Type == "discharge") {
 			if d.isTimeToDischarge(schedule.StartTime, schedule.StopTime) {
 				d.SetLimits(schedule.PowerLimit, schedule.SocLimit)
 				d.calculateRate()

@@ -137,11 +137,10 @@ func (c *Client) ConfigUpdates() <-chan ConfigUpdate {
 	return c.configs
 }
 
-func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedules []entity.Schedule, chargeSchedules []entity.Schedule) {
+func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedules []entity.Schedule) {
 	snapshot := configSnapshot{
-		Batteries:       cloneBatteryConfigs(batteries),
-		Schedules:       cloneSchedules(schedules),
-		ChargeSchedules: cloneSchedules(chargeSchedules),
+		Batteries: cloneBatteryConfigs(batteries),
+		Schedules: cloneSchedules(schedules),
 	}
 	c.initialConfigMu.Lock()
 	c.initialConfig = &snapshot
@@ -547,12 +546,11 @@ func (c *Client) readLogs(stream string, lines int) (string, error) {
 }
 
 type AgentConfig struct {
-	DeviceName      string                 `json:"device_name,omitempty"`
-	Revision        int                    `json:"revision"`
-	UpdatedAt       time.Time              `json:"updated_at"`
-	Batteries       []entity.BatteryConfig `json:"batteries"`
-	Schedules       []entity.Schedule      `json:"schedules"`
-	ChargeSchedules []entity.Schedule      `json:"charge_schedules"`
+	DeviceName string                 `json:"device_name,omitempty"`
+	Revision   int                    `json:"revision"`
+	UpdatedAt  time.Time              `json:"updated_at"`
+	Batteries  []entity.BatteryConfig `json:"batteries"`
+	Schedules  []entity.Schedule      `json:"schedules"`
 }
 
 type ConfigUpdate struct {
@@ -562,15 +560,13 @@ type ConfigUpdate struct {
 }
 
 type configSnapshot struct {
-	Batteries       []entity.BatteryConfig
-	Schedules       []entity.Schedule
-	ChargeSchedules []entity.Schedule
+	Batteries []entity.BatteryConfig
+	Schedules []entity.Schedule
 }
 
 type configPayload struct {
-	Batteries       []entity.BatteryConfig `json:"batteries"`
-	Schedules       []entity.Schedule      `json:"schedules"`
-	ChargeSchedules []entity.Schedule      `json:"charge_schedules"`
+	Batteries []entity.BatteryConfig `json:"batteries"`
+	Schedules []entity.Schedule      `json:"schedules"`
 }
 
 func cloneBatteryConfigs(in []entity.BatteryConfig) []entity.BatteryConfig {

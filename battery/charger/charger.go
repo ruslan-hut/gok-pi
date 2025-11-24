@@ -189,7 +189,7 @@ func (c *Charger) isTimeToCharge(start, stop string) bool {
 // checkTime determines whether the current time falls within the specified charge time window.
 func (c *Charger) checkTime() {
 	for _, schedule := range c.schedules {
-		if schedule.Enabled {
+		if schedule.Enabled && schedule.Type == "charge" {
 			if c.isTimeToCharge(schedule.StartTime, schedule.StopTime) {
 				c.SetLimits(schedule.PowerLimit, schedule.SocLimit)
 				c.calculateRate()
