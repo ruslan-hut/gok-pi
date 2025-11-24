@@ -886,54 +886,56 @@ function BatteryCard({
             }
             placeholder="Power (W)"
           />
-          <button
-            className="primary"
-            disabled={controlsDisabled}
-            onClick={() =>
-              onCommand("start_discharge", snapshot.name, {
-                power: commandState.power,
-              })
-            }
-          >
-            Start Discharge
-          </button>
-          <button
-            disabled={controlsDisabled}
-            onClick={() => onCommand("stop_discharge", snapshot.name)}
-          >
-            Stop Discharge
-          </button>
         </div>
-        <div className="control-row">
-          <input
-            type="number"
-            value={commandState.power}
-            disabled={controlsDisabled}
-            onChange={(event) =>
-              onCommandStateChange({
-                ...commandState,
-                power: Number(event.target.value),
-              })
-            }
-            placeholder="Power (W)"
-          />
-          <button
-            className="primary"
-            disabled={controlsDisabled}
-            onClick={() =>
-              onCommand("start_charge", snapshot.name, {
-                power: commandState.power,
-              })
-            }
-          >
-            Start Charge
-          </button>
-          <button
-            disabled={controlsDisabled}
-            onClick={() => onCommand("stop_charge", snapshot.name)}
-          >
-            Stop Charge
-          </button>
+        <div className="control-section">
+          <div className="control-section-title">Discharge</div>
+          <div className="control-section-buttons">
+            <button
+              className="button-icon-small primary"
+              disabled={controlsDisabled}
+              onClick={() =>
+                onCommand("start_discharge", snapshot.name, {
+                  power: commandState.power,
+                })
+              }
+              title="Start Discharge"
+            >
+              ▶
+            </button>
+            <button
+              className="button-icon-small"
+              disabled={controlsDisabled}
+              onClick={() => onCommand("stop_discharge", snapshot.name)}
+              title="Stop Discharge"
+            >
+              ■
+            </button>
+          </div>
+        </div>
+        <div className="control-section">
+          <div className="control-section-title">Charge</div>
+          <div className="control-section-buttons">
+            <button
+              className="button-icon-small primary"
+              disabled={controlsDisabled}
+              onClick={() =>
+                onCommand("start_charge", snapshot.name, {
+                  power: commandState.power,
+                })
+              }
+              title="Start Charge"
+            >
+              ▶
+            </button>
+            <button
+              className="button-icon-small"
+              disabled={controlsDisabled}
+              onClick={() => onCommand("stop_charge", snapshot.name)}
+              title="Stop Charge"
+            >
+              ■
+            </button>
+          </div>
         </div>
         <div className="control-row">
           <input

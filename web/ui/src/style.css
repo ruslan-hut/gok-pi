@@ -518,6 +518,64 @@ h5 {
   flex-wrap: wrap;
 }
 
+.control-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.control-section-title {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.control-section-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.button-icon-small {
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: inherit;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  line-height: 1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.button-icon-small:hover:not(:disabled) {
+  border-color: #38bdf8;
+  background: rgba(14, 116, 144, 0.3);
+}
+
+.button-icon-small:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.3);
+}
+
+.button-icon-small.primary {
+  border-color: #38bdf8;
+  background: rgba(14, 116, 144, 0.4);
+}
+
+.button-icon-small.primary:hover:not(:disabled) {
+  background: rgba(14, 116, 144, 0.5);
+}
+
 button,
 input,
 textarea,
@@ -839,11 +897,21 @@ button.primary {
     gap: 0.5rem;
   }
 
-  .control-row button,
-  .control-row input {
+  .control-row input,
+  .control-row button {
     width: 100%;
     min-height: 44px;
     padding: 0.6rem 0.75rem;
+  }
+
+  .control-section-buttons {
+    justify-content: flex-start;
+  }
+
+  .control-section-buttons .button-icon-small {
+    width: 44px;
+    height: 44px;
+    font-size: 1rem;
   }
 
   .badge {
