@@ -563,9 +563,23 @@ h5 {
   flex-wrap: wrap;
 }
 
-.control-inputs-row .control-input {
+.control-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
   flex: 1;
   min-width: 120px;
+}
+
+.control-input-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 500;
+  margin: 0;
+}
+
+.control-inputs-row .control-input {
+  width: 100%;
 }
 
 .control-button {
@@ -948,6 +962,11 @@ button.primary {
 
   .control-inputs-row {
     flex-direction: column;
+  }
+
+  .control-input-wrapper {
+    min-width: unset;
+    width: 100%;
   }
 
   .control-inputs-row .control-input {

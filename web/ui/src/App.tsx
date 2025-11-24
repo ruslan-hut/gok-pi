@@ -949,32 +949,44 @@ function BatteryCard({
         <div className="control-group">
           <label className="control-label">Limits</label>
           <div className="control-inputs-row">
-            <input
-              type="number"
-              className="control-input"
-              value={commandState.powerLimit}
-              disabled={controlsDisabled}
-              onChange={(event) =>
-                onCommandStateChange({
-                  ...commandState,
-                  powerLimit: Number(event.target.value),
-                })
-              }
-              placeholder="Power limit"
-            />
-            <input
-              type="number"
-              className="control-input"
-              value={commandState.socLimit}
-              disabled={controlsDisabled}
-              onChange={(event) =>
-                onCommandStateChange({
-                  ...commandState,
-                  socLimit: Number(event.target.value),
-                })
-              }
-              placeholder="SoC limit"
-            />
+            <div className="control-input-wrapper">
+              <label className="control-input-label" htmlFor={`power-limit-${snapshot.name}`}>
+                Power limit (W)
+              </label>
+              <input
+                id={`power-limit-${snapshot.name}`}
+                type="number"
+                className="control-input"
+                value={commandState.powerLimit}
+                disabled={controlsDisabled}
+                onChange={(event) =>
+                  onCommandStateChange({
+                    ...commandState,
+                    powerLimit: Number(event.target.value),
+                  })
+                }
+                placeholder="Power limit"
+              />
+            </div>
+            <div className="control-input-wrapper">
+              <label className="control-input-label" htmlFor={`soc-limit-${snapshot.name}`}>
+                SoC limit (%)
+              </label>
+              <input
+                id={`soc-limit-${snapshot.name}`}
+                type="number"
+                className="control-input"
+                value={commandState.socLimit}
+                disabled={controlsDisabled}
+                onChange={(event) =>
+                  onCommandStateChange({
+                    ...commandState,
+                    socLimit: Number(event.target.value),
+                  })
+                }
+                placeholder="SoC limit"
+              />
+            </div>
           </div>
           <button
             className="control-button control-button-secondary"
