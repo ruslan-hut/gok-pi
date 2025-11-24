@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -382,6 +383,14 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		config: battery,
 	}
 
+	// Always create a monitor worker to track battery status and emit data to control server
+	// This ensures enabled batteries are monitored even without schedules
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		monitorBattery(ctx, battery.Name, api, workerLog)
+	}()
+
 	// Check if we have discharge or charge schedules
 	hasDischargeSchedules := false
 	hasChargeSchedules := false
@@ -467,10 +476,55 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}()
 	}
 
-	// Set initial status - will be updated on first Status() call
-	observers.UpdateStatus(battery.Name, "Disconnected")
+	// Initial status is set by monitorBattery function
+	// No need to set it here as monitor starts immediately
 
 	return entry, nil
+}
+
+// monitorBattery continuously monitors battery status and emits data to observers
+// This ensures enabled batteries are always monitored, even without schedules
+func monitorBattery(ctx context.Context, name string, api *apiclient.ApiClient, log *slog.Logger) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	// Set initial status
+	observers.UpdateStatus(name, "Disconnected")
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info("battery monitor stopped")
+			return
+		case <-ticker.C:
+			status, err := api.Status()
+			if err != nil {
+				log.With(sl.Err(err)).Error("checking battery status")
+				observers.UpdateStatus(name, "Disconnected")
+				continue
+			}
+			observers.UpdateStatus(name, "Connected")
+			observeBatteryStatus(name, status)
+		}
+	}
+}
+
+// observeBatteryStatus updates observers with battery status data
+func observeBatteryStatus(name string, status *entity.SystemStatus) {
+	if status == nil {
+		return
+	}
+
+	go func() {
+		observers.UpdateSoC(name, status.RSOC)
+		observers.UpdateUSoC(name, status.USOC)
+		observers.UpdateCapacity(name, status.RemainingCapacityWh)
+		observers.UpdateConsumption(name, status.ConsumptionW)
+		observers.UpdatePac(name, status.PacTotalW)
+		observers.UpdateDischargeState(name, status.BatteryDischarging)
+		observers.UpdateChargeState(name, status.BatteryCharging)
+		observers.UpdateOpMode(name, status.OperatingMode)
+	}()
 }
 
 func filterEnabledBatteries(batteries []entity.BatteryConfig) []entity.BatteryConfig {
