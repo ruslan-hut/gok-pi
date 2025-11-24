@@ -105,8 +105,9 @@ type AgentSummary struct {
 }
 
 type AgentConfigSnapshot struct {
-	Batteries []entity.BatteryConfig `json:"batteries"`
-	Schedules []entity.Schedule      `json:"schedules"`
+	Batteries       []entity.BatteryConfig `json:"batteries"`
+	Schedules       []entity.Schedule      `json:"schedules"`
+	ChargeSchedules []entity.Schedule      `json:"charge_schedules"`
 }
 
 type AgentConfigSync struct {

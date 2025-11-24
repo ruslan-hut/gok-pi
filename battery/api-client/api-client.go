@@ -64,6 +64,16 @@ func (c *ApiClient) StopDischarge() error {
 	return err
 }
 
+func (c *ApiClient) StartCharge(power int) error {
+	_, err := c.requestWithRetry(http.MethodPost, nil, c.url, "setpoint", "charge", fmt.Sprintf("%d", power))
+	return err
+}
+
+func (c *ApiClient) StopCharge() error {
+	_, err := c.requestWithRetry(http.MethodPost, nil, c.url, "setpoint", "charge", "0")
+	return err
+}
+
 // SwitchOperatingModeToManual switches the operating mode of the API client to manual.
 // It returns nil if the current mode is already set to manual, otherwise it sends a request to change the operating mode to manual.
 func (c *ApiClient) SwitchOperatingModeToManual(currentMode string) error {

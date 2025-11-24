@@ -137,10 +137,11 @@ func (c *Client) ConfigUpdates() <-chan ConfigUpdate {
 	return c.configs
 }
 
-func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedules []entity.Schedule) {
+func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedules []entity.Schedule, chargeSchedules []entity.Schedule) {
 	snapshot := configSnapshot{
-		Batteries: cloneBatteryConfigs(batteries),
-		Schedules: cloneSchedules(schedules),
+		Batteries:       cloneBatteryConfigs(batteries),
+		Schedules:       cloneSchedules(schedules),
+		ChargeSchedules: cloneSchedules(chargeSchedules),
 	}
 	c.initialConfigMu.Lock()
 	c.initialConfig = &snapshot
@@ -445,7 +446,7 @@ func (c *Client) handleLogRequest(ctx context.Context, conn *websocket.Conn, raw
 	}
 
 	logs, err := c.readLogs(req.Stream, req.Lines)
-	
+
 	resp := struct {
 		Type      string    `json:"type"`
 		RequestID string    `json:"request_id"`
@@ -546,11 +547,12 @@ func (c *Client) readLogs(stream string, lines int) (string, error) {
 }
 
 type AgentConfig struct {
-	DeviceName string                 `json:"device_name,omitempty"`
-	Revision   int                    `json:"revision"`
-	UpdatedAt  time.Time              `json:"updated_at"`
-	Batteries  []entity.BatteryConfig `json:"batteries"`
-	Schedules  []entity.Schedule      `json:"schedules"`
+	DeviceName      string                 `json:"device_name,omitempty"`
+	Revision        int                    `json:"revision"`
+	UpdatedAt       time.Time              `json:"updated_at"`
+	Batteries       []entity.BatteryConfig `json:"batteries"`
+	Schedules       []entity.Schedule      `json:"schedules"`
+	ChargeSchedules []entity.Schedule      `json:"charge_schedules"`
 }
 
 type ConfigUpdate struct {
@@ -560,13 +562,15 @@ type ConfigUpdate struct {
 }
 
 type configSnapshot struct {
-	Batteries []entity.BatteryConfig
-	Schedules []entity.Schedule
+	Batteries       []entity.BatteryConfig
+	Schedules       []entity.Schedule
+	ChargeSchedules []entity.Schedule
 }
 
 type configPayload struct {
-	Batteries []entity.BatteryConfig `json:"batteries"`
-	Schedules []entity.Schedule      `json:"schedules"`
+	Batteries       []entity.BatteryConfig `json:"batteries"`
+	Schedules       []entity.Schedule      `json:"schedules"`
+	ChargeSchedules []entity.Schedule      `json:"charge_schedules"`
 }
 
 func cloneBatteryConfigs(in []entity.BatteryConfig) []entity.BatteryConfig {

@@ -12,12 +12,13 @@ import (
 )
 
 type Config struct {
-	DeviceName    string                 `yaml:"device_name" env-default:""`
-	Env           string                 `yaml:"env" env-default:"local" env-required:"true"`
-	Metrics       MetricsServer          `yaml:"metrics"`
-	RemoteControl RemoteControl          `yaml:"remote_control"`
-	Batteries     []entity.BatteryConfig `yaml:"batteries"`
-	Schedules     []entity.Schedule      `yaml:"schedules"`
+	DeviceName      string                 `yaml:"device_name" env-default:""`
+	Env             string                 `yaml:"env" env-default:"local" env-required:"true"`
+	Metrics         MetricsServer          `yaml:"metrics"`
+	RemoteControl   RemoteControl          `yaml:"remote_control"`
+	Batteries       []entity.BatteryConfig `yaml:"batteries"`
+	Schedules       []entity.Schedule      `yaml:"schedules"`
+	ChargeSchedules []entity.Schedule      `yaml:"charge_schedules"`
 }
 
 type MetricsServer struct {
@@ -71,7 +72,7 @@ func UpdateBatteriesAndSchedules(batteries []entity.BatteryConfig, schedules []e
 
 // UpdateFromRemoteConfig updates the config instance with all fields from a remote configuration.
 // This includes device_name, batteries, and schedules. This is thread-safe.
-func UpdateFromRemoteConfig(deviceName string, batteries []entity.BatteryConfig, schedules []entity.Schedule) {
+func UpdateFromRemoteConfig(deviceName string, batteries []entity.BatteryConfig, schedules []entity.Schedule, chargeSchedules []entity.Schedule) {
 	mu.Lock()
 	defer mu.Unlock()
 	if instance != nil {
@@ -80,6 +81,7 @@ func UpdateFromRemoteConfig(deviceName string, batteries []entity.BatteryConfig,
 		}
 		instance.Batteries = batteries
 		instance.Schedules = schedules
+		instance.ChargeSchedules = chargeSchedules
 	}
 }
 

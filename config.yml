@@ -50,3 +50,11 @@ schedules:
     enabled: true
     power_limit: 500
     soc_limit: 50
+charge_schedules:
+  - name: Morning Charge 1
+    start_time: 06:00
+    stop_time: 10:00
+    battery_name: battery1
+    enabled: false
+    power_limit: 1000
+    soc_limit: 90

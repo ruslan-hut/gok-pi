@@ -425,7 +425,7 @@ func (s *Server) pushConfigToAgent(agentID string, cfg AgentConfig) error {
 }
 
 func (s *Server) onAgentConfigSync(agentID string, sync AgentConfigSync) {
-	cfg, seeded, err := s.configs.Seed(agentID, sync.Config.Batteries, sync.Config.Schedules, sync.SentAt)
+	cfg, seeded, err := s.configs.Seed(agentID, sync.Config.Batteries, sync.Config.Schedules, sync.Config.ChargeSchedules, sync.SentAt)
 	if err != nil {
 		s.log.With(
 			slog.String("agent", agentID),

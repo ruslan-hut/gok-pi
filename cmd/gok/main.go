@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	apiclient "gok-pi/battery/api-client"
+	"gok-pi/battery/charger"
 	"gok-pi/battery/discharger"
 	"gok-pi/battery/entity"
 	"gok-pi/internal/config"
@@ -59,6 +60,17 @@ func main() {
 		slog.Int("schedules", len(schedules)),
 	).Info("loaded schedules")
 
+	// filter enabled charge schedules
+	var chargeSchedules []entity.Schedule
+	for _, s := range conf.ChargeSchedules {
+		if s.Enabled {
+			chargeSchedules = append(chargeSchedules, s)
+		}
+	}
+	lg.With(
+		slog.Int("charge_schedules", len(chargeSchedules)),
+	).Info("loaded charge schedules")
+
 	if conf.Metrics.Enabled {
 		lg.Info("starting metrics server", slog.String("bind", conf.Metrics.Bind), slog.String("port", conf.Metrics.Port))
 		go func() {
@@ -91,7 +103,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	manager := newWorkerManager()
-	manager.Apply(ctx, &wg, batteries, schedules, lg)
+	manager.Apply(ctx, &wg, batteries, schedules, chargeSchedules, lg)
 
 	if conf.RemoteControl.Enabled {
 		lg.Info("starting remote control client", slog.String("url", conf.RemoteControl.ServerURL))
@@ -100,7 +112,7 @@ func main() {
 			Env: conf.Env,
 		}, lg)
 		remoteClient.Run(ctx)
-		remoteClient.PublishConfigSnapshot(conf.Batteries, conf.Schedules)
+		remoteClient.PublishConfigSnapshot(conf.Batteries, conf.Schedules, conf.ChargeSchedules)
 		go handleRemoteCommands(ctx, remoteClient.Commands(), manager, lg)
 
 		go func() {
@@ -128,10 +140,10 @@ func main() {
 							observers.UpdateStatus(b.Name, "Disabled")
 						}
 					}
-					manager.Apply(ctx, &wg, filterEnabledBatteries(update.Config.Batteries), filterEnabledSchedules(update.Config.Schedules), lg)
+					manager.Apply(ctx, &wg, filterEnabledBatteries(update.Config.Batteries), filterEnabledSchedules(update.Config.Schedules), filterEnabledSchedules(update.Config.ChargeSchedules), lg)
 
 					// Persist remote configuration to local config.yml
-					config.UpdateFromRemoteConfig(update.Config.DeviceName, update.Config.Batteries, update.Config.Schedules)
+					config.UpdateFromRemoteConfig(update.Config.DeviceName, update.Config.Batteries, update.Config.Schedules, update.Config.ChargeSchedules)
 					if err := config.Save(); err != nil {
 						lg.With(
 							slog.Int("revision", update.Config.Revision),
@@ -182,26 +194,49 @@ func handleRemoteCommands(ctx context.Context, commands <-chan wsclient.Command,
 				log.Warn("remote command missing target battery")
 				continue
 			}
-			worker, ok := manager.Get(cmd.Target)
-			if !ok {
-				log.With(slog.String("target", cmd.Target)).Warn("remote command for unknown battery")
-				continue
-			}
-			controlCmd, err := translateCommand(cmd)
-			if err != nil {
-				log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate remote command")
-				continue
-			}
-			if err := worker.SubmitCommand(controlCmd); err != nil {
-				log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit remote command")
+
+			// Route charge commands to charger, discharge commands to discharger
+			if isChargeCommand(cmd.Command) {
+				chargerWorker, ok := manager.GetCharger(cmd.Target)
+				if !ok {
+					log.With(slog.String("target", cmd.Target)).Warn("remote charge command for unknown battery")
+					continue
+				}
+				controlCmd, err := translateChargeCommand(cmd)
+				if err != nil {
+					log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate remote charge command")
+					continue
+				}
+				if err := chargerWorker.SubmitCommand(controlCmd); err != nil {
+					log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit remote charge command")
+				}
+			} else {
+				dischargerWorker, ok := manager.GetDischarger(cmd.Target)
+				if !ok {
+					log.With(slog.String("target", cmd.Target)).Warn("remote command for unknown battery")
+					continue
+				}
+				controlCmd, err := translateCommand(cmd)
+				if err != nil {
+					log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate remote command")
+					continue
+				}
+				if err := dischargerWorker.SubmitCommand(controlCmd); err != nil {
+					log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit remote command")
+				}
 			}
 		}
 	}
 }
 
+func isChargeCommand(cmd string) bool {
+	return cmd == string(charger.CommandStartCharge) || cmd == string(charger.CommandStopCharge)
+}
+
 type workerEntry struct {
-	worker *discharger.Discharge
-	config entity.BatteryConfig
+	dischargerWorker *discharger.Discharge
+	chargerWorker    *charger.Charger
+	config           entity.BatteryConfig
 }
 
 type workerManager struct {
@@ -215,7 +250,7 @@ func newWorkerManager() *workerManager {
 	}
 }
 
-func (m *workerManager) Get(name string) (*discharger.Discharge, bool) {
+func (m *workerManager) GetDischarger(name string) (*discharger.Discharge, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -223,10 +258,21 @@ func (m *workerManager) Get(name string) (*discharger.Discharge, bool) {
 	if !ok {
 		return nil, false
 	}
-	return entry.worker, true
+	return entry.dischargerWorker, true
 }
 
-func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries []entity.BatteryConfig, schedules []entity.Schedule, log *slog.Logger) {
+func (m *workerManager) GetCharger(name string) (*charger.Charger, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	entry, ok := m.workers[name]
+	if !ok {
+		return nil, false
+	}
+	return entry.chargerWorker, true
+}
+
+func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries []entity.BatteryConfig, schedules []entity.Schedule, chargeSchedules []entity.Schedule, log *slog.Logger) {
 	desired := make(map[string]entity.BatteryConfig)
 	allBatteries := make(map[string]entity.BatteryConfig)
 	for _, b := range batteries {
@@ -240,6 +286,7 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 	}
 
 	scheduleByBattery := groupSchedules(schedules)
+	chargeScheduleByBattery := groupSchedules(chargeSchedules)
 
 	current := m.snapshot()
 
@@ -249,12 +296,17 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 			continue
 		}
 		if removed, ok := m.remove(name); ok {
-			log.With(slog.String("battery", name)).Info("stopping discharge worker (no longer configured)")
+			log.With(slog.String("battery", name)).Info("stopping workers (no longer configured)")
 			// Set status to Disabled if battery is disabled, otherwise it will be set when removed from config
 			if battery, exists := allBatteries[name]; exists && !battery.Enabled {
 				observers.UpdateStatus(name, "Disabled")
 			}
-			go removed.worker.Stop()
+			if removed.dischargerWorker != nil {
+				go removed.dischargerWorker.Stop()
+			}
+			if removed.chargerWorker != nil {
+				go removed.chargerWorker.Stop()
+			}
 		}
 	}
 
@@ -263,23 +315,39 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 		entry, ok := m.getEntry(name)
 		if ok {
 			if entry.config == cfg {
-				_ = entry.worker.SubmitCommand(discharger.ControlCommand{
-					Type: discharger.CommandUpdateConfig,
-					Config: &discharger.ConfigUpdate{
-						Schedules: scheduleByBattery[name],
-					},
-				})
+				// Update config for existing workers
+				if entry.dischargerWorker != nil {
+					_ = entry.dischargerWorker.SubmitCommand(discharger.ControlCommand{
+						Type: discharger.CommandUpdateConfig,
+						Config: &discharger.ConfigUpdate{
+							Schedules: scheduleByBattery[name],
+						},
+					})
+				}
+				if entry.chargerWorker != nil {
+					_ = entry.chargerWorker.SubmitCommand(charger.ControlCommand{
+						Type: charger.CommandUpdateConfig,
+						Config: &charger.ConfigUpdate{
+							Schedules: chargeScheduleByBattery[name],
+						},
+					})
+				}
 				continue
 			}
 			if removed, ok := m.remove(name); ok {
-				log.With(slog.String("battery", name)).Info("restarting discharge worker (config changed)")
-				go removed.worker.Stop()
+				log.With(slog.String("battery", name)).Info("restarting workers (config changed)")
+				if removed.dischargerWorker != nil {
+					go removed.dischargerWorker.Stop()
+				}
+				if removed.chargerWorker != nil {
+					go removed.chargerWorker.Stop()
+				}
 			}
 		}
 
-		entry, err := startWorker(ctx, wg, cfg, scheduleByBattery[name], log)
+		entry, err := startWorker(ctx, wg, cfg, scheduleByBattery[name], chargeScheduleByBattery[name], log)
 		if err != nil {
-			log.With(slog.String("battery", name), sl.Err(err)).Error("starting discharge worker")
+			log.With(slog.String("battery", name), sl.Err(err)).Error("starting workers")
 			continue
 		}
 		m.set(name, entry)
@@ -322,48 +390,92 @@ func (m *workerManager) remove(name string) (*workerEntry, bool) {
 	return entry, ok
 }
 
-func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.BatteryConfig, schedules []entity.Schedule, log *slog.Logger) (*workerEntry, error) {
+func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.BatteryConfig, schedules []entity.Schedule, chargeSchedules []entity.Schedule, log *slog.Logger) (*workerEntry, error) {
 	workerLog := log.With(slog.String("battery", battery.Name))
 	api := apiclient.New(battery.Url, battery.Token, workerLog)
 
-	worker, err := discharger.New(battery.Name, api, workerLog)
-	if err != nil {
-		return nil, fmt.Errorf("creating discharge worker: %w", err)
-	}
-
-	for _, schedule := range schedules {
-		worker.AddSchedule(schedule)
-	}
-
-	worker.SetCapacityLimit(battery.CapacityLimit)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		stopCh := make(chan struct{})
-		go func() {
-			select {
-			case <-ctx.Done():
-				worker.Stop()
-			case <-stopCh:
-			}
-		}()
-
-		// Set initial status - will be updated on first Status() call
-		observers.UpdateStatus(battery.Name, "Disconnected")
-
-		if err := worker.Run(); err != nil {
-			workerLog.Error("running discharge worker", sl.Err(err))
-		}
-		workerLog.Info("discharge worker stopped")
-		close(stopCh)
-	}()
-
-	return &workerEntry{
-		worker: worker,
+	entry := &workerEntry{
 		config: battery,
-	}, nil
+	}
+
+	// Create discharger worker
+	if len(schedules) > 0 {
+		dischargerWorker, err := discharger.New(battery.Name, api, workerLog)
+		if err != nil {
+			return nil, fmt.Errorf("creating discharge worker: %w", err)
+		}
+
+		for _, schedule := range schedules {
+			dischargerWorker.AddSchedule(schedule)
+		}
+
+		dischargerWorker.SetCapacityLimit(battery.CapacityLimit)
+		entry.dischargerWorker = dischargerWorker
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			stopCh := make(chan struct{})
+			go func() {
+				select {
+				case <-ctx.Done():
+					dischargerWorker.Stop()
+				case <-stopCh:
+				}
+			}()
+
+			if err := dischargerWorker.Run(); err != nil {
+				workerLog.Error("running discharge worker", sl.Err(err))
+			}
+			workerLog.Info("discharge worker stopped")
+			close(stopCh)
+		}()
+	}
+
+	// Create charger worker
+	if len(chargeSchedules) > 0 {
+		chargerWorker, err := charger.New(battery.Name, api, workerLog)
+		if err != nil {
+			// If discharger was created, we should still return it
+			if entry.dischargerWorker != nil {
+				entry.dischargerWorker.Stop()
+			}
+			return nil, fmt.Errorf("creating charge worker: %w", err)
+		}
+
+		for _, schedule := range chargeSchedules {
+			chargerWorker.AddSchedule(schedule)
+		}
+
+		chargerWorker.SetCapacityLimit(battery.CapacityLimit)
+		entry.chargerWorker = chargerWorker
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			stopCh := make(chan struct{})
+			go func() {
+				select {
+				case <-ctx.Done():
+					chargerWorker.Stop()
+				case <-stopCh:
+				}
+			}()
+
+			if err := chargerWorker.Run(); err != nil {
+				workerLog.Error("running charge worker", sl.Err(err))
+			}
+			workerLog.Info("charge worker stopped")
+			close(stopCh)
+		}()
+	}
+
+	// Set initial status - will be updated on first Status() call
+	observers.UpdateStatus(battery.Name, "Disconnected")
+
+	return entry, nil
 }
 
 func filterEnabledBatteries(batteries []entity.BatteryConfig) []entity.BatteryConfig {
@@ -466,5 +578,70 @@ func translateCommand(cmd wsclient.Command) (discharger.ControlCommand, error) {
 		}
 	default:
 		return discharger.ControlCommand{}, fmt.Errorf("unsupported remote command: %s", cmd.Command)
+	}
+}
+
+func translateChargeCommand(cmd wsclient.Command) (charger.ControlCommand, error) {
+	switch cmd.Command {
+	case string(charger.CommandStartCharge):
+		var payload struct {
+			Power int `json:"power"`
+		}
+		if len(cmd.Payload) > 0 {
+			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
+				return charger.ControlCommand{}, fmt.Errorf("decode start payload: %w", err)
+			}
+		}
+		return charger.ControlCommand{
+			Type:  charger.CommandStartCharge,
+			Power: payload.Power,
+		}, nil
+	case string(charger.CommandStopCharge):
+		return charger.ControlCommand{
+			Type: charger.CommandStopCharge,
+		}, nil
+	case string(charger.CommandSetLimits):
+		var payload struct {
+			PowerLimit *int `json:"power_limit"`
+			SocLimit   *int `json:"soc_limit"`
+		}
+		if len(cmd.Payload) > 0 {
+			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
+				return charger.ControlCommand{}, fmt.Errorf("decode limits payload: %w", err)
+			}
+		}
+		return charger.ControlCommand{
+			Type: charger.CommandSetLimits,
+			Limits: &charger.CommandLimits{
+				PowerLimit: payload.PowerLimit,
+				SocLimit:   payload.SocLimit,
+			},
+		}, nil
+	case string(charger.CommandForceMode):
+		var payload struct {
+			Mode string `json:"mode"`
+		}
+		if len(cmd.Payload) > 0 {
+			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
+				return charger.ControlCommand{}, fmt.Errorf("decode force mode payload: %w", err)
+			}
+		}
+		mode := strings.ToLower(payload.Mode)
+		switch mode {
+		case "manual":
+			return charger.ControlCommand{
+				Type: charger.CommandForceMode,
+				Mode: charger.OperatingModeManual,
+			}, nil
+		case "auto", "":
+			return charger.ControlCommand{
+				Type: charger.CommandForceMode,
+				Mode: charger.OperatingModeAuto,
+			}, nil
+		default:
+			return charger.ControlCommand{}, fmt.Errorf("unsupported operating mode: %s", mode)
+		}
+	default:
+		return charger.ControlCommand{}, fmt.Errorf("unsupported remote command: %s", cmd.Command)
 	}
 }

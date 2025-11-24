@@ -163,7 +163,7 @@ func TestConfigStore_Seed(t *testing.T) {
 			PowerLimit:  150,
 			SocLimit:    60,
 		},
-	}, now)
+	}, []entity.Schedule{}, now)
 	if err != nil {
 		t.Fatalf("Seed: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestConfigStore_Seed(t *testing.T) {
 	}
 
 	// Second seed should no-op.
-	cfg2, seeded, err := store.Seed("agent-1", nil, nil, time.Now())
+	cfg2, seeded, err := store.Seed("agent-1", nil, nil, nil, time.Now())
 	if err != nil {
 		t.Fatalf("Seed second: %v", err)
 	}

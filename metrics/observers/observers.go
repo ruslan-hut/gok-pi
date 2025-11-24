@@ -90,6 +90,24 @@ func UpdateDischargeState(name string, state bool) {
 	})
 }
 
+var chargeStateGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "battery",
+	Name:      "BatteryCharging",
+	Help:      "Charge status: 1 - charging, 0 - not charging",
+}, []string{"name"})
+
+func UpdateChargeState(name string, state bool) {
+	if state {
+		chargeStateGauge.WithLabelValues(name).Set(1.0)
+	} else {
+		chargeStateGauge.WithLabelValues(name).Set(0.0)
+	}
+	updateSnapshot(name, func(snapshot *Snapshot) {
+		snapshot.BatteryCharging = state
+		snapshot.BatteryChargingSet = true
+	})
+}
+
 var opModeGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Namespace: "battery",
 	Name:      "BatteryOperatingMode",
