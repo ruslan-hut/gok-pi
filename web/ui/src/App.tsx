@@ -858,7 +858,7 @@ function BatteryCard({
             snapshot.battery_discharging ? "online" : "offline"
           }`}
         >
-          {snapshot.battery_discharging ? "Discharging" : "Idle"}
+          {snapshot.battery_discharging ? "Discharging" : snapshot.battery_charging ? "Charging" : "Idle"}
         </span>
       </h2>
       <div className="metrics">
@@ -895,13 +895,44 @@ function BatteryCard({
               })
             }
           >
-            Start
+            Start Discharge
           </button>
           <button
             disabled={controlsDisabled}
             onClick={() => onCommand("stop_discharge", snapshot.name)}
           >
-            Stop
+            Stop Discharge
+          </button>
+        </div>
+        <div className="control-row">
+          <input
+            type="number"
+            value={commandState.power}
+            disabled={controlsDisabled}
+            onChange={(event) =>
+              onCommandStateChange({
+                ...commandState,
+                power: Number(event.target.value),
+              })
+            }
+            placeholder="Power (W)"
+          />
+          <button
+            className="primary"
+            disabled={controlsDisabled}
+            onClick={() =>
+              onCommand("start_charge", snapshot.name, {
+                power: commandState.power,
+              })
+            }
+          >
+            Start Charge
+          </button>
+          <button
+            disabled={controlsDisabled}
+            onClick={() => onCommand("stop_charge", snapshot.name)}
+          >
+            Stop Charge
           </button>
         </div>
         <div className="control-row">
@@ -1055,6 +1086,7 @@ function ConfigEditor({
     if (!localConfig) return;
     const newSchedule: ScheduleConfig = {
       name: "",
+      type: "discharge",
       start_time: "00:00",
       stop_time: "23:59",
       battery_name: "",
@@ -1332,7 +1364,14 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
   return (
     <div className="config-item">
       <div className="config-item-header">
-        <h5>{schedule.name || schedule.battery_name || "Unnamed Schedule"}</h5>
+        <h5>
+          {schedule.name || schedule.battery_name || "Unnamed Schedule"}
+          {schedule.type && (
+            <span className="badge" style={{ marginLeft: "8px", fontSize: "0.8em" }}>
+              {schedule.type === "charge" ? "Charge" : "Discharge"}
+            </span>
+          )}
+        </h5>
         <button
           type="button"
           className="button-icon"
@@ -1354,6 +1393,19 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
             disabled={disabled}
             placeholder="Evening Discharge"
           />
+        </div>
+        <div className="form-field">
+          <label htmlFor={`schedule-type-${schedule.battery_name || 'new'}`}>Type *</label>
+          <select
+            id={`schedule-type-${schedule.battery_name || 'new'}`}
+            value={schedule.type || "discharge"}
+            onChange={(e) => onChange({ ...schedule, type: e.target.value })}
+            disabled={disabled}
+            required
+          >
+            <option value="discharge">Discharge</option>
+            <option value="charge">Charge</option>
+          </select>
         </div>
         <div className="form-field">
           <label htmlFor={`schedule-battery-${schedule.battery_name || 'new'}`}>Battery Name *</label>

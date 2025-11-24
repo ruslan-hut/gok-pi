@@ -14,6 +14,8 @@ export interface TelemetrySnapshot {
   pac_total_w: number;
   battery_discharging: boolean;
   battery_discharging_set: boolean;
+  battery_charging?: boolean;
+  battery_charging_set?: boolean;
   operating_mode: string;
   operating_mode_set: boolean;
   status: string;
@@ -37,6 +39,7 @@ export interface BatteryConfig {
 
 export interface ScheduleConfig {
   name?: string;
+  type?: string; // "charge" or "discharge" (defaults to "discharge")
   start_time: string;
   stop_time: string;
   battery_name: string;
