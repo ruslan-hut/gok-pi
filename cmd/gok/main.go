@@ -147,14 +147,10 @@ func main() {
 			}
 		}()
 
-		// If remote control is enabled, keep the agent running even without batteries
+		// If remote control is enabled, keep the agent running even without batteries or schedules
 		// Wait for context cancellation (e.g., SIGINT/SIGTERM)
-		if len(batteries) == 0 {
-			lg.Info("agent running with remote control enabled; waiting for context cancellation")
-			<-ctx.Done()
-		} else {
-			wg.Wait()
-		}
+		lg.Info("agent running with remote control enabled; waiting for context cancellation")
+		<-ctx.Done()
 	} else {
 		// If no remote control and no batteries, exit immediately
 		if len(batteries) == 0 {
