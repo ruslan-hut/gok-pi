@@ -360,14 +360,29 @@ h5 {
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 12px;
   padding: 1rem;
-  background: rgba(30, 41, 59, 0.85);
   box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.2);
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
-.config-item:hover {
-  border-color: rgba(148, 163, 184, 0.5);
-  background: rgba(30, 41, 59, 0.95);
+.config-item-battery {
+  background: rgba(45, 60, 80, 1);
+  border-color: rgba(56, 189, 248, 0.25);
+}
+
+.config-item-battery:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(50, 65, 85, 1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
+}
+
+.config-item-schedule {
+  background: rgba(48, 62, 70, 1);
+  border-color: rgba(74, 222, 128, 0.25);
+}
+
+.config-item-schedule:hover {
+  border-color: rgba(74, 222, 128, 0.4);
+  background: rgba(53, 67, 75, 1);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
 }
 
@@ -558,17 +573,16 @@ h5 {
 }
 
 .control-inputs-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
-  flex-wrap: wrap;
 }
 
 .control-input-wrapper {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  flex: 1;
-  min-width: 120px;
+  min-width: 0;
 }
 
 .control-input-label {
@@ -580,6 +594,8 @@ h5 {
 
 .control-inputs-row .control-input {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .control-button {
@@ -862,6 +878,7 @@ button.primary {
 .login-field input {
   width: 100%;
   padding: 0.6rem 0.75rem;
+  box-sizing: border-box;
 }
 
 .login-error {
@@ -876,8 +893,9 @@ button.primary {
 
 .login-card button {
   width: 100%;
-  padding: 0.6rem;
+  padding: 0.6rem 0.75rem;
   font-size: 1rem;
+  box-sizing: border-box;
 }
 
 @media (max-width: 600px) {
@@ -961,17 +979,7 @@ button.primary {
   }
 
   .control-inputs-row {
-    flex-direction: column;
-  }
-
-  .control-input-wrapper {
-    min-width: unset;
-    width: 100%;
-  }
-
-  .control-inputs-row .control-input {
-    width: 100%;
-    min-width: unset;
+    grid-template-columns: 1fr;
   }
 
   .control-actions {

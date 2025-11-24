@@ -1309,7 +1309,7 @@ interface BatteryConfigFormProps {
 
 function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryConfigFormProps) {
   return (
-    <div className="config-item">
+    <div className="config-item config-item-battery">
       <div className="config-item-header">
         <h5>{battery.name || "Unnamed Battery"}</h5>
         <button
@@ -1397,7 +1397,7 @@ interface ScheduleConfigFormProps {
 
 function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabled }: ScheduleConfigFormProps) {
   return (
-    <div className="config-item">
+    <div className="config-item config-item-schedule">
       <div className="config-item-header">
         <h5>
           {schedule.name || schedule.battery_name || "Unnamed Schedule"}
