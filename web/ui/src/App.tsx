@@ -873,9 +873,11 @@ function BatteryCard({
         <Metric label="Op Mode" value={renderOperatingMode(snapshot.operating_mode)} />
       </div>
       <div className="controls" onClick={handleControlClick}>
-        <div className="control-row">
+        <div className="control-group">
+          <label className="control-label">Power (W)</label>
           <input
             type="number"
+            className="control-input"
             value={commandState.power}
             disabled={controlsDisabled}
             onChange={(event) =>
@@ -884,14 +886,15 @@ function BatteryCard({
                 power: Number(event.target.value),
               })
             }
-            placeholder="Power (W)"
+            placeholder="Power"
           />
         </div>
-        <div className="control-section">
-          <div className="control-section-title">Discharge</div>
-          <div className="control-section-buttons">
+        
+        <div className="control-group">
+          <label className="control-label">Discharge</label>
+          <div className="control-actions">
             <button
-              className="button-icon-small primary"
+              className="control-button control-button-primary"
               disabled={controlsDisabled}
               onClick={() =>
                 onCommand("start_discharge", snapshot.name, {
@@ -900,23 +903,26 @@ function BatteryCard({
               }
               title="Start Discharge"
             >
-              ▶
+              <span className="control-button-icon">▶</span>
+              Start
             </button>
             <button
-              className="button-icon-small"
+              className="control-button"
               disabled={controlsDisabled}
               onClick={() => onCommand("stop_discharge", snapshot.name)}
               title="Stop Discharge"
             >
-              ■
+              <span className="control-button-icon">■</span>
+              Stop
             </button>
           </div>
         </div>
-        <div className="control-section">
-          <div className="control-section-title">Charge</div>
-          <div className="control-section-buttons">
+
+        <div className="control-group">
+          <label className="control-label">Charge</label>
+          <div className="control-actions">
             <button
-              className="button-icon-small primary"
+              className="control-button control-button-primary"
               disabled={controlsDisabled}
               onClick={() =>
                 onCommand("start_charge", snapshot.name, {
@@ -925,44 +931,53 @@ function BatteryCard({
               }
               title="Start Charge"
             >
-              ▶
+              <span className="control-button-icon">▶</span>
+              Start
             </button>
             <button
-              className="button-icon-small"
+              className="control-button"
               disabled={controlsDisabled}
               onClick={() => onCommand("stop_charge", snapshot.name)}
               title="Stop Charge"
             >
-              ■
+              <span className="control-button-icon">■</span>
+              Stop
             </button>
           </div>
         </div>
-        <div className="control-row">
-          <input
-            type="number"
-            value={commandState.powerLimit}
-            disabled={controlsDisabled}
-            onChange={(event) =>
-              onCommandStateChange({
-                ...commandState,
-                powerLimit: Number(event.target.value),
-              })
-            }
-            placeholder="Power limit"
-          />
-          <input
-            type="number"
-            value={commandState.socLimit}
-            disabled={controlsDisabled}
-            onChange={(event) =>
-              onCommandStateChange({
-                ...commandState,
-                socLimit: Number(event.target.value),
-              })
-            }
-            placeholder="SoC limit"
-          />
+
+        <div className="control-group">
+          <label className="control-label">Limits</label>
+          <div className="control-inputs-row">
+            <input
+              type="number"
+              className="control-input"
+              value={commandState.powerLimit}
+              disabled={controlsDisabled}
+              onChange={(event) =>
+                onCommandStateChange({
+                  ...commandState,
+                  powerLimit: Number(event.target.value),
+                })
+              }
+              placeholder="Power limit"
+            />
+            <input
+              type="number"
+              className="control-input"
+              value={commandState.socLimit}
+              disabled={controlsDisabled}
+              onChange={(event) =>
+                onCommandStateChange({
+                  ...commandState,
+                  socLimit: Number(event.target.value),
+                })
+              }
+              placeholder="SoC limit"
+            />
+          </div>
           <button
+            className="control-button control-button-secondary"
             disabled={controlsDisabled}
             onClick={() =>
               onCommand("set_limits", snapshot.name, {
@@ -974,23 +989,29 @@ function BatteryCard({
             Update Limits
           </button>
         </div>
-        <div className="control-row">
-          <button
-            disabled={controlsDisabled}
-            onClick={() =>
-              onCommand("force_mode", snapshot.name, { mode: "manual" })
-            }
-          >
-            Force Manual
-          </button>
-          <button
-            disabled={controlsDisabled}
-            onClick={() =>
-              onCommand("force_mode", snapshot.name, { mode: "auto" })
-            }
-          >
-            Force Auto
-          </button>
+
+        <div className="control-group">
+          <label className="control-label">Mode</label>
+          <div className="control-actions">
+            <button
+              className="control-button"
+              disabled={controlsDisabled}
+              onClick={() =>
+                onCommand("force_mode", snapshot.name, { mode: "manual" })
+              }
+            >
+              Force Manual
+            </button>
+            <button
+              className="control-button"
+              disabled={controlsDisabled}
+              onClick={() =>
+                onCommand("force_mode", snapshot.name, { mode: "auto" })
+              }
+            >
+              Force Auto
+            </button>
+          </div>
         </div>
       </div>
     </div>
