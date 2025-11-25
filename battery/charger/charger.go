@@ -167,6 +167,8 @@ func (c *Charger) stopCondition() bool {
 
 // isTimeToCharge determines whether the current time falls within the specified charge time window.
 func (c *Charger) isTimeToCharge(start, stop string) bool {
+	now := time.Now()
+
 	// Calculate the start and stop times for today
 	startTime, err := timer.ParseTime(start)
 	if err != nil {
@@ -178,12 +180,22 @@ func (c *Charger) isTimeToCharge(start, stop string) bool {
 		c.log.With(sl.Err(err)).Error("parsing stop time")
 		return false
 	}
+
+	// Handle schedules that span midnight (e.g., 22:00 to 06:00)
 	if startTime.After(stopTime) {
+		// Schedule spans midnight
 		stopTime = stopTime.Add(24 * time.Hour)
+		// If current time is before the original stop time (early morning hours),
+		// the start time should be yesterday, not today
+		originalStopTime := stopTime.Add(-24 * time.Hour)
+		if now.Before(originalStopTime) {
+			startTime = startTime.Add(-24 * time.Hour)
+		}
 	}
+
 	c.stopTime = stopTime
-	now := time.Now()
-	return now.After(startTime) && now.Before(stopTime)
+	// Use !now.Before() to include the exact start time
+	return !now.Before(startTime) && now.Before(stopTime)
 }
 
 // checkTime determines whether the current time falls within the specified charge time window.
