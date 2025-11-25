@@ -97,8 +97,9 @@ func main() {
 
 	if conf.RemoteControl.Enabled {
 		lg.Info("starting remote control client", slog.String("url", conf.RemoteControl.ServerURL))
+		// Use DeviceID from config, or empty string to fallback to hostname in wsclient.New
 		remoteClient := wsclient.New(conf.RemoteControl, wsclient.AgentMetadata{
-			ID:  conf.Env,
+			ID:  conf.DeviceID,
 			Env: conf.Env,
 		}, lg)
 		remoteClient.Run(ctx)

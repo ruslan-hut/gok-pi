@@ -1,5 +1,6 @@
 ---
 device_name: My Battery Controller
+device_id: ""
 env: local
 metrics:
   enabled: false

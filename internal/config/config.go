@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"gok-pi/battery/entity"
 	"log"
@@ -13,6 +15,7 @@ import (
 
 type Config struct {
 	DeviceName      string                 `yaml:"device_name" env-default:""`
+	DeviceID        string                 `yaml:"device_id" env-default:""`
 	Env             string                 `yaml:"env" env-default:"local" env-required:"true"`
 	Metrics         MetricsServer          `yaml:"metrics"`
 	RemoteControl   RemoteControl          `yaml:"remote_control"`
@@ -55,8 +58,32 @@ func MustLoad(path string) *Config {
 			log.Fatal(err)
 		}
 		instancePath = path
+
+		// Generate random device ID if empty
+		if instance.DeviceID == "" {
+			deviceID, err := generateDeviceID()
+			if err != nil {
+				log.Fatalf("failed to generate device ID: %v", err)
+			}
+			instance.DeviceID = deviceID
+			// Save the generated ID back to the config file
+			if err := Save(); err != nil {
+				log.Printf("warning: failed to save generated device ID to config file: %v", err)
+			} else {
+				log.Printf("generated device ID: %s", deviceID)
+			}
+		}
 	})
 	return instance
+}
+
+// generateDeviceID generates a random 16-character hex-encoded device ID
+func generateDeviceID() (string, error) {
+	bytes := make([]byte, 8) // 8 bytes = 16 hex characters
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("read random bytes: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
 }
 
 // UpdateBatteriesAndSchedules updates the batteries and schedules in the config instance.

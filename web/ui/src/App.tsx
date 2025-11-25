@@ -663,7 +663,7 @@ export default function App() {
                   </span>
                 ) : null}
               </div>
-              <small>{agent.device_name ? agent.agent.id : agent.agent.hostname}</small>
+              <small>ID: {agent.agent.id}</small>
             </button>
           ))}
         </div>
@@ -699,6 +699,9 @@ export default function App() {
                 <span>
                   Last contact:{" "}
                   {new Date(selectedAgent.last_seen).toLocaleTimeString()}
+                </span>
+                <span className="badge">
+                  Device ID: {selectedAgent.agent.id}
                 </span>
                 <span className="badge">
                   Version {selectedAgent.agent.version}
