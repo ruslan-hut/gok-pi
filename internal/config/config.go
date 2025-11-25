@@ -68,10 +68,15 @@ func MustLoad(path string) *Config {
 			instance.DeviceID = deviceID
 			// Save the generated ID back to the config file
 			if err := Save(); err != nil {
+				fmt.Fprintf(os.Stderr, "WARNING: failed to save generated device ID to config file: %v\n", err)
 				log.Printf("warning: failed to save generated device ID to config file: %v", err)
 			} else {
+				fmt.Fprintf(os.Stderr, "INFO: generated and saved device ID: %s\n", deviceID)
 				log.Printf("generated device ID: %s", deviceID)
 			}
+		} else {
+			// Log existing device ID for visibility
+			fmt.Fprintf(os.Stderr, "INFO: using existing device ID: %s\n", instance.DeviceID)
 		}
 	})
 	return instance

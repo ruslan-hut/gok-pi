@@ -33,7 +33,10 @@ func main() {
 	conf := config.MustLoad(*configPath)
 	lg := logger.SetupLogger(conf.Env, *logPath)
 
-	lg.Info("starting gok-pi", slog.String("config", *configPath), slog.String("env", conf.Env))
+	lg.Info("starting gok-pi", 
+		slog.String("config", *configPath), 
+		slog.String("env", conf.Env),
+		slog.String("device_id", conf.DeviceID))
 	lg.Debug("debug messages enabled")
 	// filter enabled batteries
 	var batteries []entity.BatteryConfig
