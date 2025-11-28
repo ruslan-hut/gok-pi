@@ -103,13 +103,16 @@ func UpdateBatteriesAndSchedules(batteries []entity.BatteryConfig, schedules []e
 }
 
 // UpdateFromRemoteConfig updates the config instance with all fields from a remote configuration.
-// This includes device_name, batteries, and schedules. This is thread-safe.
-func UpdateFromRemoteConfig(deviceName string, batteries []entity.BatteryConfig, schedules []entity.Schedule) {
+// This includes device_name, env, batteries, and schedules. This is thread-safe.
+func UpdateFromRemoteConfig(deviceName string, env string, batteries []entity.BatteryConfig, schedules []entity.Schedule) {
 	mu.Lock()
 	defer mu.Unlock()
 	if instance != nil {
 		if deviceName != "" {
 			instance.DeviceName = deviceName
+		}
+		if env != "" {
+			instance.Env = env
 		}
 		instance.Batteries = batteries
 		instance.Schedules = schedules

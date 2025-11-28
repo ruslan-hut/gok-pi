@@ -41,6 +41,7 @@ const defaultCommandState: CommandState = {
 function formatConfigDraft(config: AgentConfig | null): string {
   const payload = {
     device_name: config?.device_name ?? "",
+    env: config?.env ?? "",
     revision: config?.revision ?? 0,
     batteries: config?.batteries ?? [],
     schedules: config?.schedules ?? [],
@@ -591,6 +592,9 @@ export default function App() {
       const device_name = typeof parsed.device_name === "string"
         ? parsed.device_name
         : agentConfig?.device_name ?? "";
+      const env = typeof parsed.env === "string"
+        ? parsed.env
+        : agentConfig?.env ?? "";
       const batteries = Array.isArray(parsed.batteries)
         ? parsed.batteries
         : [];
@@ -600,6 +604,7 @@ export default function App() {
 
       const updated = await updateAgentConfig(selectedAgentId, {
         device_name,
+        env,
         revision,
         batteries,
         schedules,
@@ -779,6 +784,7 @@ export default function App() {
             </section>
             <ConfigEditor
               config={agentConfig}
+              agentEnv={selectedAgent?.agent.env}
               draft={configDraft}
               loading={configLoading}
               saving={configSaving}
@@ -1082,6 +1088,7 @@ function BatteryCard({
 
 interface ConfigEditorProps {
   config: AgentConfig | null;
+  agentEnv?: string;
   draft: string;
   loading: boolean;
   saving: boolean;
@@ -1094,6 +1101,7 @@ interface ConfigEditorProps {
 
 function ConfigEditor({
   config,
+  agentEnv,
   draft,
   loading,
   saving,
@@ -1114,6 +1122,7 @@ function ConfigEditor({
         const parsed = JSON.parse(draft) as Partial<AgentConfig>;
         setLocalConfig({
           device_name: parsed.device_name ?? config?.device_name ?? "",
+          env: parsed.env ?? config?.env ?? agentEnv ?? "",
           revision: parsed.revision ?? config?.revision ?? 0,
           updated_at: config?.updated_at ?? new Date().toISOString(),
           batteries: Array.isArray(parsed.batteries) ? parsed.batteries : [],
@@ -1223,7 +1232,7 @@ function ConfigEditor({
               {!showJson ? (
                 <div className="config-forms">
                   <div className="config-section">
-                    <h4>Device Name</h4>
+                    <h4>Device Settings</h4>
                     <div className="config-form-grid">
                       <div className="form-field">
                         <label htmlFor="device-name">Device Name</label>
@@ -1238,6 +1247,26 @@ function ConfigEditor({
                           disabled={saving}
                           placeholder="My Battery Controller"
                         />
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="env">Logging Level (env)</label>
+                        <select
+                          id="env"
+                          value={localConfig?.env ?? agentEnv ?? ""}
+                          onChange={(e) => {
+                            if (!localConfig) return;
+                            handleConfigChange({ ...localConfig, env: e.target.value });
+                          }}
+                          disabled={saving}
+                        >
+                          <option value="">Select...</option>
+                          <option value="local">local</option>
+                          <option value="dev">dev</option>
+                          <option value="prod">prod</option>
+                        </select>
+                        <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
+                          Controls logging level: local (debug to stdout), dev (debug to file), prod (info to file)
+                        </small>
                       </div>
                     </div>
                   </div>
