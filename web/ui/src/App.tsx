@@ -92,20 +92,30 @@ export default function App() {
   const [logLines, setLogLines] = useState<number>(500);
   const [lastStatusMessage, setLastStatusMessage] = useState<string>("");
   const [showStatusMessage, setShowStatusMessage] = useState(false);
+  const [statusMessageFrozen, setStatusMessageFrozen] = useState(false);
   const isLoggingOutRef = useRef(false);
   const handleLogoutRef = useRef<() => void>();
   const prefetchedConfigAgentsRef = useRef<Set<string>>(new Set());
   const selectedAgentIdRef = useRef<string | undefined>();
   const configDirtyRef = useRef(false);
+  const statusMessageFrozenRef = useRef(false);
 
   // Keep refs in sync with state
   useEffect(() => {
     selectedAgentIdRef.current = selectedAgentId;
+    // Clear status message when agent changes (unless frozen)
+    if (!statusMessageFrozenRef.current) {
+      setLastStatusMessage("");
+    }
   }, [selectedAgentId]);
 
   useEffect(() => {
     configDirtyRef.current = configDirty;
   }, [configDirty]);
+
+  useEffect(() => {
+    statusMessageFrozenRef.current = statusMessageFrozen;
+  }, [statusMessageFrozen]);
 
   // Check authentication on mount
   useEffect(() => {
@@ -422,9 +432,33 @@ export default function App() {
         retryMs = 1000;
       };
       socket.onmessage = (event) => {
-        // Store raw JSON for debug preview
-        setLastStatusMessage(event.data);
+        // Store raw JSON for debug preview (only for selected agent)
         const data = JSON.parse(event.data) as DashboardMessage;
+        const currentAgentId = selectedAgentIdRef.current;
+        
+        // Check if message is for the selected agent
+        let isForSelectedAgent = false;
+        switch (data.type) {
+          case "agent.telemetry":
+          case "agent.removed":
+          case "config.updated":
+            isForSelectedAgent = data.agent_id === currentAgentId;
+            break;
+          case "agent.summary":
+            isForSelectedAgent = data.agent.agent.id === currentAgentId;
+            break;
+          case "agents.snapshot":
+            // Skip snapshot messages as they contain all agents
+            isForSelectedAgent = false;
+            break;
+          default:
+            isForSelectedAgent = false;
+        }
+        
+        if (isForSelectedAgent && !statusMessageFrozenRef.current) {
+          setLastStatusMessage(event.data);
+        }
+        
         handleMessage(data);
       };
       socket.onclose = () => {
@@ -773,6 +807,8 @@ export default function App() {
               lastStatusMessage={lastStatusMessage}
               showStatusMessage={showStatusMessage}
               onToggleStatusMessage={() => setShowStatusMessage(!showStatusMessage)}
+              statusMessageFrozen={statusMessageFrozen}
+              onToggleStatusMessageFrozen={() => setStatusMessageFrozen(!statusMessageFrozen)}
             />
           </>
         ) : (
@@ -1568,6 +1604,8 @@ interface LogViewerProps {
   lastStatusMessage: string;
   showStatusMessage: boolean;
   onToggleStatusMessage: () => void;
+  statusMessageFrozen: boolean;
+  onToggleStatusMessageFrozen: () => void;
 }
 
 function LogViewer({
@@ -1586,6 +1624,8 @@ function LogViewer({
   lastStatusMessage,
   showStatusMessage,
   onToggleStatusMessage,
+  statusMessageFrozen,
+  onToggleStatusMessageFrozen,
 }: LogViewerProps) {
   const logContainerRef = useRef<HTMLDivElement>(null);
   const onRefreshRef = useRef(onRefresh);
@@ -1676,11 +1716,40 @@ function LogViewer({
           <div className="config-section" style={{ marginBottom: "1rem" }}>
             <div 
               className="config-section-header"
-              onClick={onToggleStatusMessage}
-              style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
             >
-              <h4 style={{ margin: 0 }}>Debug: Last Status Message (Raw JSON)</h4>
-              <span className="config-toggle">{showStatusMessage ? "▼" : "▶"}</span>
+              <div 
+                onClick={onToggleStatusMessage}
+                style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", flex: 1 }}
+              >
+                <h4 style={{ margin: 0 }}>Debug: Last Status Message (Raw JSON)</h4>
+                {statusMessageFrozen && (
+                  <span className="badge" style={{ borderColor: "#fbbf24", color: "#fbbf24", fontSize: "0.75rem" }}>
+                    Frozen
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <button
+                  type="button"
+                  className="button-small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleStatusMessageFrozen();
+                  }}
+                  title={statusMessageFrozen ? "Unfreeze updates" : "Freeze updates"}
+                  style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem" }}
+                >
+                  {statusMessageFrozen ? "▶ Resume" : "⏸ Freeze"}
+                </button>
+                <span 
+                  className="config-toggle"
+                  onClick={onToggleStatusMessage}
+                  style={{ cursor: "pointer" }}
+                >
+                  {showStatusMessage ? "▼" : "▶"}
+                </span>
+              </div>
             </div>
             {showStatusMessage && (
               <div
