@@ -35,6 +35,8 @@ export interface BatteryConfig {
   token: string;
   enabled: boolean;
   capacity_limit: number;
+  power_limit?: number;  // Default power limit in W (used when no schedule is active)
+  soc_limit?: number;    // Default SoC limit in % (used when no schedule is active)
 }
 
 export interface ScheduleConfig {

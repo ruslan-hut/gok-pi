@@ -1421,6 +1421,39 @@ function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryCon
             step="1"
           />
         </div>
+        <div className="form-field">
+          <label htmlFor={`battery-power-${battery.name || 'new'}`}>Power Limit (W)</label>
+          <input
+            id={`battery-power-${battery.name || 'new'}`}
+            type="number"
+            value={battery.power_limit ?? 0}
+            onChange={(e) => onChange({ ...battery, power_limit: Number(e.target.value) || undefined })}
+            disabled={disabled}
+            min="0"
+            step="1"
+            placeholder="Default power limit"
+          />
+          <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
+            Used when no schedule is active
+          </small>
+        </div>
+        <div className="form-field">
+          <label htmlFor={`battery-soc-${battery.name || 'new'}`}>SoC Limit (%)</label>
+          <input
+            id={`battery-soc-${battery.name || 'new'}`}
+            type="number"
+            value={battery.soc_limit ?? 0}
+            onChange={(e) => onChange({ ...battery, soc_limit: Number(e.target.value) || undefined })}
+            disabled={disabled}
+            min="0"
+            max="100"
+            step="0.1"
+            placeholder="Default SoC limit"
+          />
+          <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
+            Used when no schedule is active
+          </small>
+        </div>
         <div className="form-field form-field-checkbox">
           <label>
             <input

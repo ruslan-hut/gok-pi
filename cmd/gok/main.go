@@ -33,8 +33,8 @@ func main() {
 	conf := config.MustLoad(*configPath)
 	lg := logger.SetupLogger(conf.Env, *logPath)
 
-	lg.Info("starting gok-pi", 
-		slog.String("config", *configPath), 
+	lg.Info("starting gok-pi",
+		slog.String("config", *configPath),
 		slog.String("env", conf.Env),
 		slog.String("device_id", conf.DeviceID))
 	lg.Debug("debug messages enabled")
@@ -418,6 +418,18 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}
 
 		dischargerWorker.SetCapacityLimit(battery.CapacityLimit)
+		// Initialize limits from battery config if set (non-zero values)
+		if battery.PowerLimit > 0 || battery.SocLimit > 0 {
+			powerLimit := battery.PowerLimit
+			socLimit := battery.SocLimit
+			if powerLimit == 0 {
+				powerLimit = 1000 // Default if not set
+			}
+			if socLimit == 0 {
+				socLimit = 50 // Default if not set
+			}
+			dischargerWorker.SetLimits(powerLimit, socLimit)
+		}
 		entry.dischargerWorker = dischargerWorker
 
 		wg.Add(1)
@@ -457,6 +469,18 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}
 
 		chargerWorker.SetCapacityLimit(battery.CapacityLimit)
+		// Initialize limits from battery config if set (non-zero values)
+		if battery.PowerLimit > 0 || battery.SocLimit > 0 {
+			powerLimit := battery.PowerLimit
+			socLimit := battery.SocLimit
+			if powerLimit == 0 {
+				powerLimit = 1000 // Default if not set
+			}
+			if socLimit == 0 {
+				socLimit = 50 // Default if not set
+			}
+			chargerWorker.SetLimits(powerLimit, socLimit)
+		}
 		entry.chargerWorker = chargerWorker
 
 		wg.Add(1)
