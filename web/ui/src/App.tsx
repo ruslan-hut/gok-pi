@@ -1816,63 +1816,101 @@ function LogViewer({
     <section className="config-panel">
       <div
         className="config-panel-header"
-        onClick={onToggle}
-        style={{ cursor: "pointer" }}
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}
       >
-        <h3>Agent Logs</h3>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span className="config-toggle">{isOpen ? "▼" : "▶"}</span>
-        </div>
+        <h3 
+          onClick={onToggle}
+          style={{ cursor: "pointer", margin: 0, flex: "0 0 auto" }}
+        >
+          Agent Logs
+        </h3>
+        {isOpen && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flex: "1 1 auto", justifyContent: "flex-end" }}>
+            <select
+              id="log-stream"
+              value={stream}
+              onChange={(e) => {
+                e.stopPropagation();
+                onStreamChange(e.target.value);
+              }}
+              disabled={disabled || loading}
+              style={{ 
+                height: "36px", 
+                padding: "0.5rem 0.75rem", 
+                fontSize: "0.9rem",
+                minWidth: "140px"
+              }}
+            >
+              <option value="agent">Agent Logs</option>
+              <option value="updater">Autoupdater Logs</option>
+            </select>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLinesChange(500);
+                }}
+                disabled={disabled || loading}
+                className={lines === 500 ? "primary" : ""}
+                style={{ 
+                  height: "36px", 
+                  padding: "0.5rem 1rem", 
+                  fontSize: "0.9rem",
+                  minWidth: "60px"
+                }}
+              >
+                500
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLinesChange(1000);
+                }}
+                disabled={disabled || loading}
+                className={lines === 1000 ? "primary" : ""}
+                style={{ 
+                  height: "36px", 
+                  padding: "0.5rem 1rem", 
+                  fontSize: "0.9rem",
+                  minWidth: "60px"
+                }}
+              >
+                1000
+              </button>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRefresh();
+              }}
+              disabled={disabled || loading}
+              className="primary"
+              style={{ 
+                height: "36px", 
+                padding: "0.5rem 1rem", 
+                fontSize: "0.9rem",
+                minWidth: "90px"
+              }}
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
+        )}
+        <span 
+          className="config-toggle"
+          onClick={onToggle}
+          style={{ cursor: "pointer", flex: "0 0 auto" }}
+        >
+          {isOpen ? "▼" : "▶"}
+        </span>
       </div>
       {isOpen && (
         <>
           {disabled && (
-            <div className="offline-warning" style={{ marginBottom: "1rem" }}>
+            <div className="offline-warning" style={{ marginTop: "1rem", marginBottom: "1rem" }}>
               Agent is offline. Logs cannot be fetched.
             </div>
           )}
-          <div className="config-section">
-            <div className="config-form-grid" style={{ marginBottom: "1rem" }}>
-              <div className="form-field">
-                <label htmlFor="log-stream">Log Stream</label>
-                <select
-                  id="log-stream"
-                  value={stream}
-                  onChange={(e) => onStreamChange(e.target.value)}
-                  disabled={disabled || loading}
-                >
-                  <option value="agent">Agent Logs</option>
-                  <option value="updater">Autoupdater Logs</option>
-                </select>
-              </div>
-              <div className="form-field">
-                <label htmlFor="log-lines">Lines</label>
-                <input
-                  id="log-lines"
-                  type="number"
-                  value={lines}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10);
-                    if (!isNaN(val) && val > 0) {
-                      onLinesChange(Math.min(val, 10000));
-                    }
-                  }}
-                  disabled={disabled || loading}
-                  min="1"
-                  max="10000"
-                />
-              </div>
-              <div className="form-field" style={{ display: "flex", alignItems: "flex-end" }}>
-                <button
-                  onClick={onRefresh}
-                  disabled={disabled || loading}
-                  className="primary"
-                >
-                  {loading ? "Loading..." : "Refresh"}
-                </button>
-              </div>
-            </div>
-          </div>
           {error && <div className="config-error">{error}</div>}
           {loading && logs === "" ? (
             <div className="config-loading">
