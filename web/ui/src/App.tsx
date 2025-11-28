@@ -848,6 +848,8 @@ function BatteryCard({
         return "MANUAL";
       case "2":
         return "AUTO";
+      case "10":
+        return "SERVICE";
       default:
         return mode;
     }
