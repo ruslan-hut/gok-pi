@@ -1711,7 +1711,7 @@ function StatusMessagePreview({
           onClick={onToggleStatusMessage}
           style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", flex: 1 }}
         >
-          <h3 style={{ margin: 0 }}>Debug: Last Status Message (Raw JSON)</h3>
+          <h3 style={{ margin: 0 }}>Last Status Message</h3>
           {statusMessageFrozen && (
             <span className="badge" style={{ borderColor: "#fbbf24", color: "#fbbf24", fontSize: "0.75rem" }}>
               Frozen
