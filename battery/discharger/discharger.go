@@ -255,6 +255,16 @@ func (d *Discharge) runDischarge() {
 		return
 	}
 
+	// Don't start discharging if USOC is already at or below the SoC limit
+	// Discharge continues while USOC > SoC limit, stops when USOC <= SoC limit
+	if d.soc <= d.socLimit {
+		log.With(
+			slog.Float64("usoc", d.soc),
+			slog.Float64("soc_limit", d.socLimit),
+		).Info("battery already at or below SoC limit, not starting discharge")
+		return
+	}
+
 	err := d.client.SwitchOperatingModeToManual(d.status.OperatingMode)
 	if err != nil {
 		d.log.With(sl.Err(err)).Error("switching operating mode")

@@ -255,6 +255,16 @@ func (c *Charger) runCharge() {
 		return
 	}
 
+	// Don't start charging if USOC is already at or above the SoC limit
+	// Charge continues while USOC < SoC limit, stops when USOC >= SoC limit
+	if c.soc >= c.socLimit {
+		log.With(
+			slog.Float64("usoc", c.soc),
+			slog.Float64("soc_limit", c.socLimit),
+		).Info("battery already at or above SoC limit, not starting charge")
+		return
+	}
+
 	err := c.client.SwitchOperatingModeToManual(c.status.OperatingMode)
 	if err != nil {
 		c.log.With(sl.Err(err)).Error("switching operating mode")
