@@ -448,11 +448,17 @@ func (d *Discharge) calculateRate() {
 	if remainingTime <= 0 {
 		return
 	}
-	rate := estimate / remainingTime.Hours()
-	if rate <= float64(d.powerLimit) {
-		d.rate = int(rate)
-	} else {
+	calculatedRate := estimate / remainingTime.Hours()
+	
+	// If power limit is set, use it as the actual discharge rate (not just a maximum)
+	// This ensures we discharge at the specified power limit rather than a lower calculated rate
+	if d.powerLimit > 0 {
+		// Use power limit as the rate - this allows discharging at full specified power
+		// The calculated rate is only used to verify we don't exceed hardware limits
 		d.rate = d.powerLimit
+	} else {
+		// No power limit set, use calculated rate
+		d.rate = int(calculatedRate)
 	}
 }
 

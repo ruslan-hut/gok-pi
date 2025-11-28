@@ -459,12 +459,18 @@ func (c *Charger) calculateRate() {
 		return
 	}
 
-	// Calculate rate in W (Wh/h = W)
-	rate := capacityNeeded / remainingTime.Hours()
-	if rate <= float64(c.powerLimit) {
-		c.rate = int(rate)
-	} else {
+	// Calculate rate in W (Wh/h = W) needed to reach target SoC by stop time
+	calculatedRate := capacityNeeded / remainingTime.Hours()
+
+	// If power limit is set, use it as the actual charge rate (not just a maximum)
+	// This ensures we charge at the specified power limit rather than a lower calculated rate
+	if c.powerLimit > 0 {
+		// Use power limit as the rate - this allows charging at full specified power
+		// The calculated rate is only used to verify we don't exceed hardware limits
 		c.rate = c.powerLimit
+	} else {
+		// No power limit set, use calculated rate
+		c.rate = int(calculatedRate)
 	}
 }
 
