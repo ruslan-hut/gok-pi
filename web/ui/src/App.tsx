@@ -807,6 +807,13 @@ export default function App() {
               onSave={handleConfigSave}
               onReset={handleConfigReset}
             />
+            <StatusMessagePreview
+              lastStatusMessage={lastStatusMessage}
+              showStatusMessage={showStatusMessage}
+              onToggleStatusMessage={() => setShowStatusMessage(!showStatusMessage)}
+              statusMessageFrozen={statusMessageFrozen}
+              onToggleStatusMessageFrozen={() => setStatusMessageFrozen(!statusMessageFrozen)}
+            />
             <LogViewer
               agentId={selectedAgentId}
               isOpen={logsOpen}
@@ -820,11 +827,6 @@ export default function App() {
               onStreamChange={setLogStream}
               onLinesChange={setLogLines}
               disabled={!selectedAgentOnline}
-              lastStatusMessage={lastStatusMessage}
-              showStatusMessage={showStatusMessage}
-              onToggleStatusMessage={() => setShowStatusMessage(!showStatusMessage)}
-              statusMessageFrozen={statusMessageFrozen}
-              onToggleStatusMessageFrozen={() => setStatusMessageFrozen(!statusMessageFrozen)}
             />
           </>
         ) : (
@@ -1669,6 +1671,14 @@ function Metric({ label, value }: MetricProps) {
   );
 }
 
+interface StatusMessagePreviewProps {
+  lastStatusMessage: string;
+  showStatusMessage: boolean;
+  onToggleStatusMessage: () => void;
+  statusMessageFrozen: boolean;
+  onToggleStatusMessageFrozen: () => void;
+}
+
 interface LogViewerProps {
   agentId?: string;
   isOpen: boolean;
@@ -1682,11 +1692,88 @@ interface LogViewerProps {
   onStreamChange: (stream: string) => void;
   onLinesChange: (lines: number) => void;
   disabled: boolean;
-  lastStatusMessage: string;
-  showStatusMessage: boolean;
-  onToggleStatusMessage: () => void;
-  statusMessageFrozen: boolean;
-  onToggleStatusMessageFrozen: () => void;
+}
+
+function StatusMessagePreview({
+  lastStatusMessage,
+  showStatusMessage,
+  onToggleStatusMessage,
+  statusMessageFrozen,
+  onToggleStatusMessageFrozen,
+}: StatusMessagePreviewProps) {
+  return (
+    <section className="config-panel">
+      <div 
+        className="config-panel-header"
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+      >
+        <div 
+          onClick={onToggleStatusMessage}
+          style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", flex: 1 }}
+        >
+          <h3 style={{ margin: 0 }}>Debug: Last Status Message (Raw JSON)</h3>
+          {statusMessageFrozen && (
+            <span className="badge" style={{ borderColor: "#fbbf24", color: "#fbbf24", fontSize: "0.75rem" }}>
+              Frozen
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <button
+            type="button"
+            className="button-small"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleStatusMessageFrozen();
+            }}
+            title={statusMessageFrozen ? "Unfreeze updates" : "Freeze updates"}
+            style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem" }}
+          >
+            {statusMessageFrozen ? "▶ Resume" : "⏸ Freeze"}
+          </button>
+          <span 
+            className="config-toggle"
+            onClick={onToggleStatusMessage}
+            style={{ cursor: "pointer" }}
+          >
+            {showStatusMessage ? "▼" : "▶"}
+          </span>
+        </div>
+      </div>
+      {showStatusMessage && (
+        <div
+          style={{
+            backgroundColor: "#0a0e1a",
+            border: "1px solid rgba(148, 163, 184, 0.2)",
+            borderRadius: "0.5rem",
+            padding: "1rem",
+            maxHeight: "400px",
+            overflow: "auto",
+            fontFamily: "Monaco, 'Courier New', monospace",
+            fontSize: "0.875rem",
+            lineHeight: "1.5",
+            color: "#e2e8f0",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            marginTop: "0.5rem",
+          }}
+        >
+          {lastStatusMessage ? (
+            (() => {
+              try {
+                const parsed = JSON.parse(lastStatusMessage);
+                return JSON.stringify(parsed, null, 2);
+              } catch {
+                return lastStatusMessage;
+              }
+            })()
+          ) : (
+            "No status messages received yet"
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function LogViewer({
@@ -1702,11 +1789,6 @@ function LogViewer({
   onStreamChange,
   onLinesChange,
   disabled,
-  lastStatusMessage,
-  showStatusMessage,
-  onToggleStatusMessage,
-  statusMessageFrozen,
-  onToggleStatusMessageFrozen,
 }: LogViewerProps) {
   const logContainerRef = useRef<HTMLDivElement>(null);
   const onRefreshRef = useRef(onRefresh);
@@ -1792,80 +1874,6 @@ function LogViewer({
             </div>
           </div>
           {error && <div className="config-error">{error}</div>}
-          
-          {/* Debug: Last Status Message Preview */}
-          <div className="config-section" style={{ marginBottom: "1rem" }}>
-            <div 
-              className="config-section-header"
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-            >
-              <div 
-                onClick={onToggleStatusMessage}
-                style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", flex: 1 }}
-              >
-                <h4 style={{ margin: 0 }}>Debug: Last Status Message (Raw JSON)</h4>
-                {statusMessageFrozen && (
-                  <span className="badge" style={{ borderColor: "#fbbf24", color: "#fbbf24", fontSize: "0.75rem" }}>
-                    Frozen
-                  </span>
-                )}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <button
-                  type="button"
-                  className="button-small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleStatusMessageFrozen();
-                  }}
-                  title={statusMessageFrozen ? "Unfreeze updates" : "Freeze updates"}
-                  style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem" }}
-                >
-                  {statusMessageFrozen ? "▶ Resume" : "⏸ Freeze"}
-                </button>
-                <span 
-                  className="config-toggle"
-                  onClick={onToggleStatusMessage}
-                  style={{ cursor: "pointer" }}
-                >
-                  {showStatusMessage ? "▼" : "▶"}
-                </span>
-              </div>
-            </div>
-            {showStatusMessage && (
-              <div
-                style={{
-                  backgroundColor: "#0a0e1a",
-                  border: "1px solid rgba(148, 163, 184, 0.2)",
-                  borderRadius: "0.5rem",
-                  padding: "1rem",
-                  maxHeight: "400px",
-                  overflow: "auto",
-                  fontFamily: "Monaco, 'Courier New', monospace",
-                  fontSize: "0.875rem",
-                  lineHeight: "1.5",
-                  color: "#e2e8f0",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  marginTop: "0.5rem",
-                }}
-              >
-                {lastStatusMessage ? (
-                  (() => {
-                    try {
-                      const parsed = JSON.parse(lastStatusMessage);
-                      return JSON.stringify(parsed, null, 2);
-                    } catch {
-                      return lastStatusMessage;
-                    }
-                  })()
-                ) : (
-                  "No status messages received yet"
-                )}
-              </div>
-            )}
-          </div>
-
           {loading && logs === "" ? (
             <div className="config-loading">
               <div className="spinner"></div>
