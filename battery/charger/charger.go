@@ -203,9 +203,20 @@ func (c *Charger) checkTime() {
 	for _, schedule := range c.schedules {
 		if schedule.Enabled && schedule.Type == "charge" {
 			if c.isTimeToCharge(schedule.StartTime, schedule.StopTime) {
+				oldRate := c.rate
 				c.SetLimits(schedule.PowerLimit, schedule.SocLimit)
 				c.calculateRate()
 				c.readyToCharge = true
+				// If already charging and rate changed, update the ongoing charge
+				if c.isCharging && c.rate > 0 && c.rate != oldRate {
+					c.log.With(
+						slog.Int("old_rate", oldRate),
+						slog.Int("new_rate", c.rate),
+					).Info("updating ongoing charge with new rate from schedule")
+					if err := c.client.StartCharge(c.rate); err != nil {
+						c.log.With(sl.Err(err)).Error("updating charge rate")
+					}
+				}
 				return
 			}
 		}
@@ -384,7 +395,22 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 			c.socLimit = float64(*cmd.Config.SocLimit)
 			log = log.With(slog.Int("soc_limit", *cmd.Config.SocLimit))
 		}
-		c.readyToCharge = false
+
+		// Check if we should be charging based on updated schedules
+		oldRate := c.rate
+		c.checkTime()
+
+		// If already charging and rate changed, update the ongoing charge
+		if c.isCharging && c.readyToCharge && c.rate > 0 && c.rate != oldRate {
+			log.With(
+				slog.Int("old_rate", oldRate),
+				slog.Int("new_rate", c.rate),
+			).Info("updating ongoing charge with new rate from config update")
+			if err := c.client.StartCharge(c.rate); err != nil {
+				return fmt.Errorf("updating charge rate: %w", err)
+			}
+		}
+
 		log.Info("applied runtime config update")
 		return nil
 	default:

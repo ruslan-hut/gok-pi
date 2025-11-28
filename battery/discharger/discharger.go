@@ -203,9 +203,20 @@ func (d *Discharge) checkTime() {
 	for _, schedule := range d.schedules {
 		if schedule.Enabled && (schedule.Type == "" || schedule.Type == "discharge") {
 			if d.isTimeToDischarge(schedule.StartTime, schedule.StopTime) {
+				oldRate := d.rate
 				d.SetLimits(schedule.PowerLimit, schedule.SocLimit)
 				d.calculateRate()
 				d.readyToDischarge = true
+				// If already discharging and rate changed, update the ongoing discharge
+				if d.isDischarging && d.rate > 0 && d.rate != oldRate {
+					d.log.With(
+						slog.Int("old_rate", oldRate),
+						slog.Int("new_rate", d.rate),
+					).Info("updating ongoing discharge with new rate from schedule")
+					if err := d.client.StartDischarge(d.rate); err != nil {
+						d.log.With(sl.Err(err)).Error("updating discharge rate")
+					}
+				}
 				return
 			}
 		}
@@ -386,7 +397,22 @@ func (d *Discharge) processControlCommand(cmd ControlCommand) error {
 			d.socLimit = float64(*cmd.Config.SocLimit)
 			log = log.With(slog.Int("soc_limit", *cmd.Config.SocLimit))
 		}
-		d.readyToDischarge = false
+		
+		// Check if we should be discharging based on updated schedules
+		oldRate := d.rate
+		d.checkTime()
+		
+		// If already discharging and rate changed, update the ongoing discharge
+		if d.isDischarging && d.readyToDischarge && d.rate > 0 && d.rate != oldRate {
+			log.With(
+				slog.Int("old_rate", oldRate),
+				slog.Int("new_rate", d.rate),
+			).Info("updating ongoing discharge with new rate from config update")
+			if err := d.client.StartDischarge(d.rate); err != nil {
+				return fmt.Errorf("updating discharge rate: %w", err)
+			}
+		}
+		
 		log.Info("applied runtime config update")
 		return nil
 	default:
