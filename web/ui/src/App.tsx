@@ -530,6 +530,15 @@ export default function App() {
       );
   }, [selectedAgent, agentConfig]);
 
+  // Create a map of battery configs by name for quick lookup
+  const batteryConfigMap = useMemo(() => {
+    const map = new Map<string, BatteryConfig>();
+    (agentConfig?.batteries || []).forEach((battery) => {
+      map.set(battery.name, battery);
+    });
+    return map;
+  }, [agentConfig]);
+
   const handleLogRefresh = useCallback(async () => {
     if (!selectedAgentId) return;
     setLogsLoading(true);
@@ -763,6 +772,7 @@ export default function App() {
                 <BatteryCard
                   key={battery.name}
                   snapshot={battery}
+                  batteryConfig={batteryConfigMap.get(battery.name)}
                   commandState={commandState}
                   onCommandStateChange={setCommandState}
                   onCommand={handleCommand}
@@ -834,6 +844,7 @@ export default function App() {
 
 interface BatteryCardProps {
   snapshot: TelemetrySnapshot;
+  batteryConfig?: BatteryConfig;
   commandState: CommandState;
   onCommandStateChange: (state: CommandState) => void;
   onCommand: (command: string, target: string, payload?: unknown) => void;
@@ -844,6 +855,7 @@ interface BatteryCardProps {
 
 function BatteryCard({
   snapshot,
+  batteryConfig,
   commandState,
   onCommandStateChange,
   onCommand,
@@ -853,6 +865,11 @@ function BatteryCard({
 }: BatteryCardProps) {
   const { name } = snapshot;
   const controlsDisabled = !isOnline;
+  // Check if limits are defined in config (non-zero values)
+  const hasConfigLimits = batteryConfig && (
+    (batteryConfig.power_limit !== undefined && batteryConfig.power_limit > 0) ||
+    (batteryConfig.soc_limit !== undefined && batteryConfig.soc_limit > 0)
+  );
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -1002,61 +1019,63 @@ function BatteryCard({
           </div>
         </div>
 
-        <div className="control-group">
-          <label className="control-label">Limits</label>
-          <div className="control-inputs-row">
-            <div className="control-input-wrapper">
-              <label className="control-input-label" htmlFor={`power-limit-${snapshot.name}`}>
-                Power limit (W)
-              </label>
-              <input
-                id={`power-limit-${snapshot.name}`}
-                type="number"
-                className="control-input"
-                value={commandState.powerLimit}
-                disabled={controlsDisabled}
-                onChange={(event) =>
-                  onCommandStateChange({
-                    ...commandState,
-                    powerLimit: Number(event.target.value),
-                  })
-                }
-                placeholder="Power limit"
-              />
+        {!hasConfigLimits && (
+          <div className="control-group">
+            <label className="control-label">Limits</label>
+            <div className="control-inputs-row">
+              <div className="control-input-wrapper">
+                <label className="control-input-label" htmlFor={`power-limit-${snapshot.name}`}>
+                  Power limit (W)
+                </label>
+                <input
+                  id={`power-limit-${snapshot.name}`}
+                  type="number"
+                  className="control-input"
+                  value={commandState.powerLimit}
+                  disabled={controlsDisabled}
+                  onChange={(event) =>
+                    onCommandStateChange({
+                      ...commandState,
+                      powerLimit: Number(event.target.value),
+                    })
+                  }
+                  placeholder="Power limit"
+                />
+              </div>
+              <div className="control-input-wrapper">
+                <label className="control-input-label" htmlFor={`soc-limit-${snapshot.name}`}>
+                  SoC limit (%)
+                </label>
+                <input
+                  id={`soc-limit-${snapshot.name}`}
+                  type="number"
+                  className="control-input"
+                  value={commandState.socLimit}
+                  disabled={controlsDisabled}
+                  onChange={(event) =>
+                    onCommandStateChange({
+                      ...commandState,
+                      socLimit: Number(event.target.value),
+                    })
+                  }
+                  placeholder="SoC limit"
+                />
+              </div>
             </div>
-            <div className="control-input-wrapper">
-              <label className="control-input-label" htmlFor={`soc-limit-${snapshot.name}`}>
-                SoC limit (%)
-              </label>
-              <input
-                id={`soc-limit-${snapshot.name}`}
-                type="number"
-                className="control-input"
-                value={commandState.socLimit}
-                disabled={controlsDisabled}
-                onChange={(event) =>
-                  onCommandStateChange({
-                    ...commandState,
-                    socLimit: Number(event.target.value),
-                  })
-                }
-                placeholder="SoC limit"
-              />
-            </div>
+            <button
+              className="control-button control-button-secondary"
+              disabled={controlsDisabled}
+              onClick={() =>
+                onCommand("set_limits", snapshot.name, {
+                  power_limit: commandState.powerLimit,
+                  soc_limit: commandState.socLimit,
+                })
+              }
+            >
+              Update Limits
+            </button>
           </div>
-          <button
-            className="control-button control-button-secondary"
-            disabled={controlsDisabled}
-            onClick={() =>
-              onCommand("set_limits", snapshot.name, {
-                power_limit: commandState.powerLimit,
-                soc_limit: commandState.socLimit,
-              })
-            }
-          >
-            Update Limits
-          </button>
-        </div>
+        )}
 
         <div className="control-group">
           <label className="control-label">Mode</label>
