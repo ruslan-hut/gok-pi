@@ -90,6 +90,8 @@ export default function App() {
   const [logsError, setLogsError] = useState<string>();
   const [logStream, setLogStream] = useState<string>("agent");
   const [logLines, setLogLines] = useState<number>(500);
+  const [lastStatusMessage, setLastStatusMessage] = useState<string>("");
+  const [showStatusMessage, setShowStatusMessage] = useState(false);
   const isLoggingOutRef = useRef(false);
   const handleLogoutRef = useRef<() => void>();
   const prefetchedConfigAgentsRef = useRef<Set<string>>(new Set());
@@ -363,19 +365,21 @@ export default function App() {
         setConfigDirty(false);
         setConfigError(undefined);
         // Update device_name in agents map
-        setAgents((prev: AgentsMap) => {
-          const agent = prev[selectedAgentId];
-          if (agent) {
-            return {
-              ...prev,
-              [selectedAgentId]: {
-                ...agent,
-                device_name: cfg.device_name,
-              },
-            };
-          }
-          return prev;
-        });
+        if (cfg) {
+          setAgents((prev: AgentsMap) => {
+            const agent = prev[selectedAgentId];
+            if (agent) {
+              return {
+                ...prev,
+                [selectedAgentId]: {
+                  ...agent,
+                  device_name: cfg.device_name,
+                },
+              };
+            }
+            return prev;
+          });
+        }
       })
       .catch((err) => {
         if (cancelled || isLoggingOutRef.current) return;
@@ -418,6 +422,8 @@ export default function App() {
         retryMs = 1000;
       };
       socket.onmessage = (event) => {
+        // Store raw JSON for debug preview
+        setLastStatusMessage(event.data);
         const data = JSON.parse(event.data) as DashboardMessage;
         handleMessage(data);
       };
@@ -764,6 +770,9 @@ export default function App() {
               onStreamChange={setLogStream}
               onLinesChange={setLogLines}
               disabled={!selectedAgentOnline}
+              lastStatusMessage={lastStatusMessage}
+              showStatusMessage={showStatusMessage}
+              onToggleStatusMessage={() => setShowStatusMessage(!showStatusMessage)}
             />
           </>
         ) : (
@@ -1554,6 +1563,9 @@ interface LogViewerProps {
   onStreamChange: (stream: string) => void;
   onLinesChange: (lines: number) => void;
   disabled: boolean;
+  lastStatusMessage: string;
+  showStatusMessage: boolean;
+  onToggleStatusMessage: () => void;
 }
 
 function LogViewer({
@@ -1569,6 +1581,9 @@ function LogViewer({
   onStreamChange,
   onLinesChange,
   disabled,
+  lastStatusMessage,
+  showStatusMessage,
+  onToggleStatusMessage,
 }: LogViewerProps) {
   const logContainerRef = useRef<HTMLDivElement>(null);
   const onRefreshRef = useRef(onRefresh);
@@ -1654,6 +1669,51 @@ function LogViewer({
             </div>
           </div>
           {error && <div className="config-error">{error}</div>}
+          
+          {/* Debug: Last Status Message Preview */}
+          <div className="config-section" style={{ marginBottom: "1rem" }}>
+            <div 
+              className="config-section-header"
+              onClick={onToggleStatusMessage}
+              style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+            >
+              <h4 style={{ margin: 0 }}>Debug: Last Status Message (Raw JSON)</h4>
+              <span className="config-toggle">{showStatusMessage ? "▼" : "▶"}</span>
+            </div>
+            {showStatusMessage && (
+              <div
+                style={{
+                  backgroundColor: "#0a0e1a",
+                  border: "1px solid rgba(148, 163, 184, 0.2)",
+                  borderRadius: "0.5rem",
+                  padding: "1rem",
+                  maxHeight: "400px",
+                  overflow: "auto",
+                  fontFamily: "Monaco, 'Courier New', monospace",
+                  fontSize: "0.875rem",
+                  lineHeight: "1.5",
+                  color: "#e2e8f0",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  marginTop: "0.5rem",
+                }}
+              >
+                {lastStatusMessage ? (
+                  (() => {
+                    try {
+                      const parsed = JSON.parse(lastStatusMessage);
+                      return JSON.stringify(parsed, null, 2);
+                    } catch {
+                      return lastStatusMessage;
+                    }
+                  })()
+                ) : (
+                  "No status messages received yet"
+                )}
+              </div>
+            )}
+          </div>
+
           {loading && logs === "" ? (
             <div className="config-loading">
               <div className="spinner"></div>
