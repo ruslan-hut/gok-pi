@@ -418,7 +418,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}
 
 		dischargerWorker.SetCapacityLimit(battery.CapacityLimit)
-		// Initialize limits from battery config if set (non-zero values)
+		// Initialize battery default limits from battery config (used when no schedule is active)
 		if battery.PowerLimit > 0 || battery.SocLimit > 0 {
 			powerLimit := battery.PowerLimit
 			socLimit := battery.SocLimit
@@ -428,7 +428,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 			if socLimit == 0 {
 				socLimit = 50 // Default if not set
 			}
-			dischargerWorker.SetLimits(powerLimit, socLimit)
+			dischargerWorker.SetBatteryDefaults(powerLimit, socLimit)
 		}
 		entry.dischargerWorker = dischargerWorker
 
@@ -469,7 +469,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}
 
 		chargerWorker.SetCapacityLimit(battery.CapacityLimit)
-		// Initialize limits from battery config if set (non-zero values)
+		// Initialize battery default limits from battery config (used when no schedule is active)
 		if battery.PowerLimit > 0 || battery.SocLimit > 0 {
 			powerLimit := battery.PowerLimit
 			socLimit := battery.SocLimit
@@ -479,7 +479,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 			if socLimit == 0 {
 				socLimit = 50 // Default if not set
 			}
-			chargerWorker.SetLimits(powerLimit, socLimit)
+			chargerWorker.SetBatteryDefaults(powerLimit, socLimit)
 		}
 		entry.chargerWorker = chargerWorker
 

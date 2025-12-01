@@ -59,26 +59,28 @@ type ConfigUpdate struct {
 var ErrCommandQueueFull = errors.New("charger command queue full")
 
 type Charger struct {
-	name           string
-	schedules      []entity.Schedule
-	capacityLimit  float64 // Capacity limit in Wh calculated based on the SoC limit
-	powerLimit     int
-	socLimit       float64
-	readyToCharge  bool
-	isCharging     bool
-	soc            float64 // State of Charge from last status
-	capacity       float64 // Remaining capacity in Wh from last status
-	maxCapacity    float64 // Maximum capacity in Wh (calculated from target SoC)
-	stopTime       time.Time
-	rate           int // Charge rate in W calculated based on the remaining capacity and time
-	client         Client
-	status         *entity.SystemStatus
-	log            *slog.Logger
-	commands       chan ControlCommand
-	manualOverride bool
-	stop           chan struct{}
-	stopped        chan struct{}
-	stopOnce       sync.Once
+	name              string
+	schedules         []entity.Schedule
+	capacityLimit     float64 // Capacity limit in Wh calculated based on the SoC limit
+	powerLimit        int     // Current power limit (from schedule if active, otherwise from battery config)
+	socLimit          float64 // Current SoC limit (from schedule if active, otherwise from battery config)
+	batteryPowerLimit int     // Default power limit from battery config
+	batterySocLimit   float64 // Default SoC limit from battery config
+	readyToCharge     bool
+	isCharging        bool
+	soc               float64 // State of Charge from last status
+	capacity          float64 // Remaining capacity in Wh from last status
+	maxCapacity       float64 // Maximum capacity in Wh (calculated from target SoC)
+	stopTime          time.Time
+	rate              int // Charge rate in W calculated based on the remaining capacity and time
+	client            Client
+	status            *entity.SystemStatus
+	log               *slog.Logger
+	commands          chan ControlCommand
+	manualOverride    bool
+	stop              chan struct{}
+	stopped           chan struct{}
+	stopOnce          sync.Once
 }
 
 func New(name string, client Client, log *slog.Logger) (*Charger, error) {
@@ -99,6 +101,22 @@ func (c *Charger) SetCapacityLimit(_ int) {
 func (c *Charger) SetLimits(powerLimit, socLimit int) {
 	c.powerLimit = powerLimit
 	c.socLimit = float64(socLimit)
+	// Store as battery defaults if not already set
+	if c.batteryPowerLimit == 0 && c.batterySocLimit == 0 {
+		c.batteryPowerLimit = powerLimit
+		c.batterySocLimit = float64(socLimit)
+	}
+}
+
+// SetBatteryDefaults sets the default limits from battery config (used when no schedule is active)
+func (c *Charger) SetBatteryDefaults(powerLimit, socLimit int) {
+	c.batteryPowerLimit = powerLimit
+	c.batterySocLimit = float64(socLimit)
+	// If no schedule is active, also update current limits
+	if !c.readyToCharge {
+		c.powerLimit = powerLimit
+		c.socLimit = float64(socLimit)
+	}
 }
 
 func (c *Charger) AddSchedule(schedule entity.Schedule) {
@@ -204,7 +222,9 @@ func (c *Charger) checkTime() {
 		if schedule.Enabled && schedule.Type == "charge" {
 			if c.isTimeToCharge(schedule.StartTime, schedule.StopTime) {
 				oldRate := c.rate
-				c.SetLimits(schedule.PowerLimit, schedule.SocLimit)
+				// Schedule is active: use schedule limits (they take precedence over battery limits)
+				c.powerLimit = schedule.PowerLimit
+				c.socLimit = float64(schedule.SocLimit)
 				c.calculateRate()
 				c.readyToCharge = true
 				// If already charging and rate changed, update the ongoing charge
@@ -222,7 +242,12 @@ func (c *Charger) checkTime() {
 		}
 	}
 
+	// No schedule is active: restore battery default limits
 	c.readyToCharge = false
+	if c.batteryPowerLimit > 0 || c.batterySocLimit > 0 {
+		c.powerLimit = c.batteryPowerLimit
+		c.socLimit = c.batterySocLimit
+	}
 }
 
 // runCharge manages the charge process of the battery based on its current status and predefined limits.
@@ -397,16 +422,18 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 		c.schedules = cloneSchedules(cmd.Config.Schedules)
 		c.manualOverride = false
 
+		// Update battery default limits if provided
 		if cmd.Config.PowerLimit != nil {
-			c.powerLimit = *cmd.Config.PowerLimit
-			log = log.With(slog.Int("power_limit", c.powerLimit))
+			c.batteryPowerLimit = *cmd.Config.PowerLimit
+			log = log.With(slog.Int("battery_power_limit", c.batteryPowerLimit))
 		}
 		if cmd.Config.SocLimit != nil {
-			c.socLimit = float64(*cmd.Config.SocLimit)
-			log = log.With(slog.Int("soc_limit", *cmd.Config.SocLimit))
+			c.batterySocLimit = float64(*cmd.Config.SocLimit)
+			log = log.With(slog.Int("battery_soc_limit", *cmd.Config.SocLimit))
 		}
 
 		// Check if we should be charging based on updated schedules
+		// This will apply schedule limits if active, or battery defaults if not
 		oldRate := c.rate
 		c.checkTime()
 

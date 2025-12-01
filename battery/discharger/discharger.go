@@ -59,25 +59,27 @@ type ConfigUpdate struct {
 var ErrCommandQueueFull = errors.New("discharger command queue full")
 
 type Discharge struct {
-	name             string
-	schedules        []entity.Schedule
-	capacityLimit    float64 // Capacity limit in Wh calculated based on the SoC limit
-	powerLimit       int
-	socLimit         float64
-	readyToDischarge bool
-	isDischarging    bool
-	soc              float64 // State of Charge from last status
-	capacity         float64 // Remaining capacity in Wh from last status
-	stopTime         time.Time
-	rate             int // Discharge rate in Wh/h calculated based on the remaining capacity and time
-	client           Client
-	status           *entity.SystemStatus
-	log              *slog.Logger
-	commands         chan ControlCommand
-	manualOverride   bool
-	stop             chan struct{}
-	stopped          chan struct{}
-	stopOnce         sync.Once
+	name              string
+	schedules         []entity.Schedule
+	capacityLimit     float64 // Capacity limit in Wh calculated based on the SoC limit
+	powerLimit        int     // Current power limit (from schedule if active, otherwise from battery config)
+	socLimit          float64 // Current SoC limit (from schedule if active, otherwise from battery config)
+	batteryPowerLimit int     // Default power limit from battery config
+	batterySocLimit   float64 // Default SoC limit from battery config
+	readyToDischarge  bool
+	isDischarging     bool
+	soc               float64 // State of Charge from last status
+	capacity          float64 // Remaining capacity in Wh from last status
+	stopTime          time.Time
+	rate              int // Discharge rate in Wh/h calculated based on the remaining capacity and time
+	client            Client
+	status            *entity.SystemStatus
+	log               *slog.Logger
+	commands          chan ControlCommand
+	manualOverride    bool
+	stop              chan struct{}
+	stopped           chan struct{}
+	stopOnce          sync.Once
 }
 
 func New(name string, client Client, log *slog.Logger) (*Discharge, error) {
@@ -98,6 +100,22 @@ func (d *Discharge) SetCapacityLimit(_ int) {
 func (d *Discharge) SetLimits(powerLimit, socLimit int) {
 	d.powerLimit = powerLimit
 	d.socLimit = float64(socLimit)
+	// Store as battery defaults if not already set
+	if d.batteryPowerLimit == 0 && d.batterySocLimit == 0 {
+		d.batteryPowerLimit = powerLimit
+		d.batterySocLimit = float64(socLimit)
+	}
+}
+
+// SetBatteryDefaults sets the default limits from battery config (used when no schedule is active)
+func (d *Discharge) SetBatteryDefaults(powerLimit, socLimit int) {
+	d.batteryPowerLimit = powerLimit
+	d.batterySocLimit = float64(socLimit)
+	// If no schedule is active, also update current limits
+	if !d.readyToDischarge {
+		d.powerLimit = powerLimit
+		d.socLimit = float64(socLimit)
+	}
 }
 
 func (d *Discharge) AddSchedule(schedule entity.Schedule) {
@@ -204,7 +222,9 @@ func (d *Discharge) checkTime() {
 		if schedule.Enabled && (schedule.Type == "" || schedule.Type == "discharge") {
 			if d.isTimeToDischarge(schedule.StartTime, schedule.StopTime) {
 				oldRate := d.rate
-				d.SetLimits(schedule.PowerLimit, schedule.SocLimit)
+				// Schedule is active: use schedule limits (they take precedence over battery limits)
+				d.powerLimit = schedule.PowerLimit
+				d.socLimit = float64(schedule.SocLimit)
 				d.calculateRate()
 				d.readyToDischarge = true
 				// If already discharging and rate changed, update the ongoing discharge
@@ -222,7 +242,12 @@ func (d *Discharge) checkTime() {
 		}
 	}
 
+	// No schedule is active: restore battery default limits
 	d.readyToDischarge = false
+	if d.batteryPowerLimit > 0 || d.batterySocLimit > 0 {
+		d.powerLimit = d.batteryPowerLimit
+		d.socLimit = d.batterySocLimit
+	}
 }
 
 // runDischarge manages the discharge process of the battery based on its current status and predefined limits.
@@ -399,19 +424,21 @@ func (d *Discharge) processControlCommand(cmd ControlCommand) error {
 		d.schedules = cloneSchedules(cmd.Config.Schedules)
 		d.manualOverride = false
 
+		// Update battery default limits if provided
 		if cmd.Config.PowerLimit != nil {
-			d.powerLimit = *cmd.Config.PowerLimit
-			log = log.With(slog.Int("power_limit", d.powerLimit))
+			d.batteryPowerLimit = *cmd.Config.PowerLimit
+			log = log.With(slog.Int("battery_power_limit", d.batteryPowerLimit))
 		}
 		if cmd.Config.SocLimit != nil {
-			d.socLimit = float64(*cmd.Config.SocLimit)
-			log = log.With(slog.Int("soc_limit", *cmd.Config.SocLimit))
+			d.batterySocLimit = float64(*cmd.Config.SocLimit)
+			log = log.With(slog.Int("battery_soc_limit", *cmd.Config.SocLimit))
 		}
-		
+
 		// Check if we should be discharging based on updated schedules
+		// This will apply schedule limits if active, or battery defaults if not
 		oldRate := d.rate
 		d.checkTime()
-		
+
 		// If already discharging and rate changed, update the ongoing discharge
 		if d.isDischarging && d.readyToDischarge && d.rate > 0 && d.rate != oldRate {
 			log.With(
@@ -422,7 +449,7 @@ func (d *Discharge) processControlCommand(cmd ControlCommand) error {
 				return fmt.Errorf("updating discharge rate: %w", err)
 			}
 		}
-		
+
 		log.Info("applied runtime config update")
 		return nil
 	default:
@@ -459,7 +486,7 @@ func (d *Discharge) calculateRate() {
 		return
 	}
 	calculatedRate := estimate / remainingTime.Hours()
-	
+
 	// If power limit is set, use it as the actual discharge rate (not just a maximum)
 	// This ensures we discharge at the specified power limit rather than a lower calculated rate
 	if d.powerLimit > 0 {
