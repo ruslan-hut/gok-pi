@@ -891,10 +891,10 @@ function BatteryCard({
     }
   };
 
-  const handleCardClick = (e: MouseEvent) => {
-    // Only toggle on mobile, and only if clicking on the card itself, not on interactive elements
+  const handleHeaderClick = (e: MouseEvent) => {
+    // Toggle when clicking on the header, but not on badges or other interactive elements
     const target = e.target as HTMLElement;
-    if (target.closest('.controls') || target.closest('button') || target.closest('input')) {
+    if (target.closest('.badge') || target.closest('button')) {
       return;
     }
     onToggle();
@@ -924,21 +924,28 @@ function BatteryCard({
   return (
     <div 
       className={`card battery-card ${expanded ? "expanded" : ""}`}
-      onClick={handleCardClick}
     >
-      <h2>
-        {name}
-        <span
-          className={`badge ${getStatusBadgeClass(snapshot.status || "Disconnected")}`}
-        >
-          {snapshot.status || "Disconnected"}
-        </span>
-        <span
-          className={`badge ${
-            snapshot.battery_discharging ? "online" : "offline"
-          }`}
-        >
-          {snapshot.battery_discharging ? "Discharging" : snapshot.battery_charging ? "Charging" : "Idle"}
+      <h2 
+        className="battery-card-header"
+        onClick={handleHeaderClick}
+      >
+        <span className="battery-card-title">{name}</span>
+        <span className="battery-card-badges">
+          <span
+            className={`badge ${getStatusBadgeClass(snapshot.status || "Disconnected")}`}
+          >
+            {snapshot.status || "Disconnected"}
+          </span>
+          <span
+            className={`badge ${
+              snapshot.battery_discharging ? "online" : "offline"
+            }`}
+          >
+            {snapshot.battery_discharging ? "Discharging" : snapshot.battery_charging ? "Charging" : "Idle"}
+          </span>
+          <span className="battery-card-toggle" title={expanded ? "Collapse controls" : "Expand controls"}>
+            {expanded ? "▼" : "▶"}
+          </span>
         </span>
       </h2>
       <div className="metrics">
@@ -1435,15 +1442,27 @@ function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryCon
     <div className="config-item config-item-battery">
       <div className="config-item-header">
         <h5>{battery.name || "Unnamed Battery"}</h5>
-        <button
-          type="button"
-          className="button-icon"
-          onClick={onRemove}
-          disabled={disabled}
-          title="Remove battery"
-        >
-          ×
-        </button>
+        <div className="config-item-header-actions">
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={battery.enabled}
+              onChange={(e) => onChange({ ...battery, enabled: e.target.checked })}
+              disabled={disabled}
+            />
+            <span className="switch-slider"></span>
+            <span className="switch-label">Enabled</span>
+          </label>
+          <button
+            type="button"
+            className="button-icon"
+            onClick={onRemove}
+            disabled={disabled}
+            title="Remove battery"
+          >
+            ×
+          </button>
+        </div>
       </div>
       <div className="config-form-grid">
         <div className="form-field">
@@ -1527,17 +1546,6 @@ function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryCon
             Used when no schedule is active
           </small>
         </div>
-        <div className="form-field form-field-checkbox">
-          <label>
-            <input
-              type="checkbox"
-              checked={battery.enabled}
-              onChange={(e) => onChange({ ...battery, enabled: e.target.checked })}
-              disabled={disabled}
-            />
-            <span>Enabled</span>
-          </label>
-        </div>
       </div>
     </div>
   );
@@ -1563,15 +1571,27 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
             </span>
           )}
         </h5>
-        <button
-          type="button"
-          className="button-icon"
-          onClick={onRemove}
-          disabled={disabled}
-          title="Remove schedule"
-        >
-          ×
-        </button>
+        <div className="config-item-header-actions">
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={schedule.enabled}
+              onChange={(e) => onChange({ ...schedule, enabled: e.target.checked })}
+              disabled={disabled}
+            />
+            <span className="switch-slider"></span>
+            <span className="switch-label">Enabled</span>
+          </label>
+          <button
+            type="button"
+            className="button-icon"
+            onClick={onRemove}
+            disabled={disabled}
+            title="Remove schedule"
+          >
+            ×
+          </button>
+        </div>
       </div>
       <div className="config-form-grid">
         <div className="form-field">
@@ -1663,17 +1683,6 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
             max="100"
             step="0.1"
           />
-        </div>
-        <div className="form-field form-field-checkbox">
-          <label>
-            <input
-              type="checkbox"
-              checked={schedule.enabled}
-              onChange={(e) => onChange({ ...schedule, enabled: e.target.checked })}
-              disabled={disabled}
-            />
-            <span>Enabled</span>
-          </label>
         </div>
       </div>
     </div>
