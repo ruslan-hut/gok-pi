@@ -267,6 +267,14 @@ func (d *Discharge) checkTime() {
 				
 				d.readyToDischarge = canStart
 				
+				// If conditions don't match and battery is in manual mode discharging, stop and return to auto mode
+				if !canStart && d.status != nil && d.status.OperatingMode == "manual" && (d.isDischarging || d.status.BatteryDischarging) {
+					d.log.Info("schedule conditions not met, stopping discharge and returning to auto mode")
+					if err := d.stopDischarge(); err != nil {
+						d.log.With(sl.Err(err)).Error("stopping discharge and returning to auto mode")
+					}
+				}
+				
 				// If already discharging and rate changed, update the ongoing discharge
 				if d.isDischarging && d.readyToDischarge && d.rate > 0 && d.rate != oldRate {
 					d.log.With(

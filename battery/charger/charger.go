@@ -267,6 +267,14 @@ func (c *Charger) checkTime() {
 				
 				c.readyToCharge = canStart
 				
+				// If conditions don't match and battery is in manual mode charging, stop and return to auto mode
+				if !canStart && c.status != nil && c.status.OperatingMode == "manual" && (c.isCharging || c.status.BatteryCharging) {
+					c.log.Info("schedule conditions not met, stopping charge and returning to auto mode")
+					if err := c.stopCharge(); err != nil {
+						c.log.With(sl.Err(err)).Error("stopping charge and returning to auto mode")
+					}
+				}
+				
 				// If already charging and rate changed, update the ongoing charge
 				if c.isCharging && c.readyToCharge && c.rate > 0 && c.rate != oldRate {
 					c.log.With(
