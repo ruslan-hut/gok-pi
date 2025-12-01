@@ -238,7 +238,7 @@ func (c *Charger) checkTime() {
 				c.powerLimit = schedule.PowerLimit
 				c.socLimit = float64(schedule.SocLimit)
 				c.calculateRate()
-				
+
 				// Check conditions before setting readyToCharge:
 				// 1. SOC must be below the limit (we have capacity to charge)
 				// 2. Power limit must be valid (> 0)
@@ -264,9 +264,9 @@ func (c *Charger) checkTime() {
 						slog.Int("rate", c.rate),
 					).Info("schedule is active but calculated rate is invalid, not ready to charge")
 				}
-				
+
 				c.readyToCharge = canStart
-				
+
 				// If conditions don't match and battery is in manual mode charging, stop and return to auto mode
 				// OperatingMode "1" = manual, "2" = auto
 				if !canStart && c.status != nil && c.status.OperatingMode == "1" && (c.isCharging || c.status.BatteryCharging) {
@@ -286,7 +286,7 @@ func (c *Charger) checkTime() {
 						slog.Bool("battery_charging", c.status.BatteryCharging),
 					).Debug("schedule conditions not met but not stopping charge (checking why)")
 				}
-				
+
 				// If already charging and rate changed, update the ongoing charge
 				if c.isCharging && c.readyToCharge && c.rate > 0 && c.rate != oldRate {
 					c.log.With(
@@ -368,7 +368,11 @@ func (c *Charger) runCharge() {
 // stopCharge stops the current charge activity if it is ongoing.
 // Returns an error if the operation fails at any point.
 func (c *Charger) stopCharge() error {
-	if c.isCharging {
+	// Check both internal state and actual battery status to handle cases where
+	// internal state is out of sync with actual battery state
+	shouldStop := c.isCharging || (c.status != nil && c.status.BatteryCharging)
+
+	if shouldStop {
 		err := c.client.StopCharge()
 		if err != nil {
 			return err

@@ -369,8 +369,11 @@ func (d *Discharge) runDischarge() {
 // stopDischarge stops the current discharge activity if it is ongoing.
 // Returns an error if the operation fails at any point.
 func (d *Discharge) stopDischarge() error {
-	if d.isDischarging {
-
+	// Check both internal state and actual battery status to handle cases where
+	// internal state is out of sync with actual battery state
+	shouldStop := d.isDischarging || (d.status != nil && d.status.BatteryDischarging)
+	
+	if shouldStop {
 		err := d.client.StopDischarge()
 		if err != nil {
 			return err
