@@ -921,9 +921,12 @@ function BatteryCard({
     }
   };
 
+  const isManualMode = snapshot.operating_mode === "1";
+  const isServiceMode = snapshot.operating_mode === "10";
+
   return (
     <div 
-      className={`card battery-card ${expanded ? "expanded" : ""}`}
+      className={`card battery-card ${expanded ? "expanded" : ""} ${isManualMode ? "manual-mode" : ""} ${isServiceMode ? "service-mode" : ""}`}
     >
       <h2 
         className="battery-card-header"
