@@ -238,9 +238,37 @@ func (d *Discharge) checkTime() {
 				d.powerLimit = schedule.PowerLimit
 				d.socLimit = float64(schedule.SocLimit)
 				d.calculateRate()
-				d.readyToDischarge = true
+				
+				// Check conditions before setting readyToDischarge:
+				// 1. SOC must be above the limit (we have capacity to discharge)
+				// 2. Power limit must be valid (> 0)
+				// 3. Rate must be valid (> 0)
+				canStart := true
+				if d.status == nil {
+					canStart = false
+					d.log.Debug("cannot start discharge: no battery status available")
+				} else if d.soc <= d.socLimit {
+					canStart = false
+					d.log.With(
+						slog.Float64("usoc", d.soc),
+						slog.Float64("soc_limit", d.socLimit),
+					).Info("schedule is active but battery already at or below SoC limit, not ready to discharge")
+				} else if d.powerLimit <= 0 {
+					canStart = false
+					d.log.With(
+						slog.Int("power_limit", d.powerLimit),
+					).Info("schedule is active but power limit is invalid, not ready to discharge")
+				} else if d.rate <= 0 {
+					canStart = false
+					d.log.With(
+						slog.Int("rate", d.rate),
+					).Info("schedule is active but calculated rate is invalid, not ready to discharge")
+				}
+				
+				d.readyToDischarge = canStart
+				
 				// If already discharging and rate changed, update the ongoing discharge
-				if d.isDischarging && d.rate > 0 && d.rate != oldRate {
+				if d.isDischarging && d.readyToDischarge && d.rate > 0 && d.rate != oldRate {
 					d.log.With(
 						slog.Int("old_rate", oldRate),
 						slog.Int("new_rate", d.rate),

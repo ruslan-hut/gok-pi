@@ -238,9 +238,37 @@ func (c *Charger) checkTime() {
 				c.powerLimit = schedule.PowerLimit
 				c.socLimit = float64(schedule.SocLimit)
 				c.calculateRate()
-				c.readyToCharge = true
+				
+				// Check conditions before setting readyToCharge:
+				// 1. SOC must be below the limit (we have capacity to charge)
+				// 2. Power limit must be valid (> 0)
+				// 3. Rate must be valid (> 0)
+				canStart := true
+				if c.status == nil {
+					canStart = false
+					c.log.Debug("cannot start charge: no battery status available")
+				} else if c.soc >= c.socLimit {
+					canStart = false
+					c.log.With(
+						slog.Float64("usoc", c.soc),
+						slog.Float64("soc_limit", c.socLimit),
+					).Info("schedule is active but battery already at or above SoC limit, not ready to charge")
+				} else if c.powerLimit <= 0 {
+					canStart = false
+					c.log.With(
+						slog.Int("power_limit", c.powerLimit),
+					).Info("schedule is active but power limit is invalid, not ready to charge")
+				} else if c.rate <= 0 {
+					canStart = false
+					c.log.With(
+						slog.Int("rate", c.rate),
+					).Info("schedule is active but calculated rate is invalid, not ready to charge")
+				}
+				
+				c.readyToCharge = canStart
+				
 				// If already charging and rate changed, update the ongoing charge
-				if c.isCharging && c.rate > 0 && c.rate != oldRate {
+				if c.isCharging && c.readyToCharge && c.rate > 0 && c.rate != oldRate {
 					c.log.With(
 						slog.Int("old_rate", oldRate),
 						slog.Int("new_rate", c.rate),
