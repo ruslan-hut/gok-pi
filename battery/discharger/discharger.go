@@ -546,29 +546,10 @@ func cloneSchedules(in []entity.Schedule) []entity.Schedule {
 	return out
 }
 
-// calculate discharge rate as Wh/h
+// calculateRate sets the discharge rate to the power limit from the schedule.
 func (d *Discharge) calculateRate() {
-	d.rate = 0
-	estimate := d.capacity - d.capacityLimit
-	if estimate <= 0 {
-		return
-	}
-	remainingTime := time.Until(d.stopTime)
-	if remainingTime <= 0 {
-		return
-	}
-	calculatedRate := estimate / remainingTime.Hours()
-
-	// If power limit is set, use it as the actual discharge rate (not just a maximum)
-	// This ensures we discharge at the specified power limit rather than a lower calculated rate
-	if d.powerLimit > 0 {
-		// Use power limit as the rate - this allows discharging at full specified power
-		// The calculated rate is only used to verify we don't exceed hardware limits
-		d.rate = d.powerLimit
-	} else {
-		// No power limit set, use calculated rate
-		d.rate = int(calculatedRate)
-	}
+	// Always use the power limit from the schedule as the rate
+	d.rate = d.powerLimit
 }
 
 // observeStatus updates various battery status metrics through external observers.
@@ -581,10 +562,6 @@ func (d *Discharge) observeStatus(status *entity.SystemStatus) {
 	d.status = status
 	d.soc = status.USOC
 	d.capacity = status.RemainingCapacityWh
-	d.capacityLimit = 0
-	if status.RSOC > 0 {
-		d.capacityLimit = d.socLimit * status.RemainingCapacityWh / status.RSOC
-	}
 
 	go func(status *entity.SystemStatus) {
 		observers.UpdateSoC(d.name, status.RSOC)

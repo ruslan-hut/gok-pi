@@ -545,43 +545,10 @@ func cloneSchedules(in []entity.Schedule) []entity.Schedule {
 	return out
 }
 
-// calculateRate calculates the charge rate in W needed to reach the target SoC within the time window.
+// calculateRate sets the charge rate to the power limit from the schedule.
 func (c *Charger) calculateRate() {
-	c.rate = 0
-	if c.status == nil || c.status.RSOC <= 0 {
-		return
-	}
-
-	// Calculate target capacity based on target SoC
-	c.maxCapacity = c.socLimit * c.status.RemainingCapacityWh / c.status.RSOC
-	if c.maxCapacity <= c.capacity {
-		return
-	}
-
-	// Calculate how much capacity we need to add
-	capacityNeeded := c.maxCapacity - c.capacity
-	if capacityNeeded <= 0 {
-		return
-	}
-
-	remainingTime := time.Until(c.stopTime)
-	if remainingTime <= 0 {
-		return
-	}
-
-	// Calculate rate in W (Wh/h = W) needed to reach target SoC by stop time
-	calculatedRate := capacityNeeded / remainingTime.Hours()
-
-	// If power limit is set, use it as the actual charge rate (not just a maximum)
-	// This ensures we charge at the specified power limit rather than a lower calculated rate
-	if c.powerLimit > 0 {
-		// Use power limit as the rate - this allows charging at full specified power
-		// The calculated rate is only used to verify we don't exceed hardware limits
-		c.rate = c.powerLimit
-	} else {
-		// No power limit set, use calculated rate
-		c.rate = int(calculatedRate)
-	}
+	// Always use the power limit from the schedule as the rate
+	c.rate = c.powerLimit
 }
 
 // observeStatus updates various battery status metrics through external observers.
@@ -594,10 +561,6 @@ func (c *Charger) observeStatus(status *entity.SystemStatus) {
 	c.status = status
 	c.soc = status.USOC
 	c.capacity = status.RemainingCapacityWh
-	c.maxCapacity = 0
-	if status.RSOC > 0 {
-		c.maxCapacity = c.socLimit * status.RemainingCapacityWh / status.RSOC
-	}
 
 	go func(status *entity.SystemStatus) {
 		observers.UpdateSoC(c.name, status.RSOC)
