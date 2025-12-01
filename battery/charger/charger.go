@@ -268,11 +268,23 @@ func (c *Charger) checkTime() {
 				c.readyToCharge = canStart
 				
 				// If conditions don't match and battery is in manual mode charging, stop and return to auto mode
-				if !canStart && c.status != nil && c.status.OperatingMode == "manual" && (c.isCharging || c.status.BatteryCharging) {
-					c.log.Info("schedule conditions not met, stopping charge and returning to auto mode")
+				// OperatingMode "1" = manual, "2" = auto
+				if !canStart && c.status != nil && c.status.OperatingMode == "1" && (c.isCharging || c.status.BatteryCharging) {
+					c.log.With(
+						slog.String("operating_mode", c.status.OperatingMode),
+						slog.Bool("is_charging", c.isCharging),
+						slog.Bool("battery_charging", c.status.BatteryCharging),
+					).Info("schedule conditions not met, stopping charge and returning to auto mode")
 					if err := c.stopCharge(); err != nil {
 						c.log.With(sl.Err(err)).Error("stopping charge and returning to auto mode")
 					}
+				} else if !canStart && c.status != nil {
+					// Log why we're not stopping (for debugging)
+					c.log.With(
+						slog.String("operating_mode", c.status.OperatingMode),
+						slog.Bool("is_charging", c.isCharging),
+						slog.Bool("battery_charging", c.status.BatteryCharging),
+					).Debug("schedule conditions not met but not stopping charge (checking why)")
 				}
 				
 				// If already charging and rate changed, update the ongoing charge

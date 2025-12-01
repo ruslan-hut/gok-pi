@@ -268,11 +268,23 @@ func (d *Discharge) checkTime() {
 				d.readyToDischarge = canStart
 				
 				// If conditions don't match and battery is in manual mode discharging, stop and return to auto mode
-				if !canStart && d.status != nil && d.status.OperatingMode == "manual" && (d.isDischarging || d.status.BatteryDischarging) {
-					d.log.Info("schedule conditions not met, stopping discharge and returning to auto mode")
+				// OperatingMode "1" = manual, "2" = auto
+				if !canStart && d.status != nil && d.status.OperatingMode == "1" && (d.isDischarging || d.status.BatteryDischarging) {
+					d.log.With(
+						slog.String("operating_mode", d.status.OperatingMode),
+						slog.Bool("is_discharging", d.isDischarging),
+						slog.Bool("battery_discharging", d.status.BatteryDischarging),
+					).Info("schedule conditions not met, stopping discharge and returning to auto mode")
 					if err := d.stopDischarge(); err != nil {
 						d.log.With(sl.Err(err)).Error("stopping discharge and returning to auto mode")
 					}
+				} else if !canStart && d.status != nil {
+					// Log why we're not stopping (for debugging)
+					d.log.With(
+						slog.String("operating_mode", d.status.OperatingMode),
+						slog.Bool("is_discharging", d.isDischarging),
+						slog.Bool("battery_discharging", d.status.BatteryDischarging),
+					).Debug("schedule conditions not met but not stopping discharge (checking why)")
 				}
 				
 				// If already discharging and rate changed, update the ongoing discharge
