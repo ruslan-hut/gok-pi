@@ -96,7 +96,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	manager := newWorkerManager()
-	manager.Apply(ctx, &wg, batteries, schedules, lg)
+	manager.Apply(ctx, &wg, batteries, schedules, conf.Timezone, lg)
 
 	if conf.RemoteControl.Enabled {
 		lg.Info("starting remote control client", slog.String("url", conf.RemoteControl.ServerURL))
@@ -134,10 +134,10 @@ func main() {
 							observers.UpdateStatus(b.Name, "Disabled")
 						}
 					}
-					manager.Apply(ctx, &wg, filterEnabledBatteries(update.Config.Batteries), filterEnabledSchedules(update.Config.Schedules), lg)
+					manager.Apply(ctx, &wg, filterEnabledBatteries(update.Config.Batteries), filterEnabledSchedules(update.Config.Schedules), update.Config.Timezone, lg)
 
 					// Persist remote configuration to local config.yml
-					config.UpdateFromRemoteConfig(update.Config.DeviceName, update.Config.Env, update.Config.Batteries, update.Config.Schedules)
+					config.UpdateFromRemoteConfig(update.Config.DeviceName, update.Config.Env, update.Config.Timezone, update.Config.Batteries, update.Config.Schedules)
 					if err := config.Save(); err != nil {
 						lg.With(
 							slog.Int("revision", update.Config.Revision),
@@ -262,7 +262,7 @@ func (m *workerManager) GetCharger(name string) (*charger.Charger, bool) {
 	return entry.chargerWorker, true
 }
 
-func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries []entity.BatteryConfig, schedules []entity.Schedule, log *slog.Logger) {
+func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries []entity.BatteryConfig, schedules []entity.Schedule, timezone string, log *slog.Logger) {
 	desired := make(map[string]entity.BatteryConfig)
 	allBatteries := make(map[string]entity.BatteryConfig)
 	for _, b := range batteries {
@@ -305,11 +305,16 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 		if ok {
 			if entry.config == cfg {
 				// Update config for existing workers
+				timezonePtr := &timezone
+				if timezone == "" {
+					timezonePtr = nil
+				}
 				if entry.dischargerWorker != nil {
 					_ = entry.dischargerWorker.SubmitCommand(discharger.ControlCommand{
 						Type: discharger.CommandUpdateConfig,
 						Config: &discharger.ConfigUpdate{
 							Schedules: scheduleByBattery[name],
+							Timezone:  timezonePtr,
 						},
 					})
 				}
@@ -318,6 +323,7 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 						Type: charger.CommandUpdateConfig,
 						Config: &charger.ConfigUpdate{
 							Schedules: scheduleByBattery[name],
+							Timezone:  timezonePtr,
 						},
 					})
 				}
@@ -334,7 +340,7 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 			}
 		}
 
-		entry, err := startWorker(ctx, wg, cfg, scheduleByBattery[name], log)
+		entry, err := startWorker(ctx, wg, cfg, scheduleByBattery[name], timezone, log)
 		if err != nil {
 			log.With(slog.String("battery", name), sl.Err(err)).Error("starting workers")
 			continue
@@ -379,7 +385,7 @@ func (m *workerManager) remove(name string) (*workerEntry, bool) {
 	return entry, ok
 }
 
-func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.BatteryConfig, schedules []entity.Schedule, log *slog.Logger) (*workerEntry, error) {
+func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.BatteryConfig, schedules []entity.Schedule, timezone string, log *slog.Logger) (*workerEntry, error) {
 	workerLog := log.With(slog.String("battery", battery.Name))
 	api := apiclient.New(battery.Url, battery.Token, workerLog)
 
@@ -418,6 +424,12 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}
 
 		dischargerWorker.SetCapacityLimit(battery.CapacityLimit)
+		// Set timezone if provided
+		if timezone != "" {
+			if err := dischargerWorker.SetTimezone(timezone); err != nil {
+				workerLog.With(sl.Err(err)).Warn("failed to set timezone for discharger")
+			}
+		}
 		// Initialize battery default limits from battery config (used when no schedule is active)
 		if battery.PowerLimit > 0 || battery.SocLimit > 0 {
 			powerLimit := battery.PowerLimit
@@ -469,6 +481,12 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}
 
 		chargerWorker.SetCapacityLimit(battery.CapacityLimit)
+		// Set timezone if provided
+		if timezone != "" {
+			if err := chargerWorker.SetTimezone(timezone); err != nil {
+				workerLog.With(sl.Err(err)).Warn("failed to set timezone for charger")
+			}
+		}
 		// Initialize battery default limits from battery config (used when no schedule is active)
 		if battery.PowerLimit > 0 || battery.SocLimit > 0 {
 			powerLimit := battery.PowerLimit

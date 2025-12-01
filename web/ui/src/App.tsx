@@ -42,6 +42,7 @@ function formatConfigDraft(config: AgentConfig | null): string {
   const payload = {
     device_name: config?.device_name ?? "",
     env: config?.env ?? "",
+    timezone: config?.timezone ?? "",
     revision: config?.revision ?? 0,
     batteries: config?.batteries ?? [],
     schedules: config?.schedules ?? [],
@@ -604,6 +605,9 @@ export default function App() {
       const env = typeof parsed.env === "string"
         ? parsed.env
         : agentConfig?.env ?? "";
+      const timezone = typeof parsed.timezone === "string"
+        ? parsed.timezone
+        : agentConfig?.timezone ?? "";
       const batteries = Array.isArray(parsed.batteries)
         ? parsed.batteries
         : [];
@@ -614,6 +618,7 @@ export default function App() {
       const updated = await updateAgentConfig(selectedAgentId, {
         device_name,
         env,
+        timezone,
         revision,
         batteries,
         schedules,
@@ -1144,6 +1149,7 @@ function ConfigEditor({
         setLocalConfig({
           device_name: parsed.device_name ?? config?.device_name ?? "",
           env: parsed.env ?? config?.env ?? agentEnv ?? "",
+          timezone: parsed.timezone ?? config?.timezone ?? "",
           revision: parsed.revision ?? config?.revision ?? 0,
           updated_at: config?.updated_at ?? new Date().toISOString(),
           batteries: Array.isArray(parsed.batteries) ? parsed.batteries : [],
@@ -1287,6 +1293,23 @@ function ConfigEditor({
                         </select>
                         <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
                           Controls logging level: local (debug to stdout), dev (debug to file), prod (info to file)
+                        </small>
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="timezone">Timezone</label>
+                        <input
+                          id="timezone"
+                          type="text"
+                          value={localConfig?.timezone ?? ""}
+                          onChange={(e) => {
+                            if (!localConfig) return;
+                            handleConfigChange({ ...localConfig, timezone: e.target.value });
+                          }}
+                          disabled={saving}
+                          placeholder="UTC"
+                        />
+                        <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
+                          IANA timezone name (e.g., "America/New_York", "Europe/London", "UTC"). Used for schedule time parsing.
                         </small>
                       </div>
                     </div>

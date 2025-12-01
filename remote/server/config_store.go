@@ -21,6 +21,7 @@ var (
 type AgentConfig struct {
 	DeviceName string                 `json:"device_name,omitempty"`
 	Env        string                 `json:"env,omitempty"`
+	Timezone   string                 `json:"timezone,omitempty"`
 	Revision   int                    `json:"revision"`
 	UpdatedAt  time.Time              `json:"updated_at"`
 	Batteries  []entity.BatteryConfig `json:"batteries"`
@@ -31,6 +32,7 @@ type AgentConfig struct {
 type AgentConfigRequest struct {
 	DeviceName string                 `json:"device_name,omitempty"`
 	Env        string                 `json:"env,omitempty"`
+	Timezone   string                 `json:"timezone,omitempty"`
 	Revision   int                    `json:"revision"`
 	Batteries  []entity.BatteryConfig `json:"batteries"`
 	Schedules  []entity.Schedule      `json:"schedules"`
@@ -116,6 +118,7 @@ func (cs *ConfigStore) Save(agentID string, req AgentConfigRequest) (AgentConfig
 	next := AgentConfig{
 		DeviceName: req.DeviceName,
 		Env:        req.Env,
+		Timezone:   req.Timezone,
 		Revision:   1,
 		UpdatedAt:  time.Now().UTC(),
 		Batteries:  cloneBatteryConfigs(req.Batteries),
@@ -147,6 +150,7 @@ func (cs *ConfigStore) Seed(agentID string, batteries []entity.BatteryConfig, sc
 
 	cfg := AgentConfig{
 		DeviceName: "",
+		Timezone:   "",
 		Revision:   1,
 		UpdatedAt:  ts.UTC(),
 		Batteries:  cloneBatteryConfigs(batteries),
@@ -217,6 +221,7 @@ func cloneAgentConfig(in AgentConfig) AgentConfig {
 	return AgentConfig{
 		DeviceName: in.DeviceName,
 		Env:        in.Env,
+		Timezone:   in.Timezone,
 		Revision:   in.Revision,
 		UpdatedAt:  in.UpdatedAt,
 		Batteries:  cloneBatteryConfigs(in.Batteries),

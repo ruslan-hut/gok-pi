@@ -17,6 +17,7 @@ type Config struct {
 	DeviceName      string                 `yaml:"device_name" env-default:""`
 	DeviceID        string                 `yaml:"device_id" env-default:""`
 	Env             string                 `yaml:"env" env-default:"local" env-required:"true"`
+	Timezone        string                 `yaml:"timezone" env-default:"UTC"`
 	Metrics         MetricsServer          `yaml:"metrics"`
 	RemoteControl   RemoteControl          `yaml:"remote_control"`
 	Batteries       []entity.BatteryConfig `yaml:"batteries"`
@@ -103,8 +104,8 @@ func UpdateBatteriesAndSchedules(batteries []entity.BatteryConfig, schedules []e
 }
 
 // UpdateFromRemoteConfig updates the config instance with all fields from a remote configuration.
-// This includes device_name, env, batteries, and schedules. This is thread-safe.
-func UpdateFromRemoteConfig(deviceName string, env string, batteries []entity.BatteryConfig, schedules []entity.Schedule) {
+// This includes device_name, env, timezone, batteries, and schedules. This is thread-safe.
+func UpdateFromRemoteConfig(deviceName string, env string, timezone string, batteries []entity.BatteryConfig, schedules []entity.Schedule) {
 	mu.Lock()
 	defer mu.Unlock()
 	if instance != nil {
@@ -113,6 +114,9 @@ func UpdateFromRemoteConfig(deviceName string, env string, batteries []entity.Ba
 		}
 		if env != "" {
 			instance.Env = env
+		}
+		if timezone != "" {
+			instance.Timezone = timezone
 		}
 		instance.Batteries = batteries
 		instance.Schedules = schedules

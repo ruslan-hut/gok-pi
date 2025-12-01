@@ -54,6 +54,7 @@ type ConfigUpdate struct {
 	Schedules  []entity.Schedule
 	PowerLimit *int
 	SocLimit   *int
+	Timezone   *string
 }
 
 var ErrCommandQueueFull = errors.New("charger command queue full")
@@ -78,6 +79,7 @@ type Charger struct {
 	log               *slog.Logger
 	commands          chan ControlCommand
 	manualOverride    bool
+	timezone          *time.Location // Timezone for schedule time parsing
 	stop              chan struct{}
 	stopped           chan struct{}
 	stopOnce          sync.Once
@@ -89,9 +91,19 @@ func New(name string, client Client, log *slog.Logger) (*Charger, error) {
 		client:   client,
 		log:      log.With(sl.Module("battery.charge")),
 		commands: make(chan ControlCommand, 16),
+		timezone: time.UTC, // Default to UTC
 		stop:     make(chan struct{}),
 		stopped:  make(chan struct{}),
 	}, nil
+}
+
+func (c *Charger) SetTimezone(timezone string) error {
+	loc, err := timer.LoadLocation(timezone)
+	if err != nil {
+		return fmt.Errorf("invalid timezone %q: %w", timezone, err)
+	}
+	c.timezone = loc
+	return nil
 }
 
 func (c *Charger) SetCapacityLimit(_ int) {
@@ -185,15 +197,15 @@ func (c *Charger) stopCondition() bool {
 
 // isTimeToCharge determines whether the current time falls within the specified charge time window.
 func (c *Charger) isTimeToCharge(start, stop string) bool {
-	now := time.Now()
+	now := time.Now().In(c.timezone)
 
 	// Calculate the start and stop times for today
-	startTime, err := timer.ParseTime(start)
+	startTime, err := timer.ParseTimeInLocation(start, c.timezone)
 	if err != nil {
 		c.log.With(sl.Err(err)).Error("parsing start time")
 		return false
 	}
-	stopTime, err := timer.ParseTime(stop)
+	stopTime, err := timer.ParseTimeInLocation(stop, c.timezone)
 	if err != nil {
 		c.log.With(sl.Err(err)).Error("parsing stop time")
 		return false
@@ -421,6 +433,15 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 		}
 		c.schedules = cloneSchedules(cmd.Config.Schedules)
 		c.manualOverride = false
+
+		// Update timezone if provided
+		if cmd.Config.Timezone != nil {
+			if err := c.SetTimezone(*cmd.Config.Timezone); err != nil {
+				log.With(sl.Err(err)).Warn("failed to update timezone")
+			} else {
+				log.With(slog.String("timezone", *cmd.Config.Timezone)).Info("updated timezone")
+			}
+		}
 
 		// Update battery default limits if provided
 		if cmd.Config.PowerLimit != nil {

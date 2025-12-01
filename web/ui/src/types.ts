@@ -53,6 +53,7 @@ export interface ScheduleConfig {
 export interface AgentConfig {
   device_name?: string;
   env?: string;
+  timezone?: string;
   revision: number;
   updated_at: string;
   batteries: BatteryConfig[];

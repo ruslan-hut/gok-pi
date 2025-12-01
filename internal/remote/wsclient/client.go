@@ -548,6 +548,7 @@ func (c *Client) readLogs(stream string, lines int) (string, error) {
 type AgentConfig struct {
 	DeviceName string                 `json:"device_name,omitempty"`
 	Env        string                 `json:"env,omitempty"`
+	Timezone   string                 `json:"timezone,omitempty"`
 	Revision   int                    `json:"revision"`
 	UpdatedAt  time.Time              `json:"updated_at"`
 	Batteries  []entity.BatteryConfig `json:"batteries"`
