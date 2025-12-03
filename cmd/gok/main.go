@@ -303,8 +303,27 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 	for name, cfg := range desired {
 		entry, ok := m.getEntry(name)
 		if ok {
-			if entry.config == cfg {
-				// Update config for existing workers
+			// Check if critical fields (URL or token) have changed, which require worker restart
+			urlChanged := entry.config.Url != cfg.Url
+			tokenChanged := entry.config.Token != cfg.Token
+			
+			// If URL or token changed, we must restart workers to use the new ApiClient
+			if urlChanged || tokenChanged {
+				log.With(
+					slog.String("battery", name),
+					slog.Bool("url_changed", urlChanged),
+					slog.Bool("token_changed", tokenChanged),
+				).Info("restarting workers (URL or token changed)")
+				if removed, ok := m.remove(name); ok {
+					if removed.dischargerWorker != nil {
+						go removed.dischargerWorker.Stop()
+					}
+					if removed.chargerWorker != nil {
+						go removed.chargerWorker.Stop()
+					}
+				}
+			} else if entry.config == cfg {
+				// Config is identical, just update schedules/timezone for existing workers
 				timezonePtr := &timezone
 				if timezone == "" {
 					timezonePtr = nil
@@ -328,14 +347,16 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 					})
 				}
 				continue
-			}
-			if removed, ok := m.remove(name); ok {
-				log.With(slog.String("battery", name)).Info("restarting workers (config changed)")
-				if removed.dischargerWorker != nil {
-					go removed.dischargerWorker.Stop()
-				}
-				if removed.chargerWorker != nil {
-					go removed.chargerWorker.Stop()
+			} else {
+				// Other config fields changed (not URL/token), restart workers
+				if removed, ok := m.remove(name); ok {
+					log.With(slog.String("battery", name)).Info("restarting workers (config changed)")
+					if removed.dischargerWorker != nil {
+						go removed.dischargerWorker.Stop()
+					}
+					if removed.chargerWorker != nil {
+						go removed.chargerWorker.Stop()
+					}
 				}
 			}
 		}

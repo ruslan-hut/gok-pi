@@ -11,6 +11,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 )
@@ -92,8 +94,39 @@ func (c *ApiClient) SwitchOperatingModeToAuto(currentMode string) error {
 	return c.doRequestChangeConfig("EM_OperatingMode", opModeAuto)
 }
 
+// fullPath constructs a full URL by joining the base URL with path segments.
+// It properly handles URL path joining to avoid issues with double slashes or missing slashes.
 func (c *ApiClient) fullPath(params ...string) string {
-	return strings.Join(params, "/")
+	if len(params) == 0 {
+		return ""
+	}
+
+	baseURL := params[0]
+	if len(params) == 1 {
+		return baseURL
+	}
+
+	// Parse the base URL to ensure proper joining
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		// If parsing fails, fall back to simple string joining
+		return strings.Join(params, "/")
+	}
+
+	// Join path segments properly using path.Join, then append to base path
+	pathSegments := params[1:]
+	joinedPath := path.Join(pathSegments...)
+
+	// Append to existing path, ensuring proper slash handling
+	if u.Path == "" {
+		u.Path = "/" + joinedPath
+	} else {
+		// Remove trailing slash from base path if present, then add joined path
+		basePath := strings.TrimSuffix(u.Path, "/")
+		u.Path = basePath + "/" + joinedPath
+	}
+
+	return u.String()
 }
 
 // requestWithRetry sends an HTTP request with retry logic.
