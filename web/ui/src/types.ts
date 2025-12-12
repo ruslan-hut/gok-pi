@@ -48,6 +48,7 @@ export interface ScheduleConfig {
   enabled: boolean;
   power_limit: number;
   soc_limit: number;
+  run_once?: boolean;
 }
 
 export interface AgentConfig {

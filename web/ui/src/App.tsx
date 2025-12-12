@@ -1224,6 +1224,7 @@ function ConfigEditor({
       enabled: true,
       power_limit: 0,
       soc_limit: 0,
+      run_once: false,
     };
     handleConfigChange({
       ...localConfig,
@@ -1584,6 +1585,16 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
             />
             <span className="switch-slider"></span>
             <span className="switch-label">Enabled</span>
+          </label>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={schedule.run_once ?? false}
+              onChange={(e) => onChange({ ...schedule, run_once: e.target.checked })}
+              disabled={disabled}
+            />
+            <span className="switch-slider"></span>
+            <span className="switch-label">Run Once</span>
           </label>
           <button
             type="button"

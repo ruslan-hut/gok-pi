@@ -80,6 +80,9 @@ type Charger struct {
 	commands          chan ControlCommand
 	manualOverride    bool
 	timezone          *time.Location // Timezone for schedule time parsing
+	goalReached       map[string]time.Time // Schedule name -> time when goal was reached
+	updateGoalReached func(string, time.Time) error // Callback to persist goal reached state
+	clearGoalReached  func(string) error            // Callback to clear goal reached state
 	stop              chan struct{}
 	stopped           chan struct{}
 	stopOnce          sync.Once
@@ -87,14 +90,25 @@ type Charger struct {
 
 func New(name string, client Client, log *slog.Logger) (*Charger, error) {
 	return &Charger{
-		name:     name,
-		client:   client,
-		log:      log.With(sl.Module("battery.charge")),
-		commands: make(chan ControlCommand, 16),
-		timezone: time.UTC, // Default to UTC
-		stop:     make(chan struct{}),
-		stopped:  make(chan struct{}),
+		name:         name,
+		client:       client,
+		log:          log.With(sl.Module("battery.charge")),
+		commands:     make(chan ControlCommand, 16),
+		timezone:     time.UTC, // Default to UTC
+		goalReached:  make(map[string]time.Time),
+		stop:         make(chan struct{}),
+		stopped:      make(chan struct{}),
 	}, nil
+}
+
+// SetGoalReachedState sets the initial goal reached state and callbacks for updating it.
+func (c *Charger) SetGoalReachedState(goalReached map[string]time.Time, updateFn func(string, time.Time) error, clearFn func(string) error) {
+	c.goalReached = make(map[string]time.Time)
+	for k, v := range goalReached {
+		c.goalReached[k] = v
+	}
+	c.updateGoalReached = updateFn
+	c.clearGoalReached = clearFn
 }
 
 func (c *Charger) SetTimezone(timezone string) error {
@@ -230,9 +244,48 @@ func (c *Charger) isTimeToCharge(start, stop string) bool {
 
 // checkTime determines whether the current time falls within the specified charge time window.
 func (c *Charger) checkTime() {
+	now := time.Now().In(c.timezone)
+
 	for _, schedule := range c.schedules {
 		if schedule.Enabled && schedule.Type == "charge" {
 			if c.isTimeToCharge(schedule.StartTime, schedule.StopTime) {
+				// Check run_once logic: if enabled and goal was reached, check if stop_time has passed
+				if schedule.RunOnce {
+					if goalTime, reached := c.goalReached[schedule.Name]; reached {
+						// Parse stop time to check if it has passed
+						stopTime, err := timer.ParseTimeInLocation(schedule.StopTime, c.timezone)
+						if err == nil {
+							// Handle schedules that span midnight
+							goalDay := goalTime.In(c.timezone)
+							stopTimeOnGoalDay := time.Date(goalDay.Year(), goalDay.Month(), goalDay.Day(),
+								stopTime.Hour(), stopTime.Minute(), stopTime.Second(), 0, c.timezone)
+							
+							// If stop time is before start time, it spans midnight
+							startTime, _ := timer.ParseTimeInLocation(schedule.StartTime, c.timezone)
+							if startTime.After(stopTime) {
+								stopTimeOnGoalDay = stopTimeOnGoalDay.Add(24 * time.Hour)
+							}
+							
+							// If stop_time has passed since goal was reached, clear the goal state
+							if now.After(stopTimeOnGoalDay) {
+								delete(c.goalReached, schedule.Name)
+								if c.clearGoalReached != nil {
+									if err := c.clearGoalReached(schedule.Name); err != nil {
+										c.log.With(sl.Err(err)).Warn("failed to clear goal reached state")
+									}
+								}
+							} else {
+								// Goal was reached and stop_time hasn't passed yet, skip this schedule
+								c.log.With(
+									slog.String("schedule", schedule.Name),
+									slog.Time("goal_reached_at", goalTime),
+								).Info("schedule has run_once enabled and goal was already reached, skipping until stop_time passes")
+								continue
+							}
+						}
+					}
+				}
+				
 				oldRate := c.rate
 				// Schedule is active: use schedule limits (they take precedence over battery limits)
 				c.powerLimit = schedule.PowerLimit
@@ -327,10 +380,38 @@ func (c *Charger) runCharge() {
 	if c.isCharging {
 		if c.stopCondition() {
 			log.Info("battery level reached the limit, stopping charge")
+			// Find the active schedule to check if run_once is enabled
+			var activeSchedule *entity.Schedule
+			for i := range c.schedules {
+				s := &c.schedules[i]
+				if s.Enabled && s.Type == "charge" {
+					if c.isTimeToCharge(s.StartTime, s.StopTime) {
+						activeSchedule = s
+						break
+					}
+				}
+			}
+			
 			err := c.stopCharge()
 			if err != nil {
 				c.log.With(sl.Err(err)).Error("stopping charge")
 				return
+			}
+			
+			// If run_once is enabled for the active schedule, record goal reached
+			if activeSchedule != nil && activeSchedule.RunOnce {
+				goalTime := time.Now()
+				c.goalReached[activeSchedule.Name] = goalTime
+				if c.updateGoalReached != nil {
+					if err := c.updateGoalReached(activeSchedule.Name, goalTime); err != nil {
+						c.log.With(sl.Err(err)).Warn("failed to persist goal reached state")
+					} else {
+						c.log.With(
+							slog.String("schedule", activeSchedule.Name),
+							slog.Time("goal_reached_at", goalTime),
+						).Info("recorded goal reached for run_once schedule")
+					}
+				}
 			}
 		}
 		return
@@ -483,8 +564,41 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 		if cmd.Config == nil {
 			return fmt.Errorf("missing config payload")
 		}
+		
+		// Build map of old schedules to check for run_once changes
+		oldScheduleMap := make(map[string]entity.Schedule)
+		for _, s := range c.schedules {
+			oldScheduleMap[s.Name] = s
+		}
+		
 		c.schedules = cloneSchedules(cmd.Config.Schedules)
 		c.manualOverride = false
+
+		// Check for schedules where run_once was disabled and clear goal state
+		for _, newSchedule := range c.schedules {
+			if oldSchedule, exists := oldScheduleMap[newSchedule.Name]; exists {
+				// If run_once was enabled before but is now disabled, clear goal reached state
+				if oldSchedule.RunOnce && !newSchedule.RunOnce {
+					delete(c.goalReached, newSchedule.Name)
+					if c.clearGoalReached != nil {
+						if err := c.clearGoalReached(newSchedule.Name); err != nil {
+							log.With(sl.Err(err)).Warn("failed to clear goal reached state")
+						}
+					}
+				}
+			}
+		}
+		
+		// Clean up goal reached entries for schedules that no longer exist
+		scheduleNames := make(map[string]bool)
+		for _, s := range c.schedules {
+			scheduleNames[s.Name] = true
+		}
+		for name := range c.goalReached {
+			if !scheduleNames[name] {
+				delete(c.goalReached, name)
+			}
+		}
 
 		// Update timezone if provided
 		if cmd.Config.Timezone != nil {

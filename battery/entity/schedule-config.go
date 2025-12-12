@@ -9,4 +9,5 @@ type Schedule struct {
 	Enabled     bool   `yaml:"enabled" json:"enabled" env-default:"false"`
 	PowerLimit  int    `yaml:"power_limit" json:"power_limit" env-default:"1000"`
 	SocLimit    int    `yaml:"soc_limit" json:"soc_limit" env-default:"50"`
+	RunOnce     bool   `yaml:"run_once" json:"run_once" env-default:"false"`
 }
