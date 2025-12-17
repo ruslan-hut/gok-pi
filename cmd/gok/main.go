@@ -107,7 +107,7 @@ func main() {
 			Env: conf.Env,
 		}, lg)
 		remoteClient.Run(ctx)
-		remoteClient.PublishConfigSnapshot(conf.Batteries, conf.Schedules)
+		remoteClient.PublishConfigSnapshot(conf.Batteries, conf.Schedules, goalReached)
 		go handleRemoteCommands(ctx, remoteClient.Commands(), manager, lg)
 
 		go func() {

@@ -99,15 +99,17 @@ type UIConfigUpdate struct {
 }
 
 type AgentSummary struct {
-	Agent     AgentDescriptor              `json:"agent"`
-	LastSeen  time.Time                    `json:"last_seen"`
-	Telemetry map[string]TelemetrySnapshot `json:"telemetry"`
+	Agent               AgentDescriptor              `json:"agent"`
+	LastSeen            time.Time                    `json:"last_seen"`
+	Telemetry           map[string]TelemetrySnapshot `json:"telemetry"`
+	ScheduleGoalReached map[string]time.Time         `json:"schedule_goal_reached,omitempty"`
 }
 
 type AgentConfigSnapshot struct {
-	Batteries       []entity.BatteryConfig `json:"batteries"`
-	Schedules       []entity.Schedule      `json:"schedules"`
-	ChargeSchedules []entity.Schedule      `json:"charge_schedules"`
+	Batteries           []entity.BatteryConfig `json:"batteries"`
+	Schedules           []entity.Schedule      `json:"schedules"`
+	ChargeSchedules     []entity.Schedule      `json:"charge_schedules"`
+	ScheduleGoalReached map[string]time.Time   `json:"schedule_goal_reached,omitempty"`
 }
 
 type AgentConfigSync struct {

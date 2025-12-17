@@ -811,6 +811,14 @@ export default function App() {
               }}
               onSave={handleConfigSave}
               onReset={handleConfigReset}
+              scheduleGoalReached={selectedAgent?.schedule_goal_reached}
+              onResetGoal={(scheduleName) => {
+                // Find the schedule to get its battery_name for the command target
+                const schedule = agentConfig?.schedules.find(s => s.name === scheduleName);
+                const batteryName = schedule?.battery_name || (selectedAgent?.telemetry ? Object.keys(selectedAgent.telemetry)[0] : "");
+                handleCommand("reset_goal", batteryName, { schedule_name: scheduleName });
+              }}
+              isOnline={selectedAgentOnline}
             />
             <StatusMessagePreview
               lastStatusMessage={lastStatusMessage}
@@ -1133,6 +1141,9 @@ interface ConfigEditorProps {
   onDraftChange: (value: string) => void;
   onSave: () => void;
   onReset: () => void;
+  scheduleGoalReached?: Record<string, string>;
+  onResetGoal?: (scheduleName: string) => void;
+  isOnline?: boolean;
 }
 
 function ConfigEditor({
@@ -1146,6 +1157,9 @@ function ConfigEditor({
   onDraftChange,
   onSave,
   onReset,
+  scheduleGoalReached,
+  onResetGoal,
+  isOnline,
 }: ConfigEditorProps) {
   const [collapsed, setCollapsed] = useState(true);
   const [showJson, setShowJson] = useState(false);
@@ -1379,6 +1393,9 @@ function ConfigEditor({
                             onChange={(s) => handleScheduleChange(index, s)}
                             onRemove={() => handleScheduleRemove(index)}
                             disabled={saving}
+                            goalReachedAt={schedule.name ? scheduleGoalReached?.[schedule.name] : undefined}
+                            onResetGoal={schedule.name && onResetGoal ? () => onResetGoal(schedule.name!) : undefined}
+                            isOnline={isOnline}
                           />
                         ))}
                       </div>
@@ -1561,9 +1578,26 @@ interface ScheduleConfigFormProps {
   onChange: (schedule: ScheduleConfig) => void;
   onRemove: () => void;
   disabled?: boolean;
+  goalReachedAt?: string;
+  onResetGoal?: () => void;
+  isOnline?: boolean;
 }
 
-function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabled }: ScheduleConfigFormProps) {
+function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabled, goalReachedAt, onResetGoal, isOnline }: ScheduleConfigFormProps) {
+  const formatGoalReachedTime = (isoTime: string): string => {
+    try {
+      const date = new Date(isoTime);
+      return date.toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return isoTime;
+    }
+  };
+
   return (
     <div className="config-item config-item-schedule">
       <div className="config-item-header">
@@ -1576,6 +1610,44 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
           )}
         </h5>
         <div className="config-item-header-actions">
+          {schedule.run_once && goalReachedAt && (
+            <span
+              className="badge"
+              style={{
+                borderColor: "#22c55e",
+                color: "#22c55e",
+                fontSize: "0.75rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem"
+              }}
+              title={`Goal reached at ${goalReachedAt}`}
+            >
+              ✓ Goal reached {formatGoalReachedTime(goalReachedAt)}
+              {onResetGoal && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onResetGoal();
+                  }}
+                  disabled={!isOnline}
+                  title={isOnline ? "Reset goal to allow schedule to run again today" : "Agent offline - cannot reset goal"}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: isOnline ? "#f59e0b" : "#64748b",
+                    cursor: isOnline ? "pointer" : "not-allowed",
+                    padding: "0 0.25rem",
+                    fontSize: "0.8rem",
+                    fontWeight: "bold",
+                  }}
+                >
+                  ↺ Reset
+                </button>
+              )}
+            </span>
+          )}
           <label className="switch">
             <input
               type="checkbox"

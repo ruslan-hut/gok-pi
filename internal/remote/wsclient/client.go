@@ -137,10 +137,11 @@ func (c *Client) ConfigUpdates() <-chan ConfigUpdate {
 	return c.configs
 }
 
-func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedules []entity.Schedule) {
+func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedules []entity.Schedule, scheduleGoalReached map[string]time.Time) {
 	snapshot := configSnapshot{
-		Batteries: cloneBatteryConfigs(batteries),
-		Schedules: cloneSchedules(schedules),
+		Batteries:           cloneBatteryConfigs(batteries),
+		Schedules:           cloneSchedules(schedules),
+		ScheduleGoalReached: cloneGoalReached(scheduleGoalReached),
 	}
 	c.initialConfigMu.Lock()
 	c.initialConfig = &snapshot
@@ -562,13 +563,15 @@ type ConfigUpdate struct {
 }
 
 type configSnapshot struct {
-	Batteries []entity.BatteryConfig
-	Schedules []entity.Schedule
+	Batteries           []entity.BatteryConfig
+	Schedules           []entity.Schedule
+	ScheduleGoalReached map[string]time.Time
 }
 
 type configPayload struct {
-	Batteries []entity.BatteryConfig `json:"batteries"`
-	Schedules []entity.Schedule      `json:"schedules"`
+	Batteries           []entity.BatteryConfig `json:"batteries"`
+	Schedules           []entity.Schedule      `json:"schedules"`
+	ScheduleGoalReached map[string]time.Time   `json:"schedule_goal_reached,omitempty"`
 }
 
 func cloneBatteryConfigs(in []entity.BatteryConfig) []entity.BatteryConfig {
@@ -586,6 +589,17 @@ func cloneSchedules(in []entity.Schedule) []entity.Schedule {
 	}
 	out := make([]entity.Schedule, len(in))
 	copy(out, in)
+	return out
+}
+
+func cloneGoalReached(in map[string]time.Time) map[string]time.Time {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]time.Time, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
 	return out
 }
 
