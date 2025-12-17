@@ -28,6 +28,7 @@ const (
 	CommandSetLimits    CommandType = "set_limits"
 	CommandForceMode    CommandType = "force_mode"
 	CommandUpdateConfig CommandType = "update_config"
+	CommandResetGoal    CommandType = "reset_goal"
 )
 
 type OperatingMode string
@@ -38,11 +39,12 @@ const (
 )
 
 type ControlCommand struct {
-	Type   CommandType
-	Power  int
-	Limits *CommandLimits
-	Mode   OperatingMode
-	Config *ConfigUpdate
+	Type         CommandType
+	Power        int
+	Limits       *CommandLimits
+	Mode         OperatingMode
+	Config       *ConfigUpdate
+	ScheduleName string // Used for CommandResetGoal
 }
 
 type CommandLimits struct {
@@ -79,25 +81,27 @@ type Charger struct {
 	log               *slog.Logger
 	commands          chan ControlCommand
 	manualOverride    bool
-	timezone          *time.Location // Timezone for schedule time parsing
-	goalReached       map[string]time.Time // Schedule name -> time when goal was reached
+	timezone          *time.Location                // Timezone for schedule time parsing
+	goalReached       map[string]time.Time          // Schedule name -> time when goal was reached
 	updateGoalReached func(string, time.Time) error // Callback to persist goal reached state
 	clearGoalReached  func(string) error            // Callback to clear goal reached state
 	stop              chan struct{}
 	stopped           chan struct{}
 	stopOnce          sync.Once
+	firstStatusPoll   bool // True until first successful status poll
 }
 
 func New(name string, client Client, log *slog.Logger) (*Charger, error) {
 	return &Charger{
-		name:         name,
-		client:       client,
-		log:          log.With(sl.Module("battery.charge")),
-		commands:     make(chan ControlCommand, 16),
-		timezone:     time.UTC, // Default to UTC
-		goalReached:  make(map[string]time.Time),
-		stop:         make(chan struct{}),
-		stopped:      make(chan struct{}),
+		name:            name,
+		client:          client,
+		log:             log.With(sl.Module("battery.charge")),
+		commands:        make(chan ControlCommand, 16),
+		timezone:        time.UTC, // Default to UTC
+		goalReached:     make(map[string]time.Time),
+		stop:            make(chan struct{}),
+		stopped:         make(chan struct{}),
+		firstStatusPoll: true,
 	}, nil
 }
 
@@ -179,6 +183,12 @@ func (c *Charger) Run() error {
 			observers.UpdateStatus(c.name, "Connected")
 			c.observeStatus(status)
 
+			// Sync internal state with battery on first successful status poll
+			if c.firstStatusPoll {
+				c.syncStateFromBattery(status)
+				c.firstStatusPoll = false
+			}
+
 			if len(c.schedules) == 0 {
 				if !c.manualOverride {
 					continue
@@ -249,43 +259,36 @@ func (c *Charger) checkTime() {
 	for _, schedule := range c.schedules {
 		if schedule.Enabled && schedule.Type == "charge" {
 			if c.isTimeToCharge(schedule.StartTime, schedule.StopTime) {
-				// Check run_once logic: if enabled and goal was reached, check if stop_time has passed
+				// Check run_once logic: if enabled and goal was reached, check if it's a new calendar day
 				if schedule.RunOnce {
 					if goalTime, reached := c.goalReached[schedule.Name]; reached {
-						// Parse stop time to check if it has passed
-						stopTime, err := timer.ParseTimeInLocation(schedule.StopTime, c.timezone)
-						if err == nil {
-							// Handle schedules that span midnight
-							goalDay := goalTime.In(c.timezone)
-							stopTimeOnGoalDay := time.Date(goalDay.Year(), goalDay.Month(), goalDay.Day(),
-								stopTime.Hour(), stopTime.Minute(), stopTime.Second(), 0, c.timezone)
-							
-							// If stop time is before start time, it spans midnight
-							startTime, _ := timer.ParseTimeInLocation(schedule.StartTime, c.timezone)
-							if startTime.After(stopTime) {
-								stopTimeOnGoalDay = stopTimeOnGoalDay.Add(24 * time.Hour)
-							}
-							
-							// If stop_time has passed since goal was reached, clear the goal state
-							if now.After(stopTimeOnGoalDay) {
-								delete(c.goalReached, schedule.Name)
-								if c.clearGoalReached != nil {
-									if err := c.clearGoalReached(schedule.Name); err != nil {
-										c.log.With(sl.Err(err)).Warn("failed to clear goal reached state")
-									}
+						// Check if goal was reached on a previous calendar day
+						goalDay := goalTime.In(c.timezone).Truncate(24 * time.Hour)
+						today := now.Truncate(24 * time.Hour)
+
+						if today.After(goalDay) {
+							// New day, clear the goal state
+							delete(c.goalReached, schedule.Name)
+							if c.clearGoalReached != nil {
+								if err := c.clearGoalReached(schedule.Name); err != nil {
+									c.log.With(sl.Err(err)).Warn("failed to clear goal reached state")
 								}
-							} else {
-								// Goal was reached and stop_time hasn't passed yet, skip this schedule
-								c.log.With(
-									slog.String("schedule", schedule.Name),
-									slog.Time("goal_reached_at", goalTime),
-								).Info("schedule has run_once enabled and goal was already reached, skipping until stop_time passes")
-								continue
 							}
+							c.log.With(
+								slog.String("schedule", schedule.Name),
+								slog.Time("goal_reached_at", goalTime),
+							).Info("new day started, cleared goal reached state for run_once schedule")
+						} else {
+							// Same day, skip this schedule
+							c.log.With(
+								slog.String("schedule", schedule.Name),
+								slog.Time("goal_reached_at", goalTime),
+							).Debug("run_once schedule already completed today, skipping")
+							continue
 						}
 					}
 				}
-				
+
 				oldRate := c.rate
 				// Schedule is active: use schedule limits (they take precedence over battery limits)
 				c.powerLimit = schedule.PowerLimit
@@ -391,13 +394,13 @@ func (c *Charger) runCharge() {
 					}
 				}
 			}
-			
+
 			err := c.stopCharge()
 			if err != nil {
 				c.log.With(sl.Err(err)).Error("stopping charge")
 				return
 			}
-			
+
 			// If run_once is enabled for the active schedule, record goal reached
 			if activeSchedule != nil && activeSchedule.RunOnce {
 				goalTime := time.Now()
@@ -564,14 +567,19 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 		if cmd.Config == nil {
 			return fmt.Errorf("missing config payload")
 		}
-		
+
 		// Build map of old schedules to check for run_once changes
 		oldScheduleMap := make(map[string]entity.Schedule)
 		for _, s := range c.schedules {
 			oldScheduleMap[s.Name] = s
 		}
-		
+
 		c.schedules = cloneSchedules(cmd.Config.Schedules)
+
+		// Log if manual override is being cleared
+		if c.manualOverride {
+			log.Info("config update received, clearing manual override mode")
+		}
 		c.manualOverride = false
 
 		// Check for schedules where run_once was disabled and clear goal state
@@ -588,7 +596,7 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 				}
 			}
 		}
-		
+
 		// Clean up goal reached entries for schedules that no longer exist
 		scheduleNames := make(map[string]bool)
 		for _, s := range c.schedules {
@@ -637,6 +645,41 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 
 		log.Info("applied runtime config update")
 		return nil
+
+	case CommandResetGoal:
+		if cmd.ScheduleName == "" {
+			return fmt.Errorf("missing schedule name for reset_goal command")
+		}
+
+		// Check if schedule exists
+		found := false
+		for _, s := range c.schedules {
+			if s.Name == cmd.ScheduleName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("schedule %q not found", cmd.ScheduleName)
+		}
+
+		// Clear goal state
+		if _, exists := c.goalReached[cmd.ScheduleName]; exists {
+			delete(c.goalReached, cmd.ScheduleName)
+			if c.clearGoalReached != nil {
+				if err := c.clearGoalReached(cmd.ScheduleName); err != nil {
+					return fmt.Errorf("clearing goal state: %w", err)
+				}
+			}
+			log.With(slog.String("schedule", cmd.ScheduleName)).Info("goal state cleared via remote command")
+		} else {
+			log.With(slog.String("schedule", cmd.ScheduleName)).Info("no goal state to clear for schedule")
+		}
+
+		// Re-evaluate schedule to potentially start it immediately
+		c.checkTime()
+		return nil
+
 	default:
 		return fmt.Errorf("unsupported command type: %s", cmd.Type)
 	}
@@ -685,4 +728,30 @@ func (c *Charger) observeStatus(status *entity.SystemStatus) {
 		observers.UpdateChargeState(c.name, status.BatteryCharging)
 		observers.UpdateOpMode(c.name, status.OperatingMode)
 	}(status)
+}
+
+// syncStateFromBattery synchronizes internal state with actual battery state on startup.
+// This handles cases where the battery is already in a charge state when the agent starts.
+func (c *Charger) syncStateFromBattery(status *entity.SystemStatus) {
+	if status == nil {
+		return
+	}
+
+	// If battery is in manual mode and charging, sync our internal state
+	// OperatingMode "1" = manual, "2" = auto
+	if status.OperatingMode == "1" && status.BatteryCharging {
+		if !c.isCharging {
+			c.log.With(
+				slog.String("operating_mode", status.OperatingMode),
+				slog.Bool("battery_charging", status.BatteryCharging),
+			).Info("detected battery already charging in manual mode on startup, syncing internal state")
+			c.isCharging = true
+		}
+	}
+
+	// If battery is in auto mode but we think we're charging (stale state), clear it
+	if status.OperatingMode == "2" && c.isCharging && !c.manualOverride {
+		c.log.Info("battery in auto mode but internal state shows charging, clearing stale state")
+		c.isCharging = false
+	}
 }
