@@ -24,8 +24,6 @@ type Config struct {
 	Batteries       []entity.BatteryConfig `yaml:"batteries"`
 	Schedules       []entity.Schedule      `yaml:"schedules"`
 	ChargeSchedules []entity.Schedule      `yaml:"charge_schedules"`
-	// Deprecated: ScheduleGoalReached is kept for migration only. Goal state is now stored in Schedule.GoalReachedTime
-	ScheduleGoalReached map[string]time.Time `yaml:"schedule_goal_reached,omitempty"`
 }
 
 type MetricsServer struct {
@@ -62,18 +60,6 @@ func MustLoad(path string) *Config {
 			log.Fatal(err)
 		}
 		instancePath = path
-
-		// Migrate old ScheduleGoalReached map to new Schedule.GoalReachedTime field
-		if len(instance.ScheduleGoalReached) > 0 {
-			for i := range instance.Schedules {
-				if goalTime, exists := instance.ScheduleGoalReached[instance.Schedules[i].Name]; exists {
-					instance.Schedules[i].GoalReachedTime = &goalTime
-				}
-			}
-			// Clear the old map after migration
-			instance.ScheduleGoalReached = nil
-			// Save will be called later after device ID generation, which will persist the migration
-		}
 
 		// Generate random device ID if empty
 		if instance.DeviceID == "" {
