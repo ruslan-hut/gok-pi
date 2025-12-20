@@ -3,10 +3,11 @@ module gok-pi
 go 1.24.0
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/gorilla/websocket v1.5.3
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/prometheus/client_golang v1.23.2
-	nhooyr.io/websocket v1.8.17
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -23,6 +24,5 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )

@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 )
 
 const (
@@ -234,13 +234,20 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 	headers.Set(headerAgentID, c.agent.ID)
 	headers.Set(headerAgentEnv, c.agent.Env)
 
-	conn, _, err := websocket.Dial(dialCtx, c.cfg.ServerURL, &websocket.DialOptions{
+	conn, resp, err := websocket.Dial(dialCtx, c.cfg.ServerURL, &websocket.DialOptions{
 		HTTPHeader: headers,
 	})
+	if resp != nil && resp.Body != nil {
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+	}
 	if err != nil {
 		return fmt.Errorf("dial websocket: %w", err)
 	}
-	defer conn.Close(websocket.StatusInternalError, "internal error")
+	defer func(conn *websocket.Conn, code websocket.StatusCode, reason string) {
+		_ = conn.Close(code, reason)
+	}(conn, websocket.StatusInternalError, "internal error")
 
 	if err := c.sendHello(ctx, conn); err != nil {
 		return err
@@ -534,7 +541,9 @@ func (c *Client) readLogs(stream string, lines int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("open log file: %w", err)
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		_ = file.Close()
+	}(file)
 
 	var allLines []string
 	scanner := bufio.NewScanner(file)
