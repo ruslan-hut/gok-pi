@@ -15,16 +15,17 @@ import (
 )
 
 type Config struct {
-	DeviceName          string                 `yaml:"device_name" env-default:""`
-	DeviceID            string                 `yaml:"device_id" env-default:""`
-	Env                 string                 `yaml:"env" env-default:"local" env-required:"true"`
-	Timezone            string                 `yaml:"timezone" env-default:"UTC"`
-	Metrics             MetricsServer          `yaml:"metrics"`
-	RemoteControl       RemoteControl          `yaml:"remote_control"`
-	Batteries           []entity.BatteryConfig `yaml:"batteries"`
-	Schedules           []entity.Schedule      `yaml:"schedules"`
-	ChargeSchedules     []entity.Schedule      `yaml:"charge_schedules"`
-	ScheduleGoalReached map[string]time.Time   `yaml:"schedule_goal_reached,omitempty"`
+	DeviceName      string                 `yaml:"device_name" env-default:""`
+	DeviceID        string                 `yaml:"device_id" env-default:""`
+	Env             string                 `yaml:"env" env-default:"local" env-required:"true"`
+	Timezone        string                 `yaml:"timezone" env-default:"UTC"`
+	Metrics         MetricsServer          `yaml:"metrics"`
+	RemoteControl   RemoteControl          `yaml:"remote_control"`
+	Batteries       []entity.BatteryConfig `yaml:"batteries"`
+	Schedules       []entity.Schedule      `yaml:"schedules"`
+	ChargeSchedules []entity.Schedule      `yaml:"charge_schedules"`
+	// Deprecated: ScheduleGoalReached is kept for migration only. Goal state is now stored in Schedule.GoalReachedTime
+	ScheduleGoalReached map[string]time.Time `yaml:"schedule_goal_reached,omitempty"`
 }
 
 type MetricsServer struct {
@@ -61,10 +62,17 @@ func MustLoad(path string) *Config {
 			log.Fatal(err)
 		}
 		instancePath = path
-		
-		// Initialize ScheduleGoalReached if not present
-		if instance.ScheduleGoalReached == nil {
-			instance.ScheduleGoalReached = make(map[string]time.Time)
+
+		// Migrate old ScheduleGoalReached map to new Schedule.GoalReachedTime field
+		if len(instance.ScheduleGoalReached) > 0 {
+			for i := range instance.Schedules {
+				if goalTime, exists := instance.ScheduleGoalReached[instance.Schedules[i].Name]; exists {
+					instance.Schedules[i].GoalReachedTime = &goalTime
+				}
+			}
+			// Clear the old map after migration
+			instance.ScheduleGoalReached = nil
+			// Save will be called later after device ID generation, which will persist the migration
 		}
 
 		// Generate random device ID if empty
@@ -112,50 +120,33 @@ func UpdateBatteriesAndSchedules(batteries []entity.BatteryConfig, schedules []e
 
 // UpdateFromRemoteConfig updates the config instance with all fields from a remote configuration.
 // This includes device_name, env, timezone, batteries, and schedules. This is thread-safe.
-// Also clears goal reached state for schedules where run_once is disabled.
+// Preserves GoalReachedTime for schedules that still exist with run_once enabled.
 func UpdateFromRemoteConfig(deviceName string, env string, timezone string, batteries []entity.BatteryConfig, schedules []entity.Schedule) {
 	mu.Lock()
 	if instance == nil {
 		mu.Unlock()
 		return
 	}
-	
-	// Build map of old schedules to check for run_once changes
+
+	// Build map of old schedules to preserve goal state
 	oldScheduleMap := make(map[string]entity.Schedule)
 	for _, s := range instance.Schedules {
 		oldScheduleMap[s.Name] = s
 	}
-	
-	// Check for schedules where run_once was disabled
-	needSave := false
-	if instance.ScheduleGoalReached != nil {
-		for _, newSchedule := range schedules {
-			if oldSchedule, exists := oldScheduleMap[newSchedule.Name]; exists {
-				// If run_once was enabled before but is now disabled, clear goal reached state
-				if oldSchedule.RunOnce && !newSchedule.RunOnce {
-					delete(instance.ScheduleGoalReached, newSchedule.Name)
-					needSave = true
+
+	// Preserve GoalReachedTime for existing schedules, clear if run_once was disabled
+	for i := range schedules {
+		if oldSchedule, exists := oldScheduleMap[schedules[i].Name]; exists {
+			if oldSchedule.GoalReachedTime != nil {
+				if schedules[i].RunOnce {
+					// Preserve goal state if run_once is still enabled
+					schedules[i].GoalReachedTime = oldSchedule.GoalReachedTime
 				}
+				// If run_once was disabled, GoalReachedTime remains nil (cleared)
 			}
 		}
 	}
-	
-	// Build set of existing schedule names for cleanup
-	scheduleNames := make(map[string]bool)
-	for _, s := range schedules {
-		scheduleNames[s.Name] = true
-	}
-	
-	// Remove entries for schedules that don't exist
-	if instance.ScheduleGoalReached != nil {
-		for name := range instance.ScheduleGoalReached {
-			if !scheduleNames[name] {
-				delete(instance.ScheduleGoalReached, name)
-				needSave = true
-			}
-		}
-	}
-	
+
 	if deviceName != "" {
 		instance.DeviceName = deviceName
 	}
@@ -167,13 +158,8 @@ func UpdateFromRemoteConfig(deviceName string, env string, timezone string, batt
 	}
 	instance.Batteries = batteries
 	instance.Schedules = schedules
-	
+
 	mu.Unlock()
-	
-	// Save outside the lock if we made changes
-	if needSave {
-		_ = Save()
-	}
 }
 
 // Save persists the current config instance to the YAML file it was loaded from.
@@ -222,34 +208,22 @@ func Save() error {
 	return nil
 }
 
-// GetScheduleGoalReached returns the current schedule goal reached state.
-// Returns a copy of the map for thread safety.
-func GetScheduleGoalReached() map[string]time.Time {
-	mu.RLock()
-	defer mu.RUnlock()
-	if instance == nil || instance.ScheduleGoalReached == nil {
-		return make(map[string]time.Time)
-	}
-	result := make(map[string]time.Time, len(instance.ScheduleGoalReached))
-	for k, v := range instance.ScheduleGoalReached {
-		result[k] = v
-	}
-	return result
-}
-
 // UpdateScheduleGoalReached updates the goal reached time for a schedule and persists to config file.
+// The goal state is stored directly in the Schedule.GoalReachedTime field.
 func UpdateScheduleGoalReached(scheduleName string, reachedAt time.Time) error {
 	mu.Lock()
 	if instance == nil {
 		mu.Unlock()
 		return fmt.Errorf("config not loaded")
 	}
-	if instance.ScheduleGoalReached == nil {
-		instance.ScheduleGoalReached = make(map[string]time.Time)
+	for i := range instance.Schedules {
+		if instance.Schedules[i].Name == scheduleName {
+			instance.Schedules[i].GoalReachedTime = &reachedAt
+			break
+		}
 	}
-	instance.ScheduleGoalReached[scheduleName] = reachedAt
 	mu.Unlock()
-	
+
 	// Save outside the lock to avoid holding it during I/O
 	return Save()
 }
@@ -261,46 +235,14 @@ func ClearScheduleGoalReached(scheduleName string) error {
 		mu.Unlock()
 		return fmt.Errorf("config not loaded")
 	}
-	if instance.ScheduleGoalReached != nil {
-		delete(instance.ScheduleGoalReached, scheduleName)
-	}
-	mu.Unlock()
-	
-	// Save outside the lock to avoid holding it during I/O
-	return Save()
-}
-
-// CleanupStaleScheduleGoals removes goal reached entries for schedules that no longer exist.
-func CleanupStaleScheduleGoals(schedules []entity.Schedule) error {
-	mu.Lock()
-	defer mu.Unlock()
-	if instance == nil {
-		return fmt.Errorf("config not loaded")
-	}
-	if instance.ScheduleGoalReached == nil {
-		return nil
-	}
-	
-	// Build set of existing schedule names
-	scheduleNames := make(map[string]bool)
-	for _, s := range schedules {
-		scheduleNames[s.Name] = true
-	}
-	
-	// Remove entries for schedules that don't exist
-	changed := false
-	for name := range instance.ScheduleGoalReached {
-		if !scheduleNames[name] {
-			delete(instance.ScheduleGoalReached, name)
-			changed = true
+	for i := range instance.Schedules {
+		if instance.Schedules[i].Name == scheduleName {
+			instance.Schedules[i].GoalReachedTime = nil
+			break
 		}
 	}
-	
-	if changed {
-		mu.Unlock()
-		err := Save()
-		mu.Lock()
-		return err
-	}
-	return nil
+	mu.Unlock()
+
+	// Save outside the lock to avoid holding it during I/O
+	return Save()
 }

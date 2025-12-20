@@ -96,8 +96,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	manager := newWorkerManager()
-	goalReached := config.GetScheduleGoalReached()
-	manager.Apply(ctx, &wg, batteries, schedules, conf.Timezone, goalReached, lg)
+	manager.Apply(ctx, &wg, batteries, schedules, conf.Timezone, lg)
 
 	if conf.RemoteControl.Enabled {
 		lg.Info("starting remote control client", slog.String("url", conf.RemoteControl.ServerURL))
@@ -135,8 +134,7 @@ func main() {
 							observers.UpdateStatus(b.Name, "Disabled")
 						}
 					}
-					goalReached := config.GetScheduleGoalReached()
-					manager.Apply(ctx, &wg, filterEnabledBatteries(update.Config.Batteries), filterEnabledSchedules(update.Config.Schedules), update.Config.Timezone, goalReached, lg)
+					manager.Apply(ctx, &wg, filterEnabledBatteries(update.Config.Batteries), filterEnabledSchedules(update.Config.Schedules), update.Config.Timezone, lg)
 
 					// Persist remote configuration to local config.yml
 					config.UpdateFromRemoteConfig(update.Config.DeviceName, update.Config.Env, update.Config.Timezone, update.Config.Batteries, update.Config.Schedules)
@@ -264,7 +262,7 @@ func (m *workerManager) GetCharger(name string) (*charger.Charger, bool) {
 	return entry.chargerWorker, true
 }
 
-func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries []entity.BatteryConfig, schedules []entity.Schedule, timezone string, goalReached map[string]time.Time, log *slog.Logger) {
+func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries []entity.BatteryConfig, schedules []entity.Schedule, timezone string, log *slog.Logger) {
 	desired := make(map[string]entity.BatteryConfig)
 	allBatteries := make(map[string]entity.BatteryConfig)
 	for _, b := range batteries {
@@ -308,7 +306,7 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 			// Check if critical fields (URL or token) have changed, which require worker restart
 			urlChanged := entry.config.Url != cfg.Url
 			tokenChanged := entry.config.Token != cfg.Token
-			
+
 			// If URL or token changed, we must restart workers to use the new ApiClient
 			if urlChanged || tokenChanged {
 				log.With(
@@ -363,7 +361,7 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 			}
 		}
 
-		entry, err := startWorker(ctx, wg, cfg, scheduleByBattery[name], timezone, goalReached, log)
+		entry, err := startWorker(ctx, wg, cfg, scheduleByBattery[name], timezone, log)
 		if err != nil {
 			log.With(slog.String("battery", name), sl.Err(err)).Error("starting workers")
 			continue
@@ -408,7 +406,7 @@ func (m *workerManager) remove(name string) (*workerEntry, bool) {
 	return entry, ok
 }
 
-func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.BatteryConfig, schedules []entity.Schedule, timezone string, goalReached map[string]time.Time, log *slog.Logger) (*workerEntry, error) {
+func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.BatteryConfig, schedules []entity.Schedule, timezone string, log *slog.Logger) (*workerEntry, error) {
 	workerLog := log.With(slog.String("battery", battery.Name))
 	api := apiclient.New(battery.Url, battery.Token, workerLog)
 
@@ -465,8 +463,8 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 			}
 			dischargerWorker.SetBatteryDefaults(powerLimit, socLimit)
 		}
-		// Set goal reached state and callbacks
-		dischargerWorker.SetGoalReachedState(goalReached, config.UpdateScheduleGoalReached, config.ClearScheduleGoalReached)
+		// Set goal callbacks for persisting goal reached state
+		dischargerWorker.SetGoalCallbacks(config.UpdateScheduleGoalReached, config.ClearScheduleGoalReached)
 		entry.dischargerWorker = dischargerWorker
 
 		wg.Add(1)
@@ -524,8 +522,8 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 			}
 			chargerWorker.SetBatteryDefaults(powerLimit, socLimit)
 		}
-		// Set goal reached state and callbacks
-		chargerWorker.SetGoalReachedState(goalReached, config.UpdateScheduleGoalReached, config.ClearScheduleGoalReached)
+		// Set goal callbacks for persisting goal reached state
+		chargerWorker.SetGoalCallbacks(config.UpdateScheduleGoalReached, config.ClearScheduleGoalReached)
 		entry.chargerWorker = chargerWorker
 
 		wg.Add(1)
