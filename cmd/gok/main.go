@@ -422,6 +422,20 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		monitorBattery(ctx, battery.Name, api, workerLog)
 	}()
 
+	// Validate and filter schedules
+	var validSchedules []entity.Schedule
+	for _, schedule := range schedules {
+		if err := schedule.Validate(); err != nil {
+			workerLog.With(
+				slog.String("schedule", schedule.Name),
+				sl.Err(err),
+			).Warn("skipping invalid schedule")
+			continue
+		}
+		validSchedules = append(validSchedules, schedule)
+	}
+	schedules = validSchedules
+
 	// Check if we have discharge or charge schedules
 	hasDischargeSchedules := false
 	hasChargeSchedules := false
@@ -696,6 +710,22 @@ func translateCommand(cmd wsclient.Command) (discharger.ControlCommand, error) {
 		default:
 			return discharger.ControlCommand{}, fmt.Errorf("unsupported operating mode: %s", mode)
 		}
+	case string(discharger.CommandResetGoal):
+		var payload struct {
+			ScheduleName string `json:"schedule_name"`
+		}
+		if len(cmd.Payload) > 0 {
+			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
+				return discharger.ControlCommand{}, fmt.Errorf("decode reset_goal payload: %w", err)
+			}
+		}
+		if payload.ScheduleName == "" {
+			return discharger.ControlCommand{}, fmt.Errorf("schedule_name is required for reset_goal command")
+		}
+		return discharger.ControlCommand{
+			Type:         discharger.CommandResetGoal,
+			ScheduleName: payload.ScheduleName,
+		}, nil
 	default:
 		return discharger.ControlCommand{}, fmt.Errorf("unsupported remote command: %s", cmd.Command)
 	}
@@ -761,6 +791,22 @@ func translateChargeCommand(cmd wsclient.Command) (charger.ControlCommand, error
 		default:
 			return charger.ControlCommand{}, fmt.Errorf("unsupported operating mode: %s", mode)
 		}
+	case string(charger.CommandResetGoal):
+		var payload struct {
+			ScheduleName string `json:"schedule_name"`
+		}
+		if len(cmd.Payload) > 0 {
+			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
+				return charger.ControlCommand{}, fmt.Errorf("decode reset_goal payload: %w", err)
+			}
+		}
+		if payload.ScheduleName == "" {
+			return charger.ControlCommand{}, fmt.Errorf("schedule_name is required for reset_goal command")
+		}
+		return charger.ControlCommand{
+			Type:         charger.CommandResetGoal,
+			ScheduleName: payload.ScheduleName,
+		}, nil
 	default:
 		return charger.ControlCommand{}, fmt.Errorf("unsupported remote command: %s", cmd.Command)
 	}

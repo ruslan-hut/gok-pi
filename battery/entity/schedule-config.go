@@ -1,6 +1,9 @@
 package entity
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Schedule struct {
 	Name            string     `yaml:"name" json:"name" env-default:""`
@@ -13,4 +16,27 @@ type Schedule struct {
 	SocLimit        int        `yaml:"soc_limit" json:"soc_limit" env-default:"50"`
 	RunOnce         bool       `yaml:"run_once" json:"run_once" env-default:"false"`
 	GoalReachedTime *time.Time `yaml:"goal_reached_time,omitempty" json:"goal_reached_time,omitempty"`
+}
+
+// Validate checks if the schedule configuration is valid.
+func (s *Schedule) Validate() error {
+	if s.Name == "" {
+		return fmt.Errorf("schedule name is required")
+	}
+	if s.Type != "" && s.Type != "discharge" && s.Type != "charge" {
+		return fmt.Errorf("invalid schedule type %q: must be 'discharge' or 'charge'", s.Type)
+	}
+	if _, err := time.Parse("15:04", s.StartTime); err != nil {
+		return fmt.Errorf("invalid start_time %q: expected format HH:MM", s.StartTime)
+	}
+	if _, err := time.Parse("15:04", s.StopTime); err != nil {
+		return fmt.Errorf("invalid stop_time %q: expected format HH:MM", s.StopTime)
+	}
+	if s.PowerLimit < 0 {
+		return fmt.Errorf("power_limit cannot be negative")
+	}
+	if s.SocLimit < 0 || s.SocLimit > 100 {
+		return fmt.Errorf("soc_limit must be between 0 and 100")
+	}
+	return nil
 }

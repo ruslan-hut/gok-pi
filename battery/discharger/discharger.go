@@ -28,6 +28,7 @@ const (
 	CommandSetLimits      CommandType = "set_limits"
 	CommandForceMode      CommandType = "force_mode"
 	CommandUpdateConfig   CommandType = "update_config"
+	CommandResetGoal      CommandType = "reset_goal"
 )
 
 type OperatingMode string
@@ -38,11 +39,12 @@ const (
 )
 
 type ControlCommand struct {
-	Type   CommandType
-	Power  int
-	Limits *CommandLimits
-	Mode   OperatingMode
-	Config *ConfigUpdate
+	Type         CommandType
+	Power        int
+	Limits       *CommandLimits
+	Mode         OperatingMode
+	Config       *ConfigUpdate
+	ScheduleName string // Used for CommandResetGoal
 }
 
 type CommandLimits struct {
@@ -84,17 +86,19 @@ type Discharge struct {
 	stop              chan struct{}
 	stopped           chan struct{}
 	stopOnce          sync.Once
+	firstStatusPoll   bool // True until first successful status poll
 }
 
 func New(name string, client Client, log *slog.Logger) (*Discharge, error) {
 	return &Discharge{
-		name:     name,
-		client:   client,
-		log:      log.With(sl.Module("battery.discharge")),
-		commands: make(chan ControlCommand, 16),
-		timezone: time.UTC, // Default to UTC
-		stop:     make(chan struct{}),
-		stopped:  make(chan struct{}),
+		name:            name,
+		client:          client,
+		log:             log.With(sl.Module("battery.discharge")),
+		commands:        make(chan ControlCommand, 16),
+		timezone:        time.UTC, // Default to UTC
+		stop:            make(chan struct{}),
+		stopped:         make(chan struct{}),
+		firstStatusPoll: true,
 	}, nil
 }
 
@@ -172,6 +176,12 @@ func (d *Discharge) Run() error {
 			}
 			observers.UpdateStatus(d.name, "Connected")
 			d.observeStatus(status)
+
+			// Sync internal state with battery on first successful status poll
+			if d.firstStatusPoll {
+				d.syncStateFromBattery(status)
+				d.firstStatusPoll = false
+			}
 
 			if len(d.schedules) == 0 {
 				if !d.manualOverride {
@@ -567,6 +577,11 @@ func (d *Discharge) processControlCommand(cmd ControlCommand) error {
 		}
 
 		d.schedules = cloneSchedules(cmd.Config.Schedules)
+
+		// Log if manual override is being cleared
+		if d.manualOverride {
+			log.Info("config update received, clearing manual override mode")
+		}
 		d.manualOverride = false
 
 		// Preserve GoalReachedTime for existing schedules, clear if run_once was disabled
@@ -623,6 +638,37 @@ func (d *Discharge) processControlCommand(cmd ControlCommand) error {
 
 		log.Info("applied runtime config update")
 		return nil
+
+	case CommandResetGoal:
+		if cmd.ScheduleName == "" {
+			return fmt.Errorf("missing schedule name for reset_goal command")
+		}
+
+		// Find schedule and clear goal state
+		found := false
+		for i := range d.schedules {
+			if d.schedules[i].Name == cmd.ScheduleName {
+				found = true
+				if d.schedules[i].GoalReachedTime != nil {
+					d.schedules[i].GoalReachedTime = nil
+					if d.clearGoalReached != nil {
+						if err := d.clearGoalReached(cmd.ScheduleName); err != nil {
+							return fmt.Errorf("clearing goal state: %w", err)
+						}
+					}
+					log.With(slog.String("schedule", cmd.ScheduleName)).Info("goal state cleared via remote command")
+				}
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("schedule %q not found", cmd.ScheduleName)
+		}
+
+		// Re-evaluate schedule to potentially start it immediately
+		d.checkTime()
+		return nil
+
 	default:
 		return fmt.Errorf("unsupported command type: %s", cmd.Type)
 	}
@@ -671,4 +717,30 @@ func (d *Discharge) observeStatus(status *entity.SystemStatus) {
 		observers.UpdateDischargeState(d.name, status.BatteryDischarging)
 		observers.UpdateOpMode(d.name, status.OperatingMode)
 	}(status)
+}
+
+// syncStateFromBattery synchronizes internal state with actual battery state on startup.
+// This handles cases where the battery is already in a discharge state when the agent starts.
+func (d *Discharge) syncStateFromBattery(status *entity.SystemStatus) {
+	if status == nil {
+		return
+	}
+
+	// If battery is in manual mode and discharging, sync our internal state
+	// OperatingMode "1" = manual, "2" = auto
+	if status.OperatingMode == "1" && status.BatteryDischarging {
+		if !d.isDischarging {
+			d.log.With(
+				slog.String("operating_mode", status.OperatingMode),
+				slog.Bool("battery_discharging", status.BatteryDischarging),
+			).Info("detected battery already discharging in manual mode on startup, syncing internal state")
+			d.isDischarging = true
+		}
+	}
+
+	// If battery is in auto mode but we think we're discharging (stale state), clear it
+	if status.OperatingMode == "2" && d.isDischarging && !d.manualOverride {
+		d.log.Info("battery in auto mode but internal state shows discharging, clearing stale state")
+		d.isDischarging = false
+	}
 }
