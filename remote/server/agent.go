@@ -105,7 +105,10 @@ func (a *agentConnection) handshake() error {
 		return fmt.Errorf("missing agent id")
 	}
 
-	a.conn.SetReadDeadline(time.Time{})
+	err = a.conn.SetReadDeadline(time.Time{})
+	if err != nil {
+		return err
+	}
 
 	a.info = hello.Agent
 	a.id = hello.Agent.ID
