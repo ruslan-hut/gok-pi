@@ -48,6 +48,8 @@ var instance *Config
 var instancePath string
 var once sync.Once
 var mu sync.RWMutex
+var goalStateChangedCallback func()
+var goalStateCallbackMu sync.RWMutex
 
 func MustLoad(path string) *Config {
 	var err error
@@ -102,6 +104,49 @@ func UpdateBatteriesAndSchedules(batteries []entity.BatteryConfig, schedules []e
 		instance.Batteries = batteries
 		instance.Schedules = schedules
 	}
+}
+
+// SetGoalStateChangedCallback sets a callback that is invoked when goal state changes.
+// This allows the agent to push updated config snapshots to the server.
+func SetGoalStateChangedCallback(callback func()) {
+	goalStateCallbackMu.Lock()
+	goalStateChangedCallback = callback
+	goalStateCallbackMu.Unlock()
+}
+
+func notifyGoalStateChanged() {
+	goalStateCallbackMu.RLock()
+	cb := goalStateChangedCallback
+	goalStateCallbackMu.RUnlock()
+	if cb != nil {
+		cb()
+	}
+}
+
+// GetSchedules returns a copy of the current schedules.
+// This is thread-safe and can be used to get schedule data for publishing.
+func GetSchedules() []entity.Schedule {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return nil
+	}
+	out := make([]entity.Schedule, len(instance.Schedules))
+	copy(out, instance.Schedules)
+	return out
+}
+
+// GetBatteries returns a copy of the current battery configs.
+// This is thread-safe and can be used to get battery data for publishing.
+func GetBatteries() []entity.BatteryConfig {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return nil
+	}
+	out := make([]entity.BatteryConfig, len(instance.Batteries))
+	copy(out, instance.Batteries)
+	return out
 }
 
 // UpdateFromRemoteConfig updates the config instance with all fields from a remote configuration.
@@ -210,6 +255,9 @@ func UpdateScheduleGoalReached(scheduleName string, reachedAt time.Time) error {
 	}
 	mu.Unlock()
 
+	// Notify that goal state changed so agent can push updated config to server
+	notifyGoalStateChanged()
+
 	// Save outside the lock to avoid holding it during I/O
 	return Save()
 }
@@ -228,6 +276,9 @@ func ClearScheduleGoalReached(scheduleName string) error {
 		}
 	}
 	mu.Unlock()
+
+	// Notify that goal state changed so agent can push updated config to server
+	notifyGoalStateChanged()
 
 	// Save outside the lock to avoid holding it during I/O
 	return Save()

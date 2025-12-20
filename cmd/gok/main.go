@@ -107,6 +107,12 @@ func main() {
 		}, lg)
 		remoteClient.Run(ctx)
 		remoteClient.PublishConfigSnapshot(conf.Batteries, conf.Schedules)
+
+		// Set up callback to push config updates when goal state changes
+		config.SetGoalStateChangedCallback(func() {
+			remoteClient.PublishConfigSnapshot(config.GetBatteries(), config.GetSchedules())
+		})
+
 		go handleRemoteCommands(ctx, remoteClient.Commands(), manager, lg)
 
 		go func() {
