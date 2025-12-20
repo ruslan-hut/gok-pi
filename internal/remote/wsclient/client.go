@@ -608,17 +608,6 @@ func cloneSchedules(in []entity.Schedule) []entity.Schedule {
 	return out
 }
 
-func cloneGoalReached(in map[string]time.Time) map[string]time.Time {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]time.Time, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
-
 func detectVersion() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
