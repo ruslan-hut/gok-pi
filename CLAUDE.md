@@ -78,3 +78,7 @@ Environment variables override config values via cleanenv tags.
 3. If remote_control enabled: WebSocket streams telemetry to control server, receives commands
 4. Control server aggregates telemetry, broadcasts to web UI clients, routes commands to agents
 5. Config updates from UI persist to agent's local `config.yml` via optimistic locking
+
+## Development Notes
+
+- Do not run build checks (`go build`, `go test`) automatically after making changes - the user will verify manually

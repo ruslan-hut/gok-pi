@@ -40,3 +40,21 @@ func (s *Schedule) Validate() error {
 	}
 	return nil
 }
+
+// ValidateSchedules validates a collection of schedules, checking both individual
+// schedule validity and ensuring schedule names are unique.
+func ValidateSchedules(schedules []Schedule) error {
+	names := make(map[string]bool)
+	for i, s := range schedules {
+		if err := s.Validate(); err != nil {
+			return fmt.Errorf("schedule[%d] %q: %w", i, s.Name, err)
+		}
+		if s.Name != "" {
+			if names[s.Name] {
+				return fmt.Errorf("duplicate schedule name: %q", s.Name)
+			}
+			names[s.Name] = true
+		}
+	}
+	return nil
+}

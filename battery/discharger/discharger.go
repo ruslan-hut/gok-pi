@@ -254,40 +254,55 @@ func (d *Discharge) checkTime() {
 		schedule := &d.schedules[i]
 		if schedule.Enabled && (schedule.Type == "" || schedule.Type == "discharge") {
 			if d.isTimeToDischarge(schedule.StartTime, schedule.StopTime) {
-				// Check run_once logic: if enabled and goal was reached, check if stop_time has passed
+				// Check run_once logic: if enabled and goal was reached, don't run on same day
+				// OR until the schedule period ends (whichever is later)
 				if schedule.RunOnce && schedule.GoalReachedTime != nil {
 					goalTime := *schedule.GoalReachedTime
-					// Parse stop time to check if it has passed
+					goalDay := goalTime.In(d.timezone)
+
+					// Condition 1: Same calendar day check
+					sameDay := goalDay.Year() == now.Year() && goalDay.YearDay() == now.YearDay()
+
+					// Condition 2: Schedule period ended check
 					stopTime, err := timer.ParseTimeInLocation(schedule.StopTime, d.timezone)
-					if err == nil {
-						// Handle schedules that span midnight
-						goalDay := goalTime.In(d.timezone)
-						stopTimeOnGoalDay := time.Date(goalDay.Year(), goalDay.Month(), goalDay.Day(),
-							stopTime.Hour(), stopTime.Minute(), stopTime.Second(), 0, d.timezone)
+					if err != nil {
+						d.log.With(sl.Err(err)).Error("parsing stop time for run_once check")
+						continue
+					}
 
-						// If stop time is before start time, it spans midnight
-						startTime, _ := timer.ParseTimeInLocation(schedule.StartTime, d.timezone)
-						if startTime.After(stopTime) {
-							stopTimeOnGoalDay = stopTimeOnGoalDay.Add(24 * time.Hour)
-						}
+					// Calculate stop time on goal day (when schedule period ends)
+					stopTimeOnGoalDay := time.Date(goalDay.Year(), goalDay.Month(), goalDay.Day(),
+						stopTime.Hour(), stopTime.Minute(), stopTime.Second(), 0, d.timezone)
 
-						// If stop_time has passed since goal was reached, clear the goal state
-						if now.After(stopTimeOnGoalDay) {
-							schedule.GoalReachedTime = nil
-							if d.clearGoalReached != nil {
-								if err := d.clearGoalReached(schedule.Name); err != nil {
-									d.log.With(sl.Err(err)).Warn("failed to clear goal reached state")
-								}
-							}
-						} else {
-							// Goal was reached and stop_time hasn't passed yet, skip this schedule
-							d.log.With(
-								slog.String("schedule", schedule.Name),
-								slog.Time("goal_reached_at", goalTime),
-							).Info("schedule has run_once enabled and goal was already reached, skipping until stop_time passes")
-							continue
+					// Handle midnight-spanning schedules
+					startTime, _ := timer.ParseTimeInLocation(schedule.StartTime, d.timezone)
+					if startTime.After(stopTime) {
+						stopTimeOnGoalDay = stopTimeOnGoalDay.Add(24 * time.Hour)
+					}
+
+					schedulePeriodEnded := now.After(stopTimeOnGoalDay)
+
+					// Skip if same day OR schedule period hasn't ended (whichever is later)
+					if sameDay || !schedulePeriodEnded {
+						d.log.With(
+							slog.String("schedule", schedule.Name),
+							slog.Time("goal_reached_at", goalTime),
+							slog.Bool("same_day", sameDay),
+							slog.Bool("period_ended", schedulePeriodEnded),
+						).Info("run_once schedule goal reached, skipping until next period")
+						continue
+					}
+
+					// Both conditions satisfied: different day AND period ended - clear goal state
+					schedule.GoalReachedTime = nil
+					if d.clearGoalReached != nil {
+						if err := d.clearGoalReached(schedule.Name); err != nil {
+							d.log.With(sl.Err(err)).Warn("failed to clear goal reached state")
 						}
 					}
+					d.log.With(
+						slog.String("schedule", schedule.Name),
+					).Info("cleared goal state for run_once schedule (new period started)")
 				}
 
 				oldRate := d.rate
@@ -680,6 +695,17 @@ func (d *Discharge) Stop() {
 		close(d.stop)
 	})
 	<-d.stopped
+}
+
+// GetScheduleType returns the type of a schedule by name.
+// Returns the schedule type ("discharge" or "") and true if found, or "", false if not found.
+func (d *Discharge) GetScheduleType(name string) (string, bool) {
+	for _, s := range d.schedules {
+		if s.Name == name {
+			return s.Type, true
+		}
+	}
+	return "", false
 }
 
 func cloneSchedules(in []entity.Schedule) []entity.Schedule {

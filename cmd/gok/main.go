@@ -191,6 +191,12 @@ func handleRemoteCommands(ctx context.Context, commands <-chan wsclient.Command,
 				continue
 			}
 
+			// Handle reset_goal command specially - needs to route to correct worker based on schedule type
+			if cmd.Command == string(discharger.CommandResetGoal) {
+				handleResetGoalCommand(cmd, manager, log)
+				continue
+			}
+
 			// Route charge commands to charger, discharge commands to discharger
 			if isChargeCommand(cmd.Command) {
 				chargerWorker, ok := manager.GetCharger(cmd.Target)
@@ -221,6 +227,67 @@ func handleRemoteCommands(ctx context.Context, commands <-chan wsclient.Command,
 					log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit remote command")
 				}
 			}
+		}
+	}
+}
+
+// handleResetGoalCommand routes reset_goal command to the correct worker (charger or discharger)
+// based on the schedule type.
+func handleResetGoalCommand(cmd wsclient.Command, manager *workerManager, log *slog.Logger) {
+	// Parse payload to get schedule name
+	var payload struct {
+		ScheduleName string `json:"schedule_name"`
+	}
+	if len(cmd.Payload) > 0 {
+		if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
+			log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to decode reset_goal payload")
+			return
+		}
+	}
+	if payload.ScheduleName == "" {
+		log.With(slog.String("target", cmd.Target)).Warn("reset_goal command missing schedule_name")
+		return
+	}
+
+	// Look up schedule type to determine which worker to route to
+	scheduleType, found := manager.GetScheduleType(cmd.Target, payload.ScheduleName)
+	if !found {
+		log.With(
+			slog.String("target", cmd.Target),
+			slog.String("schedule", payload.ScheduleName),
+		).Warn("reset_goal command for unknown schedule")
+		return
+	}
+
+	// Route to appropriate worker based on schedule type
+	if scheduleType == "charge" {
+		chargerWorker, ok := manager.GetCharger(cmd.Target)
+		if !ok {
+			log.With(slog.String("target", cmd.Target)).Warn("reset_goal command: charger worker not found")
+			return
+		}
+		controlCmd, err := translateChargeCommand(cmd)
+		if err != nil {
+			log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate reset_goal command for charger")
+			return
+		}
+		if err := chargerWorker.SubmitCommand(controlCmd); err != nil {
+			log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit reset_goal command to charger")
+		}
+	} else {
+		// Discharge schedule (type is "" or "discharge")
+		dischargerWorker, ok := manager.GetDischarger(cmd.Target)
+		if !ok {
+			log.With(slog.String("target", cmd.Target)).Warn("reset_goal command: discharger worker not found")
+			return
+		}
+		controlCmd, err := translateCommand(cmd)
+		if err != nil {
+			log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate reset_goal command for discharger")
+			return
+		}
+		if err := dischargerWorker.SubmitCommand(controlCmd); err != nil {
+			log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit reset_goal command to discharger")
 		}
 	}
 }
@@ -266,6 +333,34 @@ func (m *workerManager) GetCharger(name string) (*charger.Charger, bool) {
 		return nil, false
 	}
 	return entry.chargerWorker, true
+}
+
+// GetScheduleType looks up a schedule by name in the workers for a given battery
+// and returns its type. Returns "charge" for charge schedules, "" or "discharge" for discharge schedules.
+func (m *workerManager) GetScheduleType(batteryName, scheduleName string) (string, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	entry, ok := m.workers[batteryName]
+	if !ok {
+		return "", false
+	}
+
+	// Check charger first (since we need to identify charge schedules specifically)
+	if entry.chargerWorker != nil {
+		if schedType, found := entry.chargerWorker.GetScheduleType(scheduleName); found {
+			return schedType, true
+		}
+	}
+
+	// Check discharger
+	if entry.dischargerWorker != nil {
+		if schedType, found := entry.dischargerWorker.GetScheduleType(scheduleName); found {
+			return schedType, true
+		}
+	}
+
+	return "", false
 }
 
 func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries []entity.BatteryConfig, schedules []entity.Schedule, timezone string, log *slog.Logger) {

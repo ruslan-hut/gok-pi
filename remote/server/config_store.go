@@ -15,6 +15,8 @@ import (
 var (
 	// ErrConfigConflict is returned when the provided revision does not match the latest stored revision.
 	ErrConfigConflict = errors.New("agent config revision conflict")
+	// ErrInvalidSchedules is returned when schedule validation fails.
+	ErrInvalidSchedules = errors.New("invalid schedules")
 )
 
 // AgentConfig represents the persisted configuration overrides for a gok-pi agent.
@@ -113,6 +115,11 @@ func (cs *ConfigStore) Save(agentID string, req AgentConfigRequest) (AgentConfig
 		return AgentConfig{}, ErrConfigConflict
 	case exists && expectedRevision != current.Revision:
 		return AgentConfig{}, ErrConfigConflict
+	}
+
+	// Validate schedules (including uniqueness check)
+	if err := entity.ValidateSchedules(req.Schedules); err != nil {
+		return AgentConfig{}, fmt.Errorf("%w: %v", ErrInvalidSchedules, err)
 	}
 
 	next := AgentConfig{
