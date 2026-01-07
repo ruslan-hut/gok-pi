@@ -41,6 +41,8 @@ const defaultCommandState: CommandState = {
 function formatConfigDraft(config: AgentConfig | null): string {
   const payload = {
     device_name: config?.device_name ?? "",
+    env: config?.env ?? "",
+    timezone: config?.timezone ?? "",
     revision: config?.revision ?? 0,
     batteries: config?.batteries ?? [],
     schedules: config?.schedules ?? [],
@@ -90,20 +92,32 @@ export default function App() {
   const [logsError, setLogsError] = useState<string>();
   const [logStream, setLogStream] = useState<string>("agent");
   const [logLines, setLogLines] = useState<number>(500);
+  const [lastStatusMessage, setLastStatusMessage] = useState<string>("");
+  const [showStatusMessage, setShowStatusMessage] = useState(false);
+  const [statusMessageFrozen, setStatusMessageFrozen] = useState(false);
   const isLoggingOutRef = useRef(false);
   const handleLogoutRef = useRef<() => void>();
   const prefetchedConfigAgentsRef = useRef<Set<string>>(new Set());
   const selectedAgentIdRef = useRef<string | undefined>();
   const configDirtyRef = useRef(false);
+  const statusMessageFrozenRef = useRef(false);
 
   // Keep refs in sync with state
   useEffect(() => {
     selectedAgentIdRef.current = selectedAgentId;
+    // Clear status message when agent changes (unless frozen)
+    if (!statusMessageFrozenRef.current) {
+      setLastStatusMessage("");
+    }
   }, [selectedAgentId]);
 
   useEffect(() => {
     configDirtyRef.current = configDirty;
   }, [configDirty]);
+
+  useEffect(() => {
+    statusMessageFrozenRef.current = statusMessageFrozen;
+  }, [statusMessageFrozen]);
 
   // Check authentication on mount
   useEffect(() => {
@@ -363,19 +377,21 @@ export default function App() {
         setConfigDirty(false);
         setConfigError(undefined);
         // Update device_name in agents map
-        setAgents((prev: AgentsMap) => {
-          const agent = prev[selectedAgentId];
-          if (agent) {
-            return {
-              ...prev,
-              [selectedAgentId]: {
-                ...agent,
-                device_name: cfg.device_name,
-              },
-            };
-          }
-          return prev;
-        });
+        if (cfg) {
+          setAgents((prev: AgentsMap) => {
+            const agent = prev[selectedAgentId];
+            if (agent) {
+              return {
+                ...prev,
+                [selectedAgentId]: {
+                  ...agent,
+                  device_name: cfg.device_name,
+                },
+              };
+            }
+            return prev;
+          });
+        }
       })
       .catch((err) => {
         if (cancelled || isLoggingOutRef.current) return;
@@ -418,7 +434,33 @@ export default function App() {
         retryMs = 1000;
       };
       socket.onmessage = (event) => {
+        // Store raw JSON for debug preview (only for selected agent)
         const data = JSON.parse(event.data) as DashboardMessage;
+        const currentAgentId = selectedAgentIdRef.current;
+        
+        // Check if message is for the selected agent
+        let isForSelectedAgent = false;
+        switch (data.type) {
+          case "agent.telemetry":
+          case "agent.removed":
+          case "config.updated":
+            isForSelectedAgent = data.agent_id === currentAgentId;
+            break;
+          case "agent.summary":
+            isForSelectedAgent = data.agent.agent.id === currentAgentId;
+            break;
+          case "agents.snapshot":
+            // Skip snapshot messages as they contain all agents
+            isForSelectedAgent = false;
+            break;
+          default:
+            isForSelectedAgent = false;
+        }
+        
+        if (isForSelectedAgent && !statusMessageFrozenRef.current) {
+          setLastStatusMessage(event.data);
+        }
+        
         handleMessage(data);
       };
       socket.onclose = () => {
@@ -489,6 +531,15 @@ export default function App() {
       );
   }, [selectedAgent, agentConfig]);
 
+  // Create a map of battery configs by name for quick lookup
+  const batteryConfigMap = useMemo(() => {
+    const map = new Map<string, BatteryConfig>();
+    (agentConfig?.batteries || []).forEach((battery) => {
+      map.set(battery.name, battery);
+    });
+    return map;
+  }, [agentConfig]);
+
   const handleLogRefresh = useCallback(async () => {
     if (!selectedAgentId) return;
     setLogsLoading(true);
@@ -551,6 +602,12 @@ export default function App() {
       const device_name = typeof parsed.device_name === "string"
         ? parsed.device_name
         : agentConfig?.device_name ?? "";
+      const env = typeof parsed.env === "string"
+        ? parsed.env
+        : agentConfig?.env ?? "";
+      const timezone = typeof parsed.timezone === "string"
+        ? parsed.timezone
+        : agentConfig?.timezone ?? "";
       const batteries = Array.isArray(parsed.batteries)
         ? parsed.batteries
         : [];
@@ -560,6 +617,8 @@ export default function App() {
 
       const updated = await updateAgentConfig(selectedAgentId, {
         device_name,
+        env,
+        timezone,
         revision,
         batteries,
         schedules,
@@ -718,6 +777,7 @@ export default function App() {
                 <BatteryCard
                   key={battery.name}
                   snapshot={battery}
+                  batteryConfig={batteryConfigMap.get(battery.name)}
                   commandState={commandState}
                   onCommandStateChange={setCommandState}
                   onCommand={handleCommand}
@@ -739,6 +799,7 @@ export default function App() {
             </section>
             <ConfigEditor
               config={agentConfig}
+              agentEnv={selectedAgent?.agent.env}
               draft={configDraft}
               loading={configLoading}
               saving={configSaving}
@@ -750,6 +811,21 @@ export default function App() {
               }}
               onSave={handleConfigSave}
               onReset={handleConfigReset}
+              scheduleGoalReached={selectedAgent?.schedule_goal_reached}
+              onResetGoal={(scheduleName) => {
+                // Find the schedule to get its battery_name for the command target
+                const schedule = agentConfig?.schedules.find(s => s.name === scheduleName);
+                const batteryName = schedule?.battery_name || (selectedAgent?.telemetry ? Object.keys(selectedAgent.telemetry)[0] : "");
+                handleCommand("reset_goal", batteryName, { schedule_name: scheduleName });
+              }}
+              isOnline={selectedAgentOnline}
+            />
+            <StatusMessagePreview
+              lastStatusMessage={lastStatusMessage}
+              showStatusMessage={showStatusMessage}
+              onToggleStatusMessage={() => setShowStatusMessage(!showStatusMessage)}
+              statusMessageFrozen={statusMessageFrozen}
+              onToggleStatusMessageFrozen={() => setStatusMessageFrozen(!statusMessageFrozen)}
             />
             <LogViewer
               agentId={selectedAgentId}
@@ -783,6 +859,7 @@ export default function App() {
 
 interface BatteryCardProps {
   snapshot: TelemetrySnapshot;
+  batteryConfig?: BatteryConfig;
   commandState: CommandState;
   onCommandStateChange: (state: CommandState) => void;
   onCommand: (command: string, target: string, payload?: unknown) => void;
@@ -793,6 +870,7 @@ interface BatteryCardProps {
 
 function BatteryCard({
   snapshot,
+  batteryConfig,
   commandState,
   onCommandStateChange,
   onCommand,
@@ -802,6 +880,11 @@ function BatteryCard({
 }: BatteryCardProps) {
   const { name } = snapshot;
   const controlsDisabled = !isOnline;
+  // Check if limits are defined in config (non-zero values)
+  const hasConfigLimits = batteryConfig && (
+    (batteryConfig.power_limit !== undefined && batteryConfig.power_limit > 0) ||
+    (batteryConfig.soc_limit !== undefined && batteryConfig.soc_limit > 0)
+  );
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -816,10 +899,10 @@ function BatteryCard({
     }
   };
 
-  const handleCardClick = (e: MouseEvent) => {
-    // Only toggle on mobile, and only if clicking on the card itself, not on interactive elements
+  const handleHeaderClick = (e: MouseEvent) => {
+    // Toggle when clicking on the header, but not on badges or other interactive elements
     const target = e.target as HTMLElement;
-    if (target.closest('.controls') || target.closest('button') || target.closest('input')) {
+    if (target.closest('.badge') || target.closest('button')) {
       return;
     }
     onToggle();
@@ -839,29 +922,41 @@ function BatteryCard({
         return "MANUAL";
       case "2":
         return "AUTO";
+      case "10":
+        return "SERVICE";
       default:
         return mode;
     }
   };
 
+  const isManualMode = snapshot.operating_mode === "1";
+  const isServiceMode = snapshot.operating_mode === "10";
+
   return (
     <div 
-      className={`card battery-card ${expanded ? "expanded" : ""}`}
-      onClick={handleCardClick}
+      className={`card battery-card ${expanded ? "expanded" : ""} ${isManualMode ? "manual-mode" : ""} ${isServiceMode ? "service-mode" : ""}`}
     >
-      <h2>
-        {name}
-        <span
-          className={`badge ${getStatusBadgeClass(snapshot.status || "Disconnected")}`}
-        >
-          {snapshot.status || "Disconnected"}
-        </span>
-        <span
-          className={`badge ${
-            snapshot.battery_discharging ? "online" : "offline"
-          }`}
-        >
-          {snapshot.battery_discharging ? "Discharging" : snapshot.battery_charging ? "Charging" : "Idle"}
+      <h2 
+        className="battery-card-header"
+        onClick={handleHeaderClick}
+      >
+        <span className="battery-card-title">{name}</span>
+        <span className="battery-card-badges">
+          <span
+            className={`badge ${getStatusBadgeClass(snapshot.status || "Disconnected")}`}
+          >
+            {snapshot.status || "Disconnected"}
+          </span>
+          <span
+            className={`badge ${
+              snapshot.battery_discharging ? "online" : "offline"
+            }`}
+          >
+            {snapshot.battery_discharging ? "Discharging" : snapshot.battery_charging ? "Charging" : "Idle"}
+          </span>
+          <span className="battery-card-toggle" title={expanded ? "Collapse controls" : "Expand controls"}>
+            {expanded ? "▼" : "▶"}
+          </span>
         </span>
       </h2>
       <div className="metrics">
@@ -949,61 +1044,63 @@ function BatteryCard({
           </div>
         </div>
 
-        <div className="control-group">
-          <label className="control-label">Limits</label>
-          <div className="control-inputs-row">
-            <div className="control-input-wrapper">
-              <label className="control-input-label" htmlFor={`power-limit-${snapshot.name}`}>
-                Power limit (W)
-              </label>
-              <input
-                id={`power-limit-${snapshot.name}`}
-                type="number"
-                className="control-input"
-                value={commandState.powerLimit}
-                disabled={controlsDisabled}
-                onChange={(event) =>
-                  onCommandStateChange({
-                    ...commandState,
-                    powerLimit: Number(event.target.value),
-                  })
-                }
-                placeholder="Power limit"
-              />
+        {!hasConfigLimits && (
+          <div className="control-group">
+            <label className="control-label">Limits</label>
+            <div className="control-inputs-row">
+              <div className="control-input-wrapper">
+                <label className="control-input-label" htmlFor={`power-limit-${snapshot.name}`}>
+                  Power limit (W)
+                </label>
+                <input
+                  id={`power-limit-${snapshot.name}`}
+                  type="number"
+                  className="control-input"
+                  value={commandState.powerLimit}
+                  disabled={controlsDisabled}
+                  onChange={(event) =>
+                    onCommandStateChange({
+                      ...commandState,
+                      powerLimit: Number(event.target.value),
+                    })
+                  }
+                  placeholder="Power limit"
+                />
+              </div>
+              <div className="control-input-wrapper">
+                <label className="control-input-label" htmlFor={`soc-limit-${snapshot.name}`}>
+                  SoC limit (%)
+                </label>
+                <input
+                  id={`soc-limit-${snapshot.name}`}
+                  type="number"
+                  className="control-input"
+                  value={commandState.socLimit}
+                  disabled={controlsDisabled}
+                  onChange={(event) =>
+                    onCommandStateChange({
+                      ...commandState,
+                      socLimit: Number(event.target.value),
+                    })
+                  }
+                  placeholder="SoC limit"
+                />
+              </div>
             </div>
-            <div className="control-input-wrapper">
-              <label className="control-input-label" htmlFor={`soc-limit-${snapshot.name}`}>
-                SoC limit (%)
-              </label>
-              <input
-                id={`soc-limit-${snapshot.name}`}
-                type="number"
-                className="control-input"
-                value={commandState.socLimit}
-                disabled={controlsDisabled}
-                onChange={(event) =>
-                  onCommandStateChange({
-                    ...commandState,
-                    socLimit: Number(event.target.value),
-                  })
-                }
-                placeholder="SoC limit"
-              />
-            </div>
+            <button
+              className="control-button control-button-secondary"
+              disabled={controlsDisabled}
+              onClick={() =>
+                onCommand("set_limits", snapshot.name, {
+                  power_limit: commandState.powerLimit,
+                  soc_limit: commandState.socLimit,
+                })
+              }
+            >
+              Update Limits
+            </button>
           </div>
-          <button
-            className="control-button control-button-secondary"
-            disabled={controlsDisabled}
-            onClick={() =>
-              onCommand("set_limits", snapshot.name, {
-                power_limit: commandState.powerLimit,
-                soc_limit: commandState.socLimit,
-              })
-            }
-          >
-            Update Limits
-          </button>
-        </div>
+        )}
 
         <div className="control-group">
           <label className="control-label">Mode</label>
@@ -1035,6 +1132,7 @@ function BatteryCard({
 
 interface ConfigEditorProps {
   config: AgentConfig | null;
+  agentEnv?: string;
   draft: string;
   loading: boolean;
   saving: boolean;
@@ -1043,10 +1141,14 @@ interface ConfigEditorProps {
   onDraftChange: (value: string) => void;
   onSave: () => void;
   onReset: () => void;
+  scheduleGoalReached?: Record<string, string>;
+  onResetGoal?: (scheduleName: string) => void;
+  isOnline?: boolean;
 }
 
 function ConfigEditor({
   config,
+  agentEnv,
   draft,
   loading,
   saving,
@@ -1055,6 +1157,9 @@ function ConfigEditor({
   onDraftChange,
   onSave,
   onReset,
+  scheduleGoalReached,
+  onResetGoal,
+  isOnline,
 }: ConfigEditorProps) {
   const [collapsed, setCollapsed] = useState(true);
   const [showJson, setShowJson] = useState(false);
@@ -1067,6 +1172,8 @@ function ConfigEditor({
         const parsed = JSON.parse(draft) as Partial<AgentConfig>;
         setLocalConfig({
           device_name: parsed.device_name ?? config?.device_name ?? "",
+          env: parsed.env ?? config?.env ?? agentEnv ?? "",
+          timezone: parsed.timezone ?? config?.timezone ?? "",
           revision: parsed.revision ?? config?.revision ?? 0,
           updated_at: config?.updated_at ?? new Date().toISOString(),
           batteries: Array.isArray(parsed.batteries) ? parsed.batteries : [],
@@ -1131,6 +1238,7 @@ function ConfigEditor({
       enabled: true,
       power_limit: 0,
       soc_limit: 0,
+      run_once: false,
     };
     handleConfigChange({
       ...localConfig,
@@ -1176,7 +1284,7 @@ function ConfigEditor({
               {!showJson ? (
                 <div className="config-forms">
                   <div className="config-section">
-                    <h4>Device Name</h4>
+                    <h4>Device Settings</h4>
                     <div className="config-form-grid">
                       <div className="form-field">
                         <label htmlFor="device-name">Device Name</label>
@@ -1191,6 +1299,43 @@ function ConfigEditor({
                           disabled={saving}
                           placeholder="My Battery Controller"
                         />
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="env">Logging Level (env)</label>
+                        <select
+                          id="env"
+                          value={localConfig?.env ?? agentEnv ?? ""}
+                          onChange={(e) => {
+                            if (!localConfig) return;
+                            handleConfigChange({ ...localConfig, env: e.target.value });
+                          }}
+                          disabled={saving}
+                        >
+                          <option value="">Select...</option>
+                          <option value="local">local</option>
+                          <option value="dev">dev</option>
+                          <option value="prod">prod</option>
+                        </select>
+                        <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
+                          Controls logging level: local (debug to stdout), dev (debug to file), prod (info to file)
+                        </small>
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="timezone">Timezone</label>
+                        <input
+                          id="timezone"
+                          type="text"
+                          value={localConfig?.timezone ?? ""}
+                          onChange={(e) => {
+                            if (!localConfig) return;
+                            handleConfigChange({ ...localConfig, timezone: e.target.value });
+                          }}
+                          disabled={saving}
+                          placeholder="UTC"
+                        />
+                        <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
+                          IANA timezone name (e.g., "America/New_York", "Europe/London", "UTC"). Used for schedule time parsing.
+                        </small>
                       </div>
                     </div>
                   </div>
@@ -1248,6 +1393,9 @@ function ConfigEditor({
                             onChange={(s) => handleScheduleChange(index, s)}
                             onRemove={() => handleScheduleRemove(index)}
                             disabled={saving}
+                            goalReachedAt={schedule.name ? scheduleGoalReached?.[schedule.name] : undefined}
+                            onResetGoal={schedule.name && onResetGoal ? () => onResetGoal(schedule.name!) : undefined}
+                            isOnline={isOnline}
                           />
                         ))}
                       </div>
@@ -1315,15 +1463,27 @@ function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryCon
     <div className="config-item config-item-battery">
       <div className="config-item-header">
         <h5>{battery.name || "Unnamed Battery"}</h5>
-        <button
-          type="button"
-          className="button-icon"
-          onClick={onRemove}
-          disabled={disabled}
-          title="Remove battery"
-        >
-          ×
-        </button>
+        <div className="config-item-header-actions">
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={battery.enabled}
+              onChange={(e) => onChange({ ...battery, enabled: e.target.checked })}
+              disabled={disabled}
+            />
+            <span className="switch-slider"></span>
+            <span className="switch-label">Enabled</span>
+          </label>
+          <button
+            type="button"
+            className="button-icon"
+            onClick={onRemove}
+            disabled={disabled}
+            title="Remove battery"
+          >
+            ×
+          </button>
+        </div>
       </div>
       <div className="config-form-grid">
         <div className="form-field">
@@ -1374,16 +1534,38 @@ function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryCon
             step="1"
           />
         </div>
-        <div className="form-field form-field-checkbox">
-          <label>
-            <input
-              type="checkbox"
-              checked={battery.enabled}
-              onChange={(e) => onChange({ ...battery, enabled: e.target.checked })}
-              disabled={disabled}
-            />
-            <span>Enabled</span>
-          </label>
+        <div className="form-field">
+          <label htmlFor={`battery-power-${battery.name || 'new'}`}>Power Limit (W)</label>
+          <input
+            id={`battery-power-${battery.name || 'new'}`}
+            type="number"
+            value={battery.power_limit ?? 0}
+            onChange={(e) => onChange({ ...battery, power_limit: Number(e.target.value) || undefined })}
+            disabled={disabled}
+            min="0"
+            step="1"
+            placeholder="Default power limit"
+          />
+          <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
+            Used when no schedule is active
+          </small>
+        </div>
+        <div className="form-field">
+          <label htmlFor={`battery-soc-${battery.name || 'new'}`}>SoC Limit (%)</label>
+          <input
+            id={`battery-soc-${battery.name || 'new'}`}
+            type="number"
+            value={battery.soc_limit ?? 0}
+            onChange={(e) => onChange({ ...battery, soc_limit: Number(e.target.value) || undefined })}
+            disabled={disabled}
+            min="0"
+            max="100"
+            step="0.1"
+            placeholder="Default SoC limit"
+          />
+          <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
+            Used when no schedule is active
+          </small>
         </div>
       </div>
     </div>
@@ -1396,9 +1578,26 @@ interface ScheduleConfigFormProps {
   onChange: (schedule: ScheduleConfig) => void;
   onRemove: () => void;
   disabled?: boolean;
+  goalReachedAt?: string;
+  onResetGoal?: () => void;
+  isOnline?: boolean;
 }
 
-function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabled }: ScheduleConfigFormProps) {
+function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabled, goalReachedAt, onResetGoal, isOnline }: ScheduleConfigFormProps) {
+  const formatGoalReachedTime = (isoTime: string): string => {
+    try {
+      const date = new Date(isoTime);
+      return date.toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return isoTime;
+    }
+  };
+
   return (
     <div className="config-item config-item-schedule">
       <div className="config-item-header">
@@ -1410,15 +1609,75 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
             </span>
           )}
         </h5>
-        <button
-          type="button"
-          className="button-icon"
-          onClick={onRemove}
-          disabled={disabled}
-          title="Remove schedule"
-        >
-          ×
-        </button>
+        <div className="config-item-header-actions">
+          {schedule.run_once && goalReachedAt && (
+            <span
+              className="badge"
+              style={{
+                borderColor: "#22c55e",
+                color: "#22c55e",
+                fontSize: "0.75rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem"
+              }}
+              title={`Goal reached at ${goalReachedAt}`}
+            >
+              ✓ Goal reached {formatGoalReachedTime(goalReachedAt)}
+              {onResetGoal && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onResetGoal();
+                  }}
+                  disabled={!isOnline}
+                  title={isOnline ? "Reset goal to allow schedule to run again today" : "Agent offline - cannot reset goal"}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: isOnline ? "#f59e0b" : "#64748b",
+                    cursor: isOnline ? "pointer" : "not-allowed",
+                    padding: "0 0.25rem",
+                    fontSize: "0.8rem",
+                    fontWeight: "bold",
+                  }}
+                >
+                  ↺ Reset
+                </button>
+              )}
+            </span>
+          )}
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={schedule.enabled}
+              onChange={(e) => onChange({ ...schedule, enabled: e.target.checked })}
+              disabled={disabled}
+            />
+            <span className="switch-slider"></span>
+            <span className="switch-label">Enabled</span>
+          </label>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={schedule.run_once ?? false}
+              onChange={(e) => onChange({ ...schedule, run_once: e.target.checked })}
+              disabled={disabled}
+            />
+            <span className="switch-slider"></span>
+            <span className="switch-label">Run Once</span>
+          </label>
+          <button
+            type="button"
+            className="button-icon"
+            onClick={onRemove}
+            disabled={disabled}
+            title="Remove schedule"
+          >
+            ×
+          </button>
+        </div>
       </div>
       <div className="config-form-grid">
         <div className="form-field">
@@ -1511,17 +1770,6 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
             step="0.1"
           />
         </div>
-        <div className="form-field form-field-checkbox">
-          <label>
-            <input
-              type="checkbox"
-              checked={schedule.enabled}
-              onChange={(e) => onChange({ ...schedule, enabled: e.target.checked })}
-              disabled={disabled}
-            />
-            <span>Enabled</span>
-          </label>
-        </div>
       </div>
     </div>
   );
@@ -1541,6 +1789,14 @@ function Metric({ label, value }: MetricProps) {
   );
 }
 
+interface StatusMessagePreviewProps {
+  lastStatusMessage: string;
+  showStatusMessage: boolean;
+  onToggleStatusMessage: () => void;
+  statusMessageFrozen: boolean;
+  onToggleStatusMessageFrozen: () => void;
+}
+
 interface LogViewerProps {
   agentId?: string;
   isOpen: boolean;
@@ -1554,6 +1810,88 @@ interface LogViewerProps {
   onStreamChange: (stream: string) => void;
   onLinesChange: (lines: number) => void;
   disabled: boolean;
+}
+
+function StatusMessagePreview({
+  lastStatusMessage,
+  showStatusMessage,
+  onToggleStatusMessage,
+  statusMessageFrozen,
+  onToggleStatusMessageFrozen,
+}: StatusMessagePreviewProps) {
+  return (
+    <section className="config-panel">
+      <div 
+        className="config-panel-header"
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+      >
+        <div 
+          onClick={onToggleStatusMessage}
+          style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.5rem", flex: 1 }}
+        >
+          <h3 style={{ margin: 0 }}>Last Status Message</h3>
+          {statusMessageFrozen && (
+            <span className="badge" style={{ borderColor: "#fbbf24", color: "#fbbf24", fontSize: "0.75rem" }}>
+              Frozen
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <button
+            type="button"
+            className="button-small"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleStatusMessageFrozen();
+            }}
+            title={statusMessageFrozen ? "Unfreeze updates" : "Freeze updates"}
+            style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem" }}
+          >
+            {statusMessageFrozen ? "▶ Resume" : "⏸ Freeze"}
+          </button>
+          <span 
+            className="config-toggle"
+            onClick={onToggleStatusMessage}
+            style={{ cursor: "pointer" }}
+          >
+            {showStatusMessage ? "▼" : "▶"}
+          </span>
+        </div>
+      </div>
+      {showStatusMessage && (
+        <div
+          style={{
+            backgroundColor: "#0a0e1a",
+            border: "1px solid rgba(148, 163, 184, 0.2)",
+            borderRadius: "0.5rem",
+            padding: "1rem",
+            maxHeight: "400px",
+            overflow: "auto",
+            fontFamily: "Monaco, 'Courier New', monospace",
+            fontSize: "0.875rem",
+            lineHeight: "1.5",
+            color: "#e2e8f0",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            marginTop: "0.5rem",
+          }}
+        >
+          {lastStatusMessage ? (
+            (() => {
+              try {
+                const parsed = JSON.parse(lastStatusMessage);
+                return JSON.stringify(parsed, null, 2);
+              } catch {
+                return lastStatusMessage;
+              }
+            })()
+          ) : (
+            "No status messages received yet"
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function LogViewer({
@@ -1596,63 +1934,101 @@ function LogViewer({
     <section className="config-panel">
       <div
         className="config-panel-header"
-        onClick={onToggle}
-        style={{ cursor: "pointer" }}
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}
       >
-        <h3>Agent Logs</h3>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span className="config-toggle">{isOpen ? "▼" : "▶"}</span>
-        </div>
+        <h3 
+          onClick={onToggle}
+          style={{ cursor: "pointer", margin: 0, flex: "0 0 auto" }}
+        >
+          Agent Logs
+        </h3>
+        {isOpen && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flex: "1 1 auto", justifyContent: "flex-end" }}>
+            <select
+              id="log-stream"
+              value={stream}
+              onChange={(e) => {
+                e.stopPropagation();
+                onStreamChange(e.target.value);
+              }}
+              disabled={disabled || loading}
+              style={{ 
+                height: "36px", 
+                padding: "0.5rem 0.75rem", 
+                fontSize: "0.9rem",
+                minWidth: "140px"
+              }}
+            >
+              <option value="agent">Agent Logs</option>
+              <option value="updater">Autoupdater Logs</option>
+            </select>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLinesChange(500);
+                }}
+                disabled={disabled || loading}
+                className={lines === 500 ? "primary" : ""}
+                style={{ 
+                  height: "36px", 
+                  padding: "0.5rem 1rem", 
+                  fontSize: "0.9rem",
+                  minWidth: "60px"
+                }}
+              >
+                500
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLinesChange(1000);
+                }}
+                disabled={disabled || loading}
+                className={lines === 1000 ? "primary" : ""}
+                style={{ 
+                  height: "36px", 
+                  padding: "0.5rem 1rem", 
+                  fontSize: "0.9rem",
+                  minWidth: "60px"
+                }}
+              >
+                1000
+              </button>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRefresh();
+              }}
+              disabled={disabled || loading}
+              className="primary"
+              style={{ 
+                height: "36px", 
+                padding: "0.5rem 1rem", 
+                fontSize: "0.9rem",
+                minWidth: "90px"
+              }}
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
+        )}
+        <span 
+          className="config-toggle"
+          onClick={onToggle}
+          style={{ cursor: "pointer", flex: "0 0 auto" }}
+        >
+          {isOpen ? "▼" : "▶"}
+        </span>
       </div>
       {isOpen && (
         <>
           {disabled && (
-            <div className="offline-warning" style={{ marginBottom: "1rem" }}>
+            <div className="offline-warning" style={{ marginTop: "1rem", marginBottom: "1rem" }}>
               Agent is offline. Logs cannot be fetched.
             </div>
           )}
-          <div className="config-section">
-            <div className="config-form-grid" style={{ marginBottom: "1rem" }}>
-              <div className="form-field">
-                <label htmlFor="log-stream">Log Stream</label>
-                <select
-                  id="log-stream"
-                  value={stream}
-                  onChange={(e) => onStreamChange(e.target.value)}
-                  disabled={disabled || loading}
-                >
-                  <option value="agent">Agent Logs</option>
-                  <option value="updater">Autoupdater Logs</option>
-                </select>
-              </div>
-              <div className="form-field">
-                <label htmlFor="log-lines">Lines</label>
-                <input
-                  id="log-lines"
-                  type="number"
-                  value={lines}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10);
-                    if (!isNaN(val) && val > 0) {
-                      onLinesChange(Math.min(val, 10000));
-                    }
-                  }}
-                  disabled={disabled || loading}
-                  min="1"
-                  max="10000"
-                />
-              </div>
-              <div className="form-field" style={{ display: "flex", alignItems: "flex-end" }}>
-                <button
-                  onClick={onRefresh}
-                  disabled={disabled || loading}
-                  className="primary"
-                >
-                  {loading ? "Loading..." : "Refresh"}
-                </button>
-              </div>
-            </div>
-          </div>
           {error && <div className="config-error">{error}</div>}
           {loading && logs === "" ? (
             <div className="config-loading">

@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	agentMessageHello     = "agent.hello"
-	agentMessageTelemetry = "agent.telemetry"
-	agentMessageHeartbeat = "agent.heartbeat"
-	agentMessageCommand   = "agent.command"
-	agentMessageConfig    = "agent.config"
+	agentMessageHello       = "agent.hello"
+	agentMessageTelemetry   = "agent.telemetry"
+	agentMessageHeartbeat   = "agent.heartbeat"
+	agentMessageCommand     = "agent.command"
+	agentMessageConfig      = "agent.config"
 	agentMessageLogResponse = "agent.log.response"
 
 	serverMessageConfigPush = "server.config.push"
@@ -35,8 +35,9 @@ type agentConnection struct {
 	send chan interface{}
 	done chan struct{}
 
-	mu        sync.RWMutex
-	telemetry map[string]TelemetrySnapshot
+	mu                  sync.RWMutex
+	telemetry           map[string]TelemetrySnapshot
+	scheduleGoalReached map[string]time.Time
 
 	logRequestsMu sync.RWMutex
 	logRequests   map[string]chan AgentLogResponse
@@ -104,7 +105,10 @@ func (a *agentConnection) handshake() error {
 		return fmt.Errorf("missing agent id")
 	}
 
-	a.conn.SetReadDeadline(time.Time{})
+	err = a.conn.SetReadDeadline(time.Time{})
+	if err != nil {
+		return err
+	}
 
 	a.info = hello.Agent
 	a.id = hello.Agent.ID
@@ -177,6 +181,7 @@ func (a *agentConnection) handleMessage(message []byte) {
 			a.log().With(slog.Any("error", err)).Warn("decode config sync")
 			return
 		}
+		a.updateScheduleGoalReached(cfg.Config.ScheduleGoalReached)
 		a.s.onAgentConfigSync(a.id, cfg)
 	case agentMessageLogResponse:
 		var logResp AgentLogResponse
@@ -202,6 +207,13 @@ func (a *agentConnection) updateTelemetry(msg AgentTelemetry) {
 func (a *agentConnection) updateHeartbeat(msg AgentHeartbeat) {
 	a.mu.Lock()
 	a.lastSeen = msg.Timestamp
+	a.mu.Unlock()
+	a.s.onAgentSummary(a.id)
+}
+
+func (a *agentConnection) updateScheduleGoalReached(goalReached map[string]time.Time) {
+	a.mu.Lock()
+	a.scheduleGoalReached = goalReached
 	a.mu.Unlock()
 	a.s.onAgentSummary(a.id)
 }
@@ -233,10 +245,19 @@ func (a *agentConnection) summary() AgentSummary {
 		telemetry[k] = v
 	}
 
+	var goalReached map[string]time.Time
+	if len(a.scheduleGoalReached) > 0 {
+		goalReached = make(map[string]time.Time, len(a.scheduleGoalReached))
+		for k, v := range a.scheduleGoalReached {
+			goalReached[k] = v
+		}
+	}
+
 	return AgentSummary{
-		Agent:     a.info,
-		LastSeen:  a.lastSeen,
-		Telemetry: telemetry,
+		Agent:               a.info,
+		LastSeen:            a.lastSeen,
+		Telemetry:           telemetry,
+		ScheduleGoalReached: goalReached,
 	}
 }
 
@@ -259,18 +280,18 @@ func (a *agentConnection) sendCommand(req CommandRequest) error {
 
 func (a *agentConnection) requestLogs(req LogRequest, timeout time.Duration) (AgentLogResponse, error) {
 	requestID := fmt.Sprintf("%s-logs-%d", a.id, time.Now().UnixNano())
-	
+
 	ch := make(chan AgentLogResponse, 1)
 	a.logRequestsMu.Lock()
 	a.logRequests[requestID] = ch
 	a.logRequestsMu.Unlock()
 
 	payload := struct {
-		Type      string     `json:"type"`
-		RequestID string     `json:"request_id"`
-		Lines     int        `json:"lines,omitempty"`
-		Stream    string     `json:"stream,omitempty"`
-		SentAt    time.Time  `json:"sent_at"`
+		Type      string    `json:"type"`
+		RequestID string    `json:"request_id"`
+		Lines     int       `json:"lines,omitempty"`
+		Stream    string    `json:"stream,omitempty"`
+		SentAt    time.Time `json:"sent_at"`
 	}{
 		Type:      serverMessageLogRequest,
 		RequestID: requestID,

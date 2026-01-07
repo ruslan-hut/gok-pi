@@ -2,6 +2,7 @@
 device_name: My Battery Controller
 device_id: ""
 env: local
+timezone: UTC
 metrics:
   enabled: false
   bind: 0.0.0.0
@@ -19,16 +20,22 @@ batteries:
     token: auth-token1
     enabled: true
     capacity_limit: 10000
+    power_limit: 1000  # Default power limit in W (used when no schedule is active)
+    soc_limit: 50      # Default SoC limit in % (used when no schedule is active)
   - name: battery2
     url: https://example.battery2/api
     token: auth-token2
     enabled: false
     capacity_limit: 5000
+    power_limit: 500
+    soc_limit: 40
   - name: battery3
     url: https://example.battery3/api
     token: auth-token3
     enabled: true
     capacity_limit: 5000
+    power_limit: 750
+    soc_limit: 60
 schedules:
   - name: Evening Discharge 1
     type: discharge

@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
 	"gopkg.in/yaml.v3"
@@ -17,6 +18,7 @@ type Config struct {
 	DeviceName      string                 `yaml:"device_name" env-default:""`
 	DeviceID        string                 `yaml:"device_id" env-default:""`
 	Env             string                 `yaml:"env" env-default:"local" env-required:"true"`
+	Timezone        string                 `yaml:"timezone" env-default:"UTC"`
 	Metrics         MetricsServer          `yaml:"metrics"`
 	RemoteControl   RemoteControl          `yaml:"remote_control"`
 	Batteries       []entity.BatteryConfig `yaml:"batteries"`
@@ -46,6 +48,8 @@ var instance *Config
 var instancePath string
 var once sync.Once
 var mu sync.RWMutex
+var goalStateChangedCallback func()
+var goalStateCallbackMu sync.RWMutex
 
 func MustLoad(path string) *Config {
 	var err error
@@ -102,18 +106,91 @@ func UpdateBatteriesAndSchedules(batteries []entity.BatteryConfig, schedules []e
 	}
 }
 
-// UpdateFromRemoteConfig updates the config instance with all fields from a remote configuration.
-// This includes device_name, batteries, and schedules. This is thread-safe.
-func UpdateFromRemoteConfig(deviceName string, batteries []entity.BatteryConfig, schedules []entity.Schedule) {
-	mu.Lock()
-	defer mu.Unlock()
-	if instance != nil {
-		if deviceName != "" {
-			instance.DeviceName = deviceName
-		}
-		instance.Batteries = batteries
-		instance.Schedules = schedules
+// SetGoalStateChangedCallback sets a callback that is invoked when goal state changes.
+// This allows the agent to push updated config snapshots to the server.
+func SetGoalStateChangedCallback(callback func()) {
+	goalStateCallbackMu.Lock()
+	goalStateChangedCallback = callback
+	goalStateCallbackMu.Unlock()
+}
+
+func notifyGoalStateChanged() {
+	goalStateCallbackMu.RLock()
+	cb := goalStateChangedCallback
+	goalStateCallbackMu.RUnlock()
+	if cb != nil {
+		cb()
 	}
+}
+
+// GetSchedules returns a copy of the current schedules.
+// This is thread-safe and can be used to get schedule data for publishing.
+func GetSchedules() []entity.Schedule {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return nil
+	}
+	out := make([]entity.Schedule, len(instance.Schedules))
+	copy(out, instance.Schedules)
+	return out
+}
+
+// GetBatteries returns a copy of the current battery configs.
+// This is thread-safe and can be used to get battery data for publishing.
+func GetBatteries() []entity.BatteryConfig {
+	mu.RLock()
+	defer mu.RUnlock()
+	if instance == nil {
+		return nil
+	}
+	out := make([]entity.BatteryConfig, len(instance.Batteries))
+	copy(out, instance.Batteries)
+	return out
+}
+
+// UpdateFromRemoteConfig updates the config instance with all fields from a remote configuration.
+// This includes device_name, env, timezone, batteries, and schedules. This is thread-safe.
+// Preserves GoalReachedTime for schedules that still exist with run_once enabled.
+func UpdateFromRemoteConfig(deviceName string, env string, timezone string, batteries []entity.BatteryConfig, schedules []entity.Schedule) {
+	mu.Lock()
+	if instance == nil {
+		mu.Unlock()
+		return
+	}
+
+	// Build map of old schedules to preserve goal state
+	oldScheduleMap := make(map[string]entity.Schedule)
+	for _, s := range instance.Schedules {
+		oldScheduleMap[s.Name] = s
+	}
+
+	// Preserve GoalReachedTime for existing schedules, clear if run_once was disabled
+	for i := range schedules {
+		if oldSchedule, exists := oldScheduleMap[schedules[i].Name]; exists {
+			if oldSchedule.GoalReachedTime != nil {
+				if schedules[i].RunOnce {
+					// Preserve goal state if run_once is still enabled
+					schedules[i].GoalReachedTime = oldSchedule.GoalReachedTime
+				}
+				// If run_once was disabled, GoalReachedTime remains nil (cleared)
+			}
+		}
+	}
+
+	if deviceName != "" {
+		instance.DeviceName = deviceName
+	}
+	if env != "" {
+		instance.Env = env
+	}
+	if timezone != "" {
+		instance.Timezone = timezone
+	}
+	instance.Batteries = batteries
+	instance.Schedules = schedules
+
+	mu.Unlock()
 }
 
 // Save persists the current config instance to the YAML file it was loaded from.
@@ -160,4 +237,49 @@ func Save() error {
 	}
 
 	return nil
+}
+
+// UpdateScheduleGoalReached updates the goal reached time for a schedule and persists to config file.
+// The goal state is stored directly in the Schedule.GoalReachedTime field.
+func UpdateScheduleGoalReached(scheduleName string, reachedAt time.Time) error {
+	mu.Lock()
+	if instance == nil {
+		mu.Unlock()
+		return fmt.Errorf("config not loaded")
+	}
+	for i := range instance.Schedules {
+		if instance.Schedules[i].Name == scheduleName {
+			instance.Schedules[i].GoalReachedTime = &reachedAt
+			break
+		}
+	}
+	mu.Unlock()
+
+	// Notify that goal state changed so agent can push updated config to server
+	notifyGoalStateChanged()
+
+	// Save outside the lock to avoid holding it during I/O
+	return Save()
+}
+
+// ClearScheduleGoalReached clears the goal reached state for a schedule and persists to config file.
+func ClearScheduleGoalReached(scheduleName string) error {
+	mu.Lock()
+	if instance == nil {
+		mu.Unlock()
+		return fmt.Errorf("config not loaded")
+	}
+	for i := range instance.Schedules {
+		if instance.Schedules[i].Name == scheduleName {
+			instance.Schedules[i].GoalReachedTime = nil
+			break
+		}
+	}
+	mu.Unlock()
+
+	// Notify that goal state changed so agent can push updated config to server
+	notifyGoalStateChanged()
+
+	// Save outside the lock to avoid holding it during I/O
+	return Save()
 }

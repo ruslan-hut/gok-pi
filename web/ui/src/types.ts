@@ -26,6 +26,7 @@ export interface AgentSummary {
   agent: AgentDescriptor;
   last_seen: string;
   telemetry: Record<string, TelemetrySnapshot>;
+  schedule_goal_reached?: Record<string, string>;
   connected?: boolean;
 }
 
@@ -35,6 +36,8 @@ export interface BatteryConfig {
   token: string;
   enabled: boolean;
   capacity_limit: number;
+  power_limit?: number;  // Default power limit in W (used when no schedule is active)
+  soc_limit?: number;    // Default SoC limit in % (used when no schedule is active)
 }
 
 export interface ScheduleConfig {
@@ -46,10 +49,13 @@ export interface ScheduleConfig {
   enabled: boolean;
   power_limit: number;
   soc_limit: number;
+  run_once?: boolean;
 }
 
 export interface AgentConfig {
   device_name?: string;
+  env?: string;
+  timezone?: string;
   revision: number;
   updated_at: string;
   batteries: BatteryConfig[];

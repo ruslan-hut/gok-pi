@@ -215,12 +215,54 @@ h5 {
   gap: 0.75rem;
 }
 
+.battery-card.manual-mode {
+  background: rgba(45, 55, 50, 0.95);
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+.battery-card.service-mode {
+  background: rgba(55, 45, 45, 0.95);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
 .card h2 {
   margin: 0;
   font-size: 1.1rem;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+}
+
+.battery-card-header {
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.2s ease;
+}
+
+.battery-card-header:hover {
+  opacity: 0.8;
+}
+
+.battery-card-title {
+  flex: 1;
+}
+
+.battery-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.battery-card-toggle {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  transition: transform 0.2s ease, color 0.2s ease;
+  margin-left: 0.25rem;
+}
+
+.battery-card-header:hover .battery-card-toggle {
+  color: #38bdf8;
 }
 
 .metrics {
@@ -254,6 +296,16 @@ h5 {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  margin-top: 0.5rem;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.3s ease, opacity 0.3s ease, margin-top 0.3s ease;
+}
+
+.battery-card.expanded .controls {
+  max-height: 2000px;
+  opacity: 1;
   margin-top: 0.5rem;
 }
 
@@ -401,6 +453,12 @@ h5 {
   font-weight: 600;
 }
 
+.config-item-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .config-form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -425,9 +483,11 @@ h5 {
 .form-field input[type="number"],
 .form-field input[type="time"],
 .form-field select {
-  padding: 0.6rem 0.75rem;
-  font-size: 0.95rem;
-  min-height: 44px;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.9rem;
+  height: 32px;
+  min-height: 32px;
+  box-sizing: border-box;
 }
 
 .form-field input[type="checkbox"] {
@@ -443,6 +503,68 @@ h5 {
   gap: 0.5rem;
   cursor: pointer;
   flex-direction: row;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  background-color: rgba(148, 163, 184, 0.3);
+  border-radius: 24px;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  background-color: #e2e8f0;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+
+.switch input[type="checkbox"]:checked + .switch-slider {
+  background-color: #38bdf8;
+}
+
+.switch input[type="checkbox"]:checked + .switch-slider::before {
+  transform: translateX(20px);
+}
+
+.switch input[type="checkbox"]:disabled + .switch-slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch input[type="checkbox"]:disabled ~ .switch-label {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch-label {
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  font-weight: 500;
 }
 
 .config-empty {
@@ -945,28 +1067,12 @@ button.primary {
     gap: 0.5rem;
   }
 
-  .battery-card {
-    cursor: pointer;
-    transition: transform 0.2s ease;
-  }
-
   .battery-card:active {
     transform: scale(0.98);
   }
 
   .battery-card .controls {
-    max-height: 0;
-    overflow: hidden;
-    opacity: 0;
-    transition: max-height 0.3s ease, opacity 0.3s ease, margin-top 0.3s ease;
-    margin-top: 0;
     gap: 0.75rem;
-  }
-
-  .battery-card.expanded .controls {
-    max-height: 1000px;
-    opacity: 1;
-    margin-top: 0.5rem;
   }
 
   .control-group {

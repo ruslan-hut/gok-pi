@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 )
 
 const (
@@ -138,9 +138,17 @@ func (c *Client) ConfigUpdates() <-chan ConfigUpdate {
 }
 
 func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedules []entity.Schedule) {
+	// Extract goal reached times from schedules
+	goalReached := make(map[string]time.Time)
+	for _, s := range schedules {
+		if s.GoalReachedTime != nil {
+			goalReached[s.Name] = *s.GoalReachedTime
+		}
+	}
 	snapshot := configSnapshot{
-		Batteries: cloneBatteryConfigs(batteries),
-		Schedules: cloneSchedules(schedules),
+		Batteries:           cloneBatteryConfigs(batteries),
+		Schedules:           cloneSchedules(schedules),
+		ScheduleGoalReached: goalReached,
 	}
 	c.initialConfigMu.Lock()
 	c.initialConfig = &snapshot
@@ -226,13 +234,20 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 	headers.Set(headerAgentID, c.agent.ID)
 	headers.Set(headerAgentEnv, c.agent.Env)
 
-	conn, _, err := websocket.Dial(dialCtx, c.cfg.ServerURL, &websocket.DialOptions{
+	conn, resp, err := websocket.Dial(dialCtx, c.cfg.ServerURL, &websocket.DialOptions{
 		HTTPHeader: headers,
 	})
+	if resp != nil && resp.Body != nil {
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+	}
 	if err != nil {
 		return fmt.Errorf("dial websocket: %w", err)
 	}
-	defer conn.Close(websocket.StatusInternalError, "internal error")
+	defer func(conn *websocket.Conn, code websocket.StatusCode, reason string) {
+		_ = conn.Close(code, reason)
+	}(conn, websocket.StatusInternalError, "internal error")
 
 	if err := c.sendHello(ctx, conn); err != nil {
 		return err
@@ -526,7 +541,9 @@ func (c *Client) readLogs(stream string, lines int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("open log file: %w", err)
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		_ = file.Close()
+	}(file)
 
 	var allLines []string
 	scanner := bufio.NewScanner(file)
@@ -547,6 +564,8 @@ func (c *Client) readLogs(stream string, lines int) (string, error) {
 
 type AgentConfig struct {
 	DeviceName string                 `json:"device_name,omitempty"`
+	Env        string                 `json:"env,omitempty"`
+	Timezone   string                 `json:"timezone,omitempty"`
 	Revision   int                    `json:"revision"`
 	UpdatedAt  time.Time              `json:"updated_at"`
 	Batteries  []entity.BatteryConfig `json:"batteries"`
@@ -560,13 +579,15 @@ type ConfigUpdate struct {
 }
 
 type configSnapshot struct {
-	Batteries []entity.BatteryConfig
-	Schedules []entity.Schedule
+	Batteries           []entity.BatteryConfig
+	Schedules           []entity.Schedule
+	ScheduleGoalReached map[string]time.Time
 }
 
 type configPayload struct {
-	Batteries []entity.BatteryConfig `json:"batteries"`
-	Schedules []entity.Schedule      `json:"schedules"`
+	Batteries           []entity.BatteryConfig `json:"batteries"`
+	Schedules           []entity.Schedule      `json:"schedules"`
+	ScheduleGoalReached map[string]time.Time   `json:"schedule_goal_reached,omitempty"`
 }
 
 func cloneBatteryConfigs(in []entity.BatteryConfig) []entity.BatteryConfig {

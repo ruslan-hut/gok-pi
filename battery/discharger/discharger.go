@@ -28,6 +28,7 @@ const (
 	CommandSetLimits      CommandType = "set_limits"
 	CommandForceMode      CommandType = "force_mode"
 	CommandUpdateConfig   CommandType = "update_config"
+	CommandResetGoal      CommandType = "reset_goal"
 )
 
 type OperatingMode string
@@ -38,11 +39,12 @@ const (
 )
 
 type ControlCommand struct {
-	Type   CommandType
-	Power  int
-	Limits *CommandLimits
-	Mode   OperatingMode
-	Config *ConfigUpdate
+	Type         CommandType
+	Power        int
+	Limits       *CommandLimits
+	Mode         OperatingMode
+	Config       *ConfigUpdate
+	ScheduleName string // Used for CommandResetGoal
 }
 
 type CommandLimits struct {
@@ -54,41 +56,66 @@ type ConfigUpdate struct {
 	Schedules  []entity.Schedule
 	PowerLimit *int
 	SocLimit   *int
+	Timezone   *string
 }
 
 var ErrCommandQueueFull = errors.New("discharger command queue full")
 
 type Discharge struct {
-	name             string
-	schedules        []entity.Schedule
-	capacityLimit    float64 // Capacity limit in Wh calculated based on the SoC limit
-	powerLimit       int
-	socLimit         float64
-	readyToDischarge bool
-	isDischarging    bool
-	soc              float64 // State of Charge from last status
-	capacity         float64 // Remaining capacity in Wh from last status
-	stopTime         time.Time
-	rate             int // Discharge rate in Wh/h calculated based on the remaining capacity and time
-	client           Client
-	status           *entity.SystemStatus
-	log              *slog.Logger
-	commands         chan ControlCommand
-	manualOverride   bool
-	stop             chan struct{}
-	stopped          chan struct{}
-	stopOnce         sync.Once
+	name              string
+	schedules         []entity.Schedule
+	capacityLimit     float64 // Capacity limit in Wh calculated based on the SoC limit
+	powerLimit        int     // Current power limit (from schedule if active, otherwise from battery config)
+	socLimit          float64 // Current SoC limit (from schedule if active, otherwise from battery config)
+	batteryPowerLimit int     // Default power limit from battery config
+	batterySocLimit   float64 // Default SoC limit from battery config
+	readyToDischarge  bool
+	isDischarging     bool
+	soc               float64 // State of Charge from last status
+	capacity          float64 // Remaining capacity in Wh from last status
+	stopTime          time.Time
+	rate              int // Discharge rate in Wh/h calculated based on the remaining capacity and time
+	client            Client
+	status            *entity.SystemStatus
+	log               *slog.Logger
+	commands          chan ControlCommand
+	manualOverride    bool
+	timezone          *time.Location                // Timezone for schedule time parsing
+	updateGoalReached func(string, time.Time) error // Callback to persist goal reached state
+	clearGoalReached  func(string) error            // Callback to clear goal reached state
+	stop              chan struct{}
+	stopped           chan struct{}
+	stopOnce          sync.Once
+	firstStatusPoll   bool // True until first successful status poll
 }
 
 func New(name string, client Client, log *slog.Logger) (*Discharge, error) {
 	return &Discharge{
-		name:     name,
-		client:   client,
-		log:      log.With(sl.Module("battery.discharge")),
-		commands: make(chan ControlCommand, 16),
-		stop:     make(chan struct{}),
-		stopped:  make(chan struct{}),
+		name:            name,
+		client:          client,
+		log:             log.With(sl.Module("battery.discharge")),
+		commands:        make(chan ControlCommand, 16),
+		timezone:        time.UTC, // Default to UTC
+		stop:            make(chan struct{}),
+		stopped:         make(chan struct{}),
+		firstStatusPoll: true,
 	}, nil
+}
+
+// SetGoalCallbacks sets the callbacks for persisting and clearing goal reached state.
+// Goal state is now stored directly in Schedule.GoalReachedTime.
+func (d *Discharge) SetGoalCallbacks(updateFn func(string, time.Time) error, clearFn func(string) error) {
+	d.updateGoalReached = updateFn
+	d.clearGoalReached = clearFn
+}
+
+func (d *Discharge) SetTimezone(timezone string) error {
+	loc, err := timer.LoadLocation(timezone)
+	if err != nil {
+		return fmt.Errorf("invalid timezone %q: %w", timezone, err)
+	}
+	d.timezone = loc
+	return nil
 }
 
 func (d *Discharge) SetCapacityLimit(_ int) {
@@ -98,6 +125,22 @@ func (d *Discharge) SetCapacityLimit(_ int) {
 func (d *Discharge) SetLimits(powerLimit, socLimit int) {
 	d.powerLimit = powerLimit
 	d.socLimit = float64(socLimit)
+	// Store as battery defaults if not already set
+	if d.batteryPowerLimit == 0 && d.batterySocLimit == 0 {
+		d.batteryPowerLimit = powerLimit
+		d.batterySocLimit = float64(socLimit)
+	}
+}
+
+// SetBatteryDefaults sets the default limits from battery config (used when no schedule is active)
+func (d *Discharge) SetBatteryDefaults(powerLimit, socLimit int) {
+	d.batteryPowerLimit = powerLimit
+	d.batterySocLimit = float64(socLimit)
+	// If no schedule is active, also update current limits
+	if !d.readyToDischarge {
+		d.powerLimit = powerLimit
+		d.socLimit = float64(socLimit)
+	}
 }
 
 func (d *Discharge) AddSchedule(schedule entity.Schedule) {
@@ -134,6 +177,12 @@ func (d *Discharge) Run() error {
 			observers.UpdateStatus(d.name, "Connected")
 			d.observeStatus(status)
 
+			// Sync internal state with battery on first successful status poll
+			if d.firstStatusPoll {
+				d.syncStateFromBattery(status)
+				d.firstStatusPoll = false
+			}
+
 			if len(d.schedules) == 0 {
 				if !d.manualOverride {
 					continue
@@ -166,15 +215,15 @@ func (d *Discharge) stopCondition() bool {
 
 // isTimeToDischarge determines whether the current time falls within the specified discharge time window.
 func (d *Discharge) isTimeToDischarge(start, stop string) bool {
-	now := time.Now()
+	now := time.Now().In(d.timezone)
 
 	// Calculate the start and stop times for today
-	startTime, err := timer.ParseTime(start)
+	startTime, err := timer.ParseTimeInLocation(start, d.timezone)
 	if err != nil {
 		d.log.With(sl.Err(err)).Error("parsing start time")
 		return false
 	}
-	stopTime, err := timer.ParseTime(stop)
+	stopTime, err := timer.ParseTimeInLocation(stop, d.timezone)
 	if err != nil {
 		d.log.With(sl.Err(err)).Error("parsing stop time")
 		return false
@@ -199,19 +248,123 @@ func (d *Discharge) isTimeToDischarge(start, stop string) bool {
 
 // checkTime determines whether the current time falls within the specified discharge time window.
 func (d *Discharge) checkTime() {
+	now := time.Now().In(d.timezone)
 
-	for _, schedule := range d.schedules {
+	for i := range d.schedules {
+		schedule := &d.schedules[i]
 		if schedule.Enabled && (schedule.Type == "" || schedule.Type == "discharge") {
 			if d.isTimeToDischarge(schedule.StartTime, schedule.StopTime) {
-				d.SetLimits(schedule.PowerLimit, schedule.SocLimit)
+				// Check run_once logic: if enabled and goal was reached, check if stop_time has passed
+				if schedule.RunOnce && schedule.GoalReachedTime != nil {
+					goalTime := *schedule.GoalReachedTime
+					// Parse stop time to check if it has passed
+					stopTime, err := timer.ParseTimeInLocation(schedule.StopTime, d.timezone)
+					if err == nil {
+						// Handle schedules that span midnight
+						goalDay := goalTime.In(d.timezone)
+						stopTimeOnGoalDay := time.Date(goalDay.Year(), goalDay.Month(), goalDay.Day(),
+							stopTime.Hour(), stopTime.Minute(), stopTime.Second(), 0, d.timezone)
+
+						// If stop time is before start time, it spans midnight
+						startTime, _ := timer.ParseTimeInLocation(schedule.StartTime, d.timezone)
+						if startTime.After(stopTime) {
+							stopTimeOnGoalDay = stopTimeOnGoalDay.Add(24 * time.Hour)
+						}
+
+						// If stop_time has passed since goal was reached, clear the goal state
+						if now.After(stopTimeOnGoalDay) {
+							schedule.GoalReachedTime = nil
+							if d.clearGoalReached != nil {
+								if err := d.clearGoalReached(schedule.Name); err != nil {
+									d.log.With(sl.Err(err)).Warn("failed to clear goal reached state")
+								}
+							}
+						} else {
+							// Goal was reached and stop_time hasn't passed yet, skip this schedule
+							d.log.With(
+								slog.String("schedule", schedule.Name),
+								slog.Time("goal_reached_at", goalTime),
+							).Info("schedule has run_once enabled and goal was already reached, skipping until stop_time passes")
+							continue
+						}
+					}
+				}
+
+				oldRate := d.rate
+				// Schedule is active: use schedule limits (they take precedence over battery limits)
+				d.powerLimit = schedule.PowerLimit
+				d.socLimit = float64(schedule.SocLimit)
 				d.calculateRate()
-				d.readyToDischarge = true
+
+				// Check conditions before setting readyToDischarge:
+				// 1. SOC must be above the limit (we have capacity to discharge)
+				// 2. Power limit must be valid (> 0)
+				// 3. Rate must be valid (> 0)
+				canStart := true
+				if d.status == nil {
+					canStart = false
+					d.log.Debug("cannot start discharge: no battery status available")
+				} else if d.soc <= d.socLimit {
+					canStart = false
+					d.log.With(
+						slog.Float64("usoc", d.soc),
+						slog.Float64("soc_limit", d.socLimit),
+					).Info("schedule is active but battery already at or below SoC limit, not ready to discharge")
+				} else if d.powerLimit <= 0 {
+					canStart = false
+					d.log.With(
+						slog.Int("power_limit", d.powerLimit),
+					).Info("schedule is active but power limit is invalid, not ready to discharge")
+				} else if d.rate <= 0 {
+					canStart = false
+					d.log.With(
+						slog.Int("rate", d.rate),
+					).Info("schedule is active but calculated rate is invalid, not ready to discharge")
+				}
+
+				d.readyToDischarge = canStart
+
+				// If conditions don't match and battery is in manual mode discharging, stop and return to auto mode
+				// OperatingMode "1" = manual, "2" = auto
+				if !canStart && d.status != nil && d.status.OperatingMode == "1" && (d.isDischarging || d.status.BatteryDischarging) {
+					d.log.With(
+						slog.String("operating_mode", d.status.OperatingMode),
+						slog.Bool("is_discharging", d.isDischarging),
+						slog.Bool("battery_discharging", d.status.BatteryDischarging),
+					).Info("schedule conditions not met, stopping discharge and returning to auto mode")
+					if err := d.stopDischarge(); err != nil {
+						d.log.With(sl.Err(err)).Error("stopping discharge and returning to auto mode")
+					}
+				} else if !canStart && d.status != nil {
+					// Log why we're not stopping (for debugging)
+					d.log.With(
+						slog.String("operating_mode", d.status.OperatingMode),
+						slog.Bool("is_discharging", d.isDischarging),
+						slog.Bool("battery_discharging", d.status.BatteryDischarging),
+					).Debug("schedule conditions not met but not stopping discharge (checking why)")
+				}
+
+				// If already discharging and rate changed, update the ongoing discharge
+				if d.isDischarging && d.readyToDischarge && d.rate > 0 && d.rate != oldRate {
+					d.log.With(
+						slog.Int("old_rate", oldRate),
+						slog.Int("new_rate", d.rate),
+					).Info("updating ongoing discharge with new rate from schedule")
+					if err := d.client.StartDischarge(d.rate); err != nil {
+						d.log.With(sl.Err(err)).Error("updating discharge rate")
+					}
+				}
 				return
 			}
 		}
 	}
 
+	// No schedule is active: restore battery default limits
 	d.readyToDischarge = false
+	if d.batteryPowerLimit > 0 || d.batterySocLimit > 0 {
+		d.powerLimit = d.batteryPowerLimit
+		d.socLimit = d.batterySocLimit
+	}
 }
 
 // runDischarge manages the discharge process of the battery based on its current status and predefined limits.
@@ -231,16 +384,54 @@ func (d *Discharge) runDischarge() {
 	if d.isDischarging {
 		if d.stopCondition() {
 			log.Info("battery level reached the limit, stopping discharge")
+			// Find the active schedule to check if run_once is enabled
+			var activeSchedule *entity.Schedule
+			for i := range d.schedules {
+				s := &d.schedules[i]
+				if s.Enabled && (s.Type == "" || s.Type == "discharge") {
+					if d.isTimeToDischarge(s.StartTime, s.StopTime) {
+						activeSchedule = s
+						break
+					}
+				}
+			}
+
 			err := d.stopDischarge()
 			if err != nil {
 				d.log.With(sl.Err(err)).Error("stopping discharge")
 				return
+			}
+
+			// If run_once is enabled for the active schedule, record goal reached
+			if activeSchedule != nil && activeSchedule.RunOnce {
+				goalTime := time.Now()
+				activeSchedule.GoalReachedTime = &goalTime
+				if d.updateGoalReached != nil {
+					if err := d.updateGoalReached(activeSchedule.Name, goalTime); err != nil {
+						d.log.With(sl.Err(err)).Warn("failed to persist goal reached state")
+					} else {
+						d.log.With(
+							slog.String("schedule", activeSchedule.Name),
+							slog.Time("goal_reached_at", goalTime),
+						).Info("recorded goal reached for run_once schedule")
+					}
+				}
 			}
 		}
 		return
 	}
 
 	if d.rate == 0 && !d.isDischarging {
+		return
+	}
+
+	// Don't start discharging if USOC is already at or below the SoC limit
+	// Discharge continues while USOC > SoC limit, stops when USOC <= SoC limit
+	if d.soc <= d.socLimit {
+		log.With(
+			slog.Float64("usoc", d.soc),
+			slog.Float64("soc_limit", d.socLimit),
+		).Info("battery already at or below SoC limit, not starting discharge")
 		return
 	}
 
@@ -263,8 +454,11 @@ func (d *Discharge) runDischarge() {
 // stopDischarge stops the current discharge activity if it is ongoing.
 // Returns an error if the operation fails at any point.
 func (d *Discharge) stopDischarge() error {
-	if d.isDischarging {
+	// Check both internal state and actual battery status to handle cases where
+	// internal state is out of sync with actual battery state
+	shouldStop := d.isDischarging || (d.status != nil && d.status.BatteryDischarging)
 
+	if shouldStop {
 		err := d.client.StopDischarge()
 		if err != nil {
 			return err
@@ -375,20 +569,106 @@ func (d *Discharge) processControlCommand(cmd ControlCommand) error {
 		if cmd.Config == nil {
 			return fmt.Errorf("missing config payload")
 		}
+
+		// Build map of old schedules to preserve goal state
+		oldScheduleMap := make(map[string]entity.Schedule)
+		for _, s := range d.schedules {
+			oldScheduleMap[s.Name] = s
+		}
+
 		d.schedules = cloneSchedules(cmd.Config.Schedules)
+
+		// Log if manual override is being cleared
+		if d.manualOverride {
+			log.Info("config update received, clearing manual override mode")
+		}
 		d.manualOverride = false
 
+		// Preserve GoalReachedTime for existing schedules, clear if run_once was disabled
+		for i := range d.schedules {
+			if oldSchedule, exists := oldScheduleMap[d.schedules[i].Name]; exists {
+				if oldSchedule.GoalReachedTime != nil {
+					if d.schedules[i].RunOnce {
+						// Preserve goal state if run_once is still enabled
+						d.schedules[i].GoalReachedTime = oldSchedule.GoalReachedTime
+					} else if d.clearGoalReached != nil {
+						// run_once was disabled, clear persisted goal state
+						if err := d.clearGoalReached(d.schedules[i].Name); err != nil {
+							log.With(sl.Err(err)).Warn("failed to clear goal reached state")
+						}
+					}
+				}
+			}
+		}
+
+		// Update timezone if provided
+		if cmd.Config.Timezone != nil {
+			if err := d.SetTimezone(*cmd.Config.Timezone); err != nil {
+				log.With(sl.Err(err)).Warn("failed to update timezone")
+			} else {
+				log.With(slog.String("timezone", *cmd.Config.Timezone)).Info("updated timezone")
+			}
+		}
+
+		// Update battery default limits if provided
 		if cmd.Config.PowerLimit != nil {
-			d.powerLimit = *cmd.Config.PowerLimit
-			log = log.With(slog.Int("power_limit", d.powerLimit))
+			d.batteryPowerLimit = *cmd.Config.PowerLimit
+			log = log.With(slog.Int("battery_power_limit", d.batteryPowerLimit))
 		}
 		if cmd.Config.SocLimit != nil {
-			d.socLimit = float64(*cmd.Config.SocLimit)
-			log = log.With(slog.Int("soc_limit", *cmd.Config.SocLimit))
+			d.batterySocLimit = float64(*cmd.Config.SocLimit)
+			log = log.With(slog.Int("battery_soc_limit", *cmd.Config.SocLimit))
 		}
-		d.readyToDischarge = false
+
+		// Check if we should be discharging based on updated schedules
+		// This will apply schedule limits if active, or battery defaults if not
+		oldRate := d.rate
+		d.checkTime()
+
+		// If already discharging and rate changed, update the ongoing discharge
+		if d.isDischarging && d.readyToDischarge && d.rate > 0 && d.rate != oldRate {
+			log.With(
+				slog.Int("old_rate", oldRate),
+				slog.Int("new_rate", d.rate),
+			).Info("updating ongoing discharge with new rate from config update")
+			if err := d.client.StartDischarge(d.rate); err != nil {
+				return fmt.Errorf("updating discharge rate: %w", err)
+			}
+		}
+
 		log.Info("applied runtime config update")
 		return nil
+
+	case CommandResetGoal:
+		if cmd.ScheduleName == "" {
+			return fmt.Errorf("missing schedule name for reset_goal command")
+		}
+
+		// Find schedule and clear goal state
+		found := false
+		for i := range d.schedules {
+			if d.schedules[i].Name == cmd.ScheduleName {
+				found = true
+				if d.schedules[i].GoalReachedTime != nil {
+					d.schedules[i].GoalReachedTime = nil
+					if d.clearGoalReached != nil {
+						if err := d.clearGoalReached(cmd.ScheduleName); err != nil {
+							return fmt.Errorf("clearing goal state: %w", err)
+						}
+					}
+					log.With(slog.String("schedule", cmd.ScheduleName)).Info("goal state cleared via remote command")
+				}
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("schedule %q not found", cmd.ScheduleName)
+		}
+
+		// Re-evaluate schedule to potentially start it immediately
+		d.checkTime()
+		return nil
+
 	default:
 		return fmt.Errorf("unsupported command type: %s", cmd.Type)
 	}
@@ -411,23 +691,10 @@ func cloneSchedules(in []entity.Schedule) []entity.Schedule {
 	return out
 }
 
-// calculate discharge rate as Wh/h
+// calculateRate sets the discharge rate to the power limit from the schedule.
 func (d *Discharge) calculateRate() {
-	d.rate = 0
-	estimate := d.capacity - d.capacityLimit
-	if estimate <= 0 {
-		return
-	}
-	remainingTime := time.Until(d.stopTime)
-	if remainingTime <= 0 {
-		return
-	}
-	rate := estimate / remainingTime.Hours()
-	if rate <= float64(d.powerLimit) {
-		d.rate = int(rate)
-	} else {
-		d.rate = d.powerLimit
-	}
+	// Always use the power limit from the schedule as the rate
+	d.rate = d.powerLimit
 }
 
 // observeStatus updates various battery status metrics through external observers.
@@ -440,10 +707,6 @@ func (d *Discharge) observeStatus(status *entity.SystemStatus) {
 	d.status = status
 	d.soc = status.USOC
 	d.capacity = status.RemainingCapacityWh
-	d.capacityLimit = 0
-	if status.RSOC > 0 {
-		d.capacityLimit = d.socLimit * status.RemainingCapacityWh / status.RSOC
-	}
 
 	go func(status *entity.SystemStatus) {
 		observers.UpdateSoC(d.name, status.RSOC)
@@ -454,4 +717,30 @@ func (d *Discharge) observeStatus(status *entity.SystemStatus) {
 		observers.UpdateDischargeState(d.name, status.BatteryDischarging)
 		observers.UpdateOpMode(d.name, status.OperatingMode)
 	}(status)
+}
+
+// syncStateFromBattery synchronizes internal state with actual battery state on startup.
+// This handles cases where the battery is already in a discharge state when the agent starts.
+func (d *Discharge) syncStateFromBattery(status *entity.SystemStatus) {
+	if status == nil {
+		return
+	}
+
+	// If battery is in manual mode and discharging, sync our internal state
+	// OperatingMode "1" = manual, "2" = auto
+	if status.OperatingMode == "1" && status.BatteryDischarging {
+		if !d.isDischarging {
+			d.log.With(
+				slog.String("operating_mode", status.OperatingMode),
+				slog.Bool("battery_discharging", status.BatteryDischarging),
+			).Info("detected battery already discharging in manual mode on startup, syncing internal state")
+			d.isDischarging = true
+		}
+	}
+
+	// If battery is in auto mode but we think we're discharging (stale state), clear it
+	if status.OperatingMode == "2" && d.isDischarging && !d.manualOverride {
+		d.log.Info("battery in auto mode but internal state shows discharging, clearing stale state")
+		d.isDischarging = false
+	}
 }
