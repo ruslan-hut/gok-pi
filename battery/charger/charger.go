@@ -322,10 +322,26 @@ func (c *Charger) checkTime() {
 					c.log.Debug("cannot start charge: no battery status available")
 				} else if c.soc >= c.socLimit {
 					canStart = false
+					// For run_once schedules: if battery is already at/past goal, record goal as reached
+					if schedule.RunOnce {
+						goalTime := time.Now()
+						schedule.GoalReachedTime = &goalTime
+						if c.updateGoalReached != nil {
+							if err := c.updateGoalReached(schedule.Name, goalTime); err != nil {
+								c.log.With(sl.Err(err)).Warn("failed to persist goal reached state")
+							}
+						}
+						c.log.With(
+							slog.String("schedule", schedule.Name),
+							slog.Float64("usoc", c.soc),
+							slog.Float64("soc_limit", c.socLimit),
+						).Info("run_once schedule: battery already at goal, marking as reached")
+						continue
+					}
 					c.log.With(
 						slog.Float64("usoc", c.soc),
 						slog.Float64("soc_limit", c.socLimit),
-					).Info("schedule is active but battery already at or above SoC limit, not ready to charge")
+					).Debug("schedule is active but battery already at or above SoC limit, not ready to charge")
 				} else if c.powerLimit <= 0 {
 					canStart = false
 					c.log.With(

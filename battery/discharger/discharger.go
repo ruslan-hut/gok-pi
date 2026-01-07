@@ -321,10 +321,26 @@ func (d *Discharge) checkTime() {
 					d.log.Debug("cannot start discharge: no battery status available")
 				} else if d.soc <= d.socLimit {
 					canStart = false
+					// For run_once schedules: if battery is already at/past goal, record goal as reached
+					if schedule.RunOnce {
+						goalTime := time.Now()
+						schedule.GoalReachedTime = &goalTime
+						if d.updateGoalReached != nil {
+							if err := d.updateGoalReached(schedule.Name, goalTime); err != nil {
+								d.log.With(sl.Err(err)).Warn("failed to persist goal reached state")
+							}
+						}
+						d.log.With(
+							slog.String("schedule", schedule.Name),
+							slog.Float64("usoc", d.soc),
+							slog.Float64("soc_limit", d.socLimit),
+						).Info("run_once schedule: battery already at goal, marking as reached")
+						continue
+					}
 					d.log.With(
 						slog.Float64("usoc", d.soc),
 						slog.Float64("soc_limit", d.socLimit),
-					).Info("schedule is active but battery already at or below SoC limit, not ready to discharge")
+					).Debug("schedule is active but battery already at or below SoC limit, not ready to discharge")
 				} else if d.powerLimit <= 0 {
 					canStart = false
 					d.log.With(
