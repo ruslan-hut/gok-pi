@@ -773,29 +773,51 @@ export default function App() {
               </div>
             )}
             <section className="metrics-grid">
-              {batteries.map((battery) => (
-                <BatteryCard
-                  key={battery.name}
-                  snapshot={battery}
-                  batteryConfig={batteryConfigMap.get(battery.name)}
-                  commandState={commandState}
-                  onCommandStateChange={setCommandState}
-                  onCommand={handleCommand}
-                  isOnline={selectedAgentOnline}
-                  expanded={expandedBatteries.has(battery.name)}
-                  onToggle={() => {
-                    setExpandedBatteries((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(battery.name)) {
-                        next.delete(battery.name);
-                      } else {
-                        next.add(battery.name);
-                      }
-                      return next;
-                    });
-                  }}
-                />
-              ))}
+              {batteries.map((battery) => {
+                // Check if any schedule for this battery has goal reached today
+                const hasGoalReachedToday = (() => {
+                  if (!selectedAgent?.schedule_goal_reached || !agentConfig?.schedules) {
+                    return false;
+                  }
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const batterySchedules = agentConfig.schedules.filter(
+                    (s) => s.battery_name === battery.name && s.run_once
+                  );
+                  return batterySchedules.some((schedule) => {
+                    const goalTime = selectedAgent.schedule_goal_reached?.[schedule.name ?? ""];
+                    if (!goalTime) return false;
+                    const goalDate = new Date(goalTime);
+                    goalDate.setHours(0, 0, 0, 0);
+                    return goalDate.getTime() === today.getTime();
+                  });
+                })();
+
+                return (
+                  <BatteryCard
+                    key={battery.name}
+                    snapshot={battery}
+                    batteryConfig={batteryConfigMap.get(battery.name)}
+                    commandState={commandState}
+                    onCommandStateChange={setCommandState}
+                    onCommand={handleCommand}
+                    isOnline={selectedAgentOnline}
+                    expanded={expandedBatteries.has(battery.name)}
+                    onToggle={() => {
+                      setExpandedBatteries((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(battery.name)) {
+                          next.delete(battery.name);
+                        } else {
+                          next.add(battery.name);
+                        }
+                        return next;
+                      });
+                    }}
+                    hasGoalReachedToday={hasGoalReachedToday}
+                  />
+                );
+              })}
             </section>
             <ConfigEditor
               config={agentConfig}
@@ -866,6 +888,7 @@ interface BatteryCardProps {
   isOnline: boolean;
   expanded: boolean;
   onToggle: () => void;
+  hasGoalReachedToday?: boolean;
 }
 
 function BatteryCard({
@@ -877,6 +900,7 @@ function BatteryCard({
   isOnline,
   expanded,
   onToggle,
+  hasGoalReachedToday,
 }: BatteryCardProps) {
   const { name } = snapshot;
   const controlsDisabled = !isOnline;
@@ -947,6 +971,19 @@ function BatteryCard({
           >
             {snapshot.status || "Disconnected"}
           </span>
+          {hasGoalReachedToday && (
+            <span
+              className="goal-reached-icon"
+              title="Schedule goal reached today"
+              style={{
+                color: "#22c55e",
+                fontSize: "1rem",
+                marginLeft: "0.25rem",
+              }}
+            >
+              ✓
+            </span>
+          )}
           <span
             className={`badge ${
               snapshot.battery_discharging ? "online" : "offline"
