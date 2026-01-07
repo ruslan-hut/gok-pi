@@ -226,6 +226,31 @@ func (s *Server) handleAgentConfigGet(w http.ResponseWriter, _ *http.Request, ag
 		return
 	}
 
+	// Merge goal_reached_time from agent connection into schedule objects
+	s.agentsMu.RLock()
+	agent, agentConnected := s.agents[agentID]
+	var goalReached map[string]time.Time
+	if agentConnected {
+		agent.mu.RLock()
+		if len(agent.scheduleGoalReached) > 0 {
+			goalReached = make(map[string]time.Time, len(agent.scheduleGoalReached))
+			for k, v := range agent.scheduleGoalReached {
+				goalReached[k] = v
+			}
+		}
+		agent.mu.RUnlock()
+	}
+	s.agentsMu.RUnlock()
+
+	// Apply goal times to schedules
+	if len(goalReached) > 0 {
+		for i := range cfg.Schedules {
+			if t, ok := goalReached[cfg.Schedules[i].Name]; ok {
+				cfg.Schedules[i].GoalReachedTime = &t
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(cfg); err != nil {
 		s.log.With(slog.Any("error", err)).Error("encode agent config response")
@@ -487,7 +512,12 @@ func (s *Server) computeAgentHash(downloadPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("open agent binary: %w", err)
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			s.log.Warn("failed to close agent binary", slog.String("error", err.Error()))
+		}
+	}(file)
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {
@@ -576,7 +606,7 @@ func (s *Server) handleAgentLogs(w http.ResponseWriter, r *http.Request, agentID
 	}
 
 	req := LogRequest{
-		Lines:  500, // default to last 500 lines
+		Lines:  500,     // default to last 500 lines
 		Stream: "agent", // default to agent logs
 	}
 

@@ -50,6 +50,7 @@ export interface ScheduleConfig {
   power_limit: number;
   soc_limit: number;
   run_once?: boolean;
+  goal_reached_time?: string; // ISO timestamp, set when run_once goal is reached
 }
 
 export interface AgentConfig {
