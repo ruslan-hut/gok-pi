@@ -290,7 +290,7 @@ func (c *Charger) checkTime() {
 							slog.Time("goal_reached_at", goalTime),
 							slog.Bool("same_day", sameDay),
 							slog.Bool("period_ended", schedulePeriodEnded),
-						).Info("run_once schedule goal reached, skipping until next period")
+						).Debug("run_once schedule goal reached, skipping until next period")
 						continue
 					}
 
