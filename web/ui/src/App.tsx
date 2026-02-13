@@ -1520,15 +1520,6 @@ function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryCon
             <span className="switch-slider"></span>
             <span className="switch-label">Enabled</span>
           </label>
-          <button
-            type="button"
-            className="button-icon"
-            onClick={onRemove}
-            disabled={disabled}
-            title="Remove battery"
-          >
-            ×
-          </button>
         </div>
       </div>
       {collapsed && (
@@ -1618,6 +1609,14 @@ function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryCon
         <small className="form-help-text">
           Used when no schedule is active
         </small>
+        <button
+          type="button"
+          className="config-item-remove"
+          onClick={onRemove}
+          disabled={disabled}
+        >
+          🗑 Remove Battery
+        </button>
       </div>}
     </div>
   );
@@ -1688,15 +1687,6 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
             <span className="switch-slider"></span>
             <span className="switch-label">Run Once</span>
           </label>
-          <button
-            type="button"
-            className="button-icon"
-            onClick={onRemove}
-            disabled={disabled}
-            title="Remove schedule"
-          >
-            ×
-          </button>
         </div>
       </div>
       {schedule.run_once && goalReachedAt && (
@@ -1818,6 +1808,14 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
             />
           </div>
         </div>
+        <button
+          type="button"
+          className="config-item-remove"
+          onClick={onRemove}
+          disabled={disabled}
+        >
+          🗑 Remove Schedule
+        </button>
       </div>}
     </div>
   );
