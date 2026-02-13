@@ -1353,7 +1353,7 @@ function ConfigEditor({
                           <option value="dev">dev</option>
                           <option value="prod">prod</option>
                         </select>
-                        <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
+                        <small className="form-help-text">
                           Controls logging level: local (debug to stdout), dev (debug to file), prod (info to file)
                         </small>
                       </div>
@@ -1370,7 +1370,7 @@ function ConfigEditor({
                           disabled={saving}
                           placeholder="UTC"
                         />
-                        <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
+                        <small className="form-help-text">
                           IANA timezone name (e.g., "America/New_York", "Europe/London", "UTC"). Used for schedule time parsing.
                         </small>
                       </div>
@@ -1496,11 +1496,20 @@ interface BatteryConfigFormProps {
 }
 
 function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryConfigFormProps) {
+  const [collapsed, setCollapsed] = useState(true);
+
   return (
     <div className="config-item config-item-battery">
-      <div className="config-item-header">
-        <h5>{battery.name || "Unnamed Battery"}</h5>
-        <div className="config-item-header-actions">
+      <div
+        className={`config-item-header ${collapsed ? "config-item-header-collapsed" : ""}`}
+        onClick={() => setCollapsed(!collapsed)}
+        style={{ cursor: "pointer" }}
+      >
+        <h5>
+          {battery.name || "Unnamed Battery"}
+          <span className="config-item-toggle">{collapsed ? "▶" : "▼"}</span>
+        </h5>
+        <div className="config-item-header-actions" onClick={(e) => e.stopPropagation()}>
           <label className="switch">
             <input
               type="checkbox"
@@ -1522,7 +1531,13 @@ function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryCon
           </button>
         </div>
       </div>
-      <div className="config-form-grid">
+      {collapsed && (
+        <div className="config-item-summary">
+          {battery.url?.replace(/^https?:\/\//, '') || 'No URL'}
+          {' · '}{battery.capacity_limit > 0 ? `${battery.capacity_limit} Wh` : 'No limit'}
+        </div>
+      )}
+      {!collapsed && <div className="config-form-grid">
         <div className="form-field">
           <label htmlFor={`battery-name-${battery.name || 'new'}`}>Name *</label>
           <input
@@ -1571,40 +1586,39 @@ function BatteryConfigForm({ battery, onChange, onRemove, disabled }: BatteryCon
             step="1"
           />
         </div>
-        <div className="form-field">
-          <label htmlFor={`battery-power-${battery.name || 'new'}`}>Power Limit (W)</label>
-          <input
-            id={`battery-power-${battery.name || 'new'}`}
-            type="number"
-            value={battery.power_limit ?? 0}
-            onChange={(e) => onChange({ ...battery, power_limit: Number(e.target.value) || undefined })}
-            disabled={disabled}
-            min="0"
-            step="1"
-            placeholder="Default power limit"
-          />
-          <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
-            Used when no schedule is active
-          </small>
+        <div className="form-field-pair">
+          <div className="form-field">
+            <label htmlFor={`battery-power-${battery.name || 'new'}`}>Power Limit (W)</label>
+            <input
+              id={`battery-power-${battery.name || 'new'}`}
+              type="number"
+              value={battery.power_limit ?? 0}
+              onChange={(e) => onChange({ ...battery, power_limit: Number(e.target.value) || undefined })}
+              disabled={disabled}
+              min="0"
+              step="1"
+              placeholder="Default power limit"
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor={`battery-soc-${battery.name || 'new'}`}>SoC Limit (%)</label>
+            <input
+              id={`battery-soc-${battery.name || 'new'}`}
+              type="number"
+              value={battery.soc_limit ?? 0}
+              onChange={(e) => onChange({ ...battery, soc_limit: Number(e.target.value) || undefined })}
+              disabled={disabled}
+              min="0"
+              max="100"
+              step="0.1"
+              placeholder="Default SoC limit"
+            />
+          </div>
         </div>
-        <div className="form-field">
-          <label htmlFor={`battery-soc-${battery.name || 'new'}`}>SoC Limit (%)</label>
-          <input
-            id={`battery-soc-${battery.name || 'new'}`}
-            type="number"
-            value={battery.soc_limit ?? 0}
-            onChange={(e) => onChange({ ...battery, soc_limit: Number(e.target.value) || undefined })}
-            disabled={disabled}
-            min="0"
-            max="100"
-            step="0.1"
-            placeholder="Default SoC limit"
-          />
-          <small style={{ display: "block", marginTop: "0.25rem", color: "#94a3b8", fontSize: "0.875rem" }}>
-            Used when no schedule is active
-          </small>
-        </div>
-      </div>
+        <small className="form-help-text">
+          Used when no schedule is active
+        </small>
+      </div>}
     </div>
   );
 }
@@ -1621,6 +1635,8 @@ interface ScheduleConfigFormProps {
 }
 
 function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabled, goalReachedAt, onResetGoal, isOnline }: ScheduleConfigFormProps) {
+  const [collapsed, setCollapsed] = useState(true);
+
   const formatGoalReachedTime = (isoTime: string): string => {
     try {
       const date = new Date(isoTime);
@@ -1637,7 +1653,11 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
 
   return (
     <div className="config-item config-item-schedule">
-      <div className="config-item-header">
+      <div
+        className={`config-item-header ${collapsed ? "config-item-header-collapsed" : ""}`}
+        onClick={() => setCollapsed(!collapsed)}
+        style={{ cursor: "pointer" }}
+      >
         <h5>
           {schedule.name || schedule.battery_name || "Unnamed Schedule"}
           {schedule.type && (
@@ -1645,8 +1665,9 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
               {schedule.type === "charge" ? "Charge" : "Discharge"}
             </span>
           )}
+          <span className="config-item-toggle">{collapsed ? "▶" : "▼"}</span>
         </h5>
-        <div className="config-item-header-actions">
+        <div className="config-item-header-actions" onClick={(e) => e.stopPropagation()}>
           {schedule.run_once && goalReachedAt && (
             <span
               className="badge"
@@ -1716,7 +1737,12 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
           </button>
         </div>
       </div>
-      <div className="config-form-grid">
+      {collapsed && (
+        <div className="config-item-summary">
+          {schedule.start_time}–{schedule.stop_time} · {schedule.battery_name || 'No battery'} · {schedule.power_limit}W / {schedule.soc_limit}%
+        </div>
+      )}
+      {!collapsed && <div className="config-form-grid">
         <div className="form-field">
           <label htmlFor={`schedule-name-${schedule.battery_name || 'new'}`}>Schedule Name</label>
           <input
@@ -1758,56 +1784,60 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
             ))}
           </select>
         </div>
-        <div className="form-field">
-          <label htmlFor={`schedule-start-${schedule.battery_name || 'new'}`}>Start Time *</label>
-          <input
-            id={`schedule-start-${schedule.battery_name || 'new'}`}
-            type="time"
-            value={schedule.start_time}
-            onChange={(e) => onChange({ ...schedule, start_time: e.target.value })}
-            disabled={disabled}
-            required
-          />
+        <div className="form-field-pair">
+          <div className="form-field">
+            <label htmlFor={`schedule-start-${schedule.battery_name || 'new'}`}>Start Time *</label>
+            <input
+              id={`schedule-start-${schedule.battery_name || 'new'}`}
+              type="time"
+              value={schedule.start_time}
+              onChange={(e) => onChange({ ...schedule, start_time: e.target.value })}
+              disabled={disabled}
+              required
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor={`schedule-stop-${schedule.battery_name || 'new'}`}>Stop Time *</label>
+            <input
+              id={`schedule-stop-${schedule.battery_name || 'new'}`}
+              type="time"
+              value={schedule.stop_time}
+              onChange={(e) => onChange({ ...schedule, stop_time: e.target.value })}
+              disabled={disabled}
+              required
+            />
+          </div>
         </div>
-        <div className="form-field">
-          <label htmlFor={`schedule-stop-${schedule.battery_name || 'new'}`}>Stop Time *</label>
-          <input
-            id={`schedule-stop-${schedule.battery_name || 'new'}`}
-            type="time"
-            value={schedule.stop_time}
-            onChange={(e) => onChange({ ...schedule, stop_time: e.target.value })}
-            disabled={disabled}
-            required
-          />
+        <div className="form-field-pair">
+          <div className="form-field">
+            <label htmlFor={`schedule-power-${schedule.battery_name || 'new'}`}>Power Limit (W) *</label>
+            <input
+              id={`schedule-power-${schedule.battery_name || 'new'}`}
+              type="number"
+              value={schedule.power_limit}
+              onChange={(e) => onChange({ ...schedule, power_limit: Number(e.target.value) })}
+              disabled={disabled}
+              required
+              min="0"
+              step="1"
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor={`schedule-soc-${schedule.battery_name || 'new'}`}>SoC Limit (%) *</label>
+            <input
+              id={`schedule-soc-${schedule.battery_name || 'new'}`}
+              type="number"
+              value={schedule.soc_limit}
+              onChange={(e) => onChange({ ...schedule, soc_limit: Number(e.target.value) })}
+              disabled={disabled}
+              required
+              min="0"
+              max="100"
+              step="0.1"
+            />
+          </div>
         </div>
-        <div className="form-field">
-          <label htmlFor={`schedule-power-${schedule.battery_name || 'new'}`}>Power Limit (W) *</label>
-          <input
-            id={`schedule-power-${schedule.battery_name || 'new'}`}
-            type="number"
-            value={schedule.power_limit}
-            onChange={(e) => onChange({ ...schedule, power_limit: Number(e.target.value) })}
-            disabled={disabled}
-            required
-            min="0"
-            step="1"
-          />
-        </div>
-        <div className="form-field">
-          <label htmlFor={`schedule-soc-${schedule.battery_name || 'new'}`}>SoC Limit (%) *</label>
-          <input
-            id={`schedule-soc-${schedule.battery_name || 'new'}`}
-            type="number"
-            value={schedule.soc_limit}
-            onChange={(e) => onChange({ ...schedule, soc_limit: Number(e.target.value) })}
-            disabled={disabled}
-            required
-            min="0"
-            max="100"
-            step="0.1"
-          />
-        </div>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -1896,23 +1926,7 @@ function StatusMessagePreview({
         </div>
       </div>
       {showStatusMessage && (
-        <div
-          style={{
-            backgroundColor: "#0a0e1a",
-            border: "1px solid rgba(148, 163, 184, 0.2)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-            maxHeight: "400px",
-            overflow: "auto",
-            fontFamily: "Monaco, 'Courier New', monospace",
-            fontSize: "0.875rem",
-            lineHeight: "1.5",
-            color: "#e2e8f0",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            marginTop: "0.5rem",
-          }}
-        >
+        <div className="status-message-content">
           {lastStatusMessage ? (
             (() => {
               try {
@@ -1980,7 +1994,7 @@ function LogViewer({
           Agent Logs
         </h3>
         {isOpen && (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flex: "1 1 auto", justifyContent: "flex-end" }}>
+          <div className="log-viewer-controls">
             <select
               id="log-stream"
               value={stream}
@@ -1989,12 +2003,6 @@ function LogViewer({
                 onStreamChange(e.target.value);
               }}
               disabled={disabled || loading}
-              style={{ 
-                height: "36px", 
-                padding: "0.5rem 0.75rem", 
-                fontSize: "0.9rem",
-                minWidth: "140px"
-              }}
             >
               <option value="agent">Agent Logs</option>
               <option value="updater">Autoupdater Logs</option>
@@ -2007,12 +2015,6 @@ function LogViewer({
                 }}
                 disabled={disabled || loading}
                 className={lines === 500 ? "primary" : ""}
-                style={{ 
-                  height: "36px", 
-                  padding: "0.5rem 1rem", 
-                  fontSize: "0.9rem",
-                  minWidth: "60px"
-                }}
               >
                 500
               </button>
@@ -2023,12 +2025,6 @@ function LogViewer({
                 }}
                 disabled={disabled || loading}
                 className={lines === 1000 ? "primary" : ""}
-                style={{ 
-                  height: "36px", 
-                  padding: "0.5rem 1rem", 
-                  fontSize: "0.9rem",
-                  minWidth: "60px"
-                }}
               >
                 1000
               </button>
@@ -2040,12 +2036,6 @@ function LogViewer({
               }}
               disabled={disabled || loading}
               className="primary"
-              style={{ 
-                height: "36px", 
-                padding: "0.5rem 1rem", 
-                fontSize: "0.9rem",
-                minWidth: "90px"
-              }}
             >
               {loading ? "Loading..." : "Refresh"}
             </button>
@@ -2075,21 +2065,7 @@ function LogViewer({
           ) : (
             <div
               ref={logContainerRef}
-              className="log-viewer"
-              style={{
-                backgroundColor: "#0a0e1a",
-                border: "1px solid rgba(148, 163, 184, 0.2)",
-                borderRadius: "0.5rem",
-                padding: "1rem",
-                maxHeight: "600px",
-                overflow: "auto",
-                fontFamily: "Monaco, 'Courier New', monospace",
-                fontSize: "0.875rem",
-                lineHeight: "1.5",
-                color: "#e2e8f0",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
+              className="log-viewer-content"
             >
               {logs || "No logs available"}
             </div>
