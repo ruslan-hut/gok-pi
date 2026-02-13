@@ -1668,44 +1668,6 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
           <span className="config-item-toggle">{collapsed ? "▶" : "▼"}</span>
         </h5>
         <div className="config-item-header-actions" onClick={(e) => e.stopPropagation()}>
-          {schedule.run_once && goalReachedAt && (
-            <span
-              className="badge"
-              style={{
-                borderColor: "#22c55e",
-                color: "#22c55e",
-                fontSize: "0.75rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem"
-              }}
-              title={`Goal reached at ${goalReachedAt}`}
-            >
-              ✓ Goal reached {formatGoalReachedTime(goalReachedAt)}
-              {onResetGoal && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onResetGoal();
-                  }}
-                  disabled={!isOnline}
-                  title={isOnline ? "Reset goal to allow schedule to run again today" : "Agent offline - cannot reset goal"}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: isOnline ? "#f59e0b" : "#64748b",
-                    cursor: isOnline ? "pointer" : "not-allowed",
-                    padding: "0 0.25rem",
-                    fontSize: "0.8rem",
-                    fontWeight: "bold",
-                  }}
-                >
-                  ↺ Reset
-                </button>
-              )}
-            </span>
-          )}
           <label className="switch">
             <input
               type="checkbox"
@@ -1737,6 +1699,25 @@ function ScheduleConfigForm({ schedule, batteryNames, onChange, onRemove, disabl
           </button>
         </div>
       </div>
+      {schedule.run_once && goalReachedAt && (
+        <div
+          className="config-item-goal-badge"
+          title={`Goal reached at ${goalReachedAt}`}
+        >
+          <span className="goal-badge-text">✓ Goal reached {formatGoalReachedTime(goalReachedAt)}</span>
+          {onResetGoal && (
+            <button
+              type="button"
+              className="goal-reset-button"
+              onClick={onResetGoal}
+              disabled={!isOnline}
+              title={isOnline ? "Reset goal to allow schedule to run again today" : "Agent offline - cannot reset goal"}
+            >
+              ↺ Reset
+            </button>
+          )}
+        </div>
+      )}
       {collapsed && (
         <div className="config-item-summary">
           {schedule.start_time}–{schedule.stop_time} · {schedule.battery_name || 'No battery'} · {schedule.power_limit}W / {schedule.soc_limit}%
