@@ -3,6 +3,7 @@ import type { TabId } from "../../types";
 
 const tabs: { id: TabId; label: string }[] = [
   { id: "monitor", label: "Monitor" },
+  { id: "prices", label: "Prices" },
   { id: "configure", label: "Configure" },
   { id: "tools", label: "Tools" },
 ];

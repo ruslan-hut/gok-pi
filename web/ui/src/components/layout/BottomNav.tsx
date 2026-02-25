@@ -2,6 +2,7 @@ import type { TabId } from "../../types";
 
 const items: { id: TabId; label: string; icon: string }[] = [
   { id: "monitor", label: "Monitor", icon: "◉" },
+  { id: "prices", label: "Prices", icon: "⚡" },
   { id: "configure", label: "Config", icon: "⚙" },
   { id: "tools", label: "Tools", icon: "◧" },
 ];

@@ -75,25 +75,7 @@
   color: var(--color-text);
 }
 
-/* Quick actions — always visible */
-.quick-actions {
-  border-top: 1px solid var(--border-color-subtle);
-  padding-top: var(--space-md);
-}
-
-.quick-actions-row {
-  display: flex;
-  gap: var(--space-sm);
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.quick-actions-power {
-  width: 80px;
-  flex-shrink: 0;
-}
-
-/* Advanced controls — expandable */
+/* Controls — expandable */
 .controls {
   display: flex;
   flex-direction: column;
@@ -331,19 +313,6 @@
   }
 
   .control-actions .control-button {
-    width: 100%;
-  }
-
-  .quick-actions-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .quick-actions-power {
-    width: 100%;
-  }
-
-  .quick-actions-row .control-button {
     width: 100%;
   }
 

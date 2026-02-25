@@ -153,5 +153,5 @@ export interface CommandState {
   socLimit: number;
 }
 
-export type TabId = "monitor" | "configure" | "tools";
+export type TabId = "monitor" | "prices" | "configure" | "tools";
 

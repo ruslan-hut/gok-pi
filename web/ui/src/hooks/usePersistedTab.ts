@@ -6,7 +6,7 @@ const STORAGE_KEY = "gok-pi-tab";
 export function usePersistedTab(defaultTab: TabId = "monitor"): [TabId, (tab: TabId) => void] {
   const [tab, setTabState] = useState<TabId>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "monitor" || stored === "configure" || stored === "tools") {
+    if (stored === "monitor" || stored === "prices" || stored === "configure" || stored === "tools") {
       return stored;
     }
     return defaultTab;

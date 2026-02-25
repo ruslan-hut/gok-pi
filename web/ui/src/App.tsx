@@ -15,6 +15,7 @@ import { BottomNav } from "./components/layout/BottomNav";
 import { MonitorTab } from "./components/monitor/MonitorTab";
 import { ConfigTab } from "./components/config/ConfigTab";
 import { ToolsTab } from "./components/tools/ToolsTab";
+import PricesDashboard from "./components/prices/PricesDashboard";
 import { MessageBanner } from "./components/shared/MessageBanner";
 import type { TabId } from "./types";
 
@@ -275,6 +276,8 @@ function Dashboard({ onLogout }: DashboardProps) {
                   onCommand={handleCommand}
                 />
               )}
+
+              {tab === "prices" && <PricesDashboard variant="full" />}
 
               {tab === "configure" && (
                 <ConfigTab

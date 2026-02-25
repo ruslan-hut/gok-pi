@@ -1,9 +1,7 @@
 import { StatusMessagePreview } from "./StatusMessagePreview";
 import { LogViewer } from "./LogViewer";
-import PricesDashboard from "../prices/PricesDashboard";
 
 interface ToolsTabProps {
-  // Prices — always shown
   // Status message
   lastStatusMessage: string;
   showStatusMessage: boolean;
@@ -46,7 +44,6 @@ export function ToolsTab({
 }: ToolsTabProps) {
   return (
     <>
-      <PricesDashboard variant="full" />
       <StatusMessagePreview
         lastStatusMessage={lastStatusMessage}
         showStatusMessage={showStatusMessage}

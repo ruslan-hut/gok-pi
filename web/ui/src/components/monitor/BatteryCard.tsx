@@ -136,12 +136,13 @@ export function BatteryCard({
         />
       </div>
 
-      {/* Quick actions — always visible */}
-      <div className="quick-actions" onClick={(e) => e.stopPropagation()}>
-        <div className="quick-actions-row">
+      {/* All controls — expandable */}
+      <div className="controls" onClick={(e) => e.stopPropagation()}>
+        <div className="control-group">
+          <label className="control-label">Power (W)</label>
           <input
             type="number"
-            className="control-input quick-actions-power"
+            className="control-input"
             value={commandState.power}
             disabled={controlsDisabled}
             onChange={(e) =>
@@ -150,52 +151,66 @@ export function BatteryCard({
                 power: Number(e.target.value),
               })
             }
-            placeholder="W"
-            aria-label="Power (W)"
+            placeholder="Power"
           />
-          <button
-            className="control-button control-button-primary"
-            disabled={controlsDisabled}
-            onClick={() =>
-              onCommand("start_discharge", name, {
-                power: commandState.power,
-              })
-            }
-            title="Start Discharge"
-          >
-            <span className="control-button-icon">▶</span>
-            Discharge
-          </button>
-          <button
-            className="control-button control-button-primary"
-            disabled={controlsDisabled}
-            onClick={() =>
-              onCommand("start_charge", name, {
-                power: commandState.power,
-              })
-            }
-            title="Start Charge"
-          >
-            <span className="control-button-icon">▶</span>
-            Charge
-          </button>
-          <button
-            className="control-button"
-            disabled={controlsDisabled}
-            onClick={() => {
-              onCommand("stop_discharge", name);
-              onCommand("stop_charge", name);
-            }}
-            title="Stop"
-          >
-            <span className="control-button-icon">■</span>
-            Stop
-          </button>
         </div>
-      </div>
 
-      {/* Advanced controls — expandable */}
-      <div className="controls" onClick={(e) => e.stopPropagation()}>
+        <div className="control-group">
+          <label className="control-label">Discharge</label>
+          <div className="control-actions">
+            <button
+              className="control-button control-button-primary"
+              disabled={controlsDisabled}
+              onClick={() =>
+                onCommand("start_discharge", name, {
+                  power: commandState.power,
+                })
+              }
+              title="Start Discharge"
+            >
+              <span className="control-button-icon">▶</span>
+              Start
+            </button>
+            <button
+              className="control-button"
+              disabled={controlsDisabled}
+              onClick={() => onCommand("stop_discharge", name)}
+              title="Stop Discharge"
+            >
+              <span className="control-button-icon">■</span>
+              Stop
+            </button>
+          </div>
+        </div>
+
+        <div className="control-group">
+          <label className="control-label">Charge</label>
+          <div className="control-actions">
+            <button
+              className="control-button control-button-primary"
+              disabled={controlsDisabled}
+              onClick={() =>
+                onCommand("start_charge", name, {
+                  power: commandState.power,
+                })
+              }
+              title="Start Charge"
+            >
+              <span className="control-button-icon">▶</span>
+              Start
+            </button>
+            <button
+              className="control-button"
+              disabled={controlsDisabled}
+              onClick={() => onCommand("stop_charge", name)}
+              title="Stop Charge"
+            >
+              <span className="control-button-icon">■</span>
+              Stop
+            </button>
+          </div>
+        </div>
+
         {!hasConfigLimits && (
           <div className="control-group">
             <label className="control-label">Limits</label>

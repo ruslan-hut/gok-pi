@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { BatteryCard } from "./BatteryCard";
 import { SystemSummary } from "../layout/SystemSummary";
-import PricesDashboard from "../prices/PricesDashboard";
 import type {
   AgentConfig,
   AgentSummaryWithDeviceName,
@@ -89,7 +88,6 @@ export function MonitorTab({
           );
         })}
       </section>
-      <PricesDashboard variant="compact" />
     </>
   );
 }
