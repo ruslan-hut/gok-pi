@@ -9,6 +9,7 @@
 .sidebar {
   border-right: 1px solid var(--border-color);
   padding: var(--space-xl);
+  padding-top: calc(var(--space-xl) + env(safe-area-inset-top, 0px));
   background: var(--color-bg-sidebar);
 }
 
@@ -209,6 +210,7 @@
   min-height: 100vh;
   background-color: var(--color-bg);
   padding: var(--space-2xl);
+  padding-top: calc(var(--space-2xl) + env(safe-area-inset-top, 0px));
 }
 
 .login-card {
@@ -318,6 +320,7 @@
 
   .sidebar {
     padding: var(--space-lg) 1.25rem;
+    padding-top: calc(var(--space-lg) + env(safe-area-inset-top, 0px));
   }
 
   .sidebar-header {
