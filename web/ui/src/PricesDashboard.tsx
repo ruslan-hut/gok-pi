@@ -59,10 +59,13 @@ export default function PricesDashboard() {
           )}
           {state && (
             <>
-              <div className="config-meta">
-                Last updated:{" "}
-                {new Date(state.last_updated).toLocaleString()} | Next
-                update: {new Date(state.next_update).toLocaleString()}
+              <div className="prices-meta">
+                <span>
+                  Last updated: {new Date(state.last_updated).toLocaleString()}
+                </span>
+                <span>
+                  Next update: {new Date(state.next_update).toLocaleString()}
+                </span>
                 {loading && <span className="spinner-small" />}
               </div>
               {state.today && <DayPanel label="Today" data={state.today} />}

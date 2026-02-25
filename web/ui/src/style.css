@@ -1425,7 +1425,8 @@ button.primary {
 
 .prices-stats {
   display: flex;
-  gap: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
   align-items: baseline;
   font-size: 0.9rem;
   color: #94a3b8;
@@ -1445,6 +1446,7 @@ button.primary {
   width: 100%;
   max-width: 720px;
   height: auto;
+  min-height: 140px;
   background: rgba(15, 23, 42, 0.5);
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.15);
@@ -1496,5 +1498,44 @@ button.primary {
   color: #f87171;
   border: 1px solid rgba(248, 113, 113, 0.4);
   background: rgba(248, 113, 113, 0.1);
+}
+
+.prices-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+@media (max-width: 600px) {
+  .prices-stats {
+    gap: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .prices-stats strong {
+    font-size: 0.9rem;
+  }
+
+  .schedule-table table {
+    font-size: 0.8rem;
+  }
+
+  .schedule-table th,
+  .schedule-table td {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .schedule-badge {
+    font-size: 0.6rem;
+    padding: 0.1rem 0.35rem;
+  }
+
+  .prices-meta {
+    font-size: 0.75rem;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
 }
 
