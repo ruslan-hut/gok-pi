@@ -20,6 +20,8 @@ function formatConfigDraft(config: AgentConfig | null): string {
 interface ConfigTabProps {
   config: AgentConfig | null;
   agentEnv?: string;
+  agentId?: string;
+  agentVersion?: string;
   draft: string;
   loading: boolean;
   saving: boolean;
@@ -36,6 +38,8 @@ interface ConfigTabProps {
 export function ConfigTab({
   config,
   agentEnv,
+  agentId,
+  agentVersion,
   draft,
   loading,
   saving,
@@ -149,6 +153,16 @@ export function ConfigTab({
 
   return (
     <div className="config-tab">
+      {(agentId || agentVersion) && (
+        <div className="config-device-info">
+          {agentId && (
+            <span className="badge">Device ID: {agentId}</span>
+          )}
+          {agentVersion && (
+            <span className="badge">Version {agentVersion}</span>
+          )}
+        </div>
+      )}
       <p className="config-meta">
         {config
           ? `Last updated ${new Date(config.updated_at).toLocaleString()}`

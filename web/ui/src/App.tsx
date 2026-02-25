@@ -247,12 +247,6 @@ function Dashboard({ onLogout }: DashboardProps) {
                     agents.selectedAgent.last_seen,
                   ).toLocaleTimeString()}
                 </span>
-                <span className="badge">
-                  Device ID: {agents.selectedAgent.agent.id}
-                </span>
-                <span className="badge">
-                  Version {agents.selectedAgent.agent.version}
-                </span>
               </div>
             </header>
 
@@ -283,6 +277,8 @@ function Dashboard({ onLogout }: DashboardProps) {
                 <ConfigTab
                   config={configHook.agentConfig}
                   agentEnv={agents.selectedAgent?.agent.env}
+                  agentId={agents.selectedAgent?.agent.id}
+                  agentVersion={agents.selectedAgent?.agent.version}
                   draft={configHook.configDraft}
                   loading={configHook.configLoading}
                   saving={configHook.configSaving}

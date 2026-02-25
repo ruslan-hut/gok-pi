@@ -6,6 +6,12 @@
   gap: var(--space-md);
 }
 
+.config-device-info {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
 .config-panel {
   border: 1px solid var(--border-color-strong);
   border-radius: var(--radius-xl);
