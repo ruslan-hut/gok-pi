@@ -4,20 +4,11 @@ import type { DayData, PricesState, ScheduleWindow } from "../../types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-interface PricesDashboardProps {
-  variant?: "compact" | "full";
-}
-
-export default function PricesDashboard({
-  variant = "full",
-}: PricesDashboardProps) {
-  const [open, setOpen] = useState(variant === "compact");
+export default function PricesDashboard() {
   const [state, setState] = useState<PricesState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
-
-  const isCompact = variant === "compact";
 
   const load = useCallback(async () => {
     try {
@@ -35,86 +26,48 @@ export default function PricesDashboard({
   }, []);
 
   useEffect(() => {
-    if (!open) return;
     load();
     intervalRef.current = setInterval(load, POLL_INTERVAL_MS);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [open, load]);
-
-  // For compact variant, auto-open (no collapsible header)
-  if (isCompact) {
-    return (
-      <div className="prices-compact">
-        {loading && !state && (
-          <div className="config-loading">
-            <div className="spinner" />
-            <span>Loading prices...</span>
-          </div>
-        )}
-        {error && <div className="config-error">{error}</div>}
-        {state?.today && <DayPanel label="Today" data={state.today} />}
-        {!state?.today && !loading && (
-          <div className="config-empty">No price data available.</div>
-        )}
-      </div>
-    );
-  }
+  }, [load]);
 
   return (
-    <div className="config-panel">
-      <div
-        className="config-panel-header"
-        style={{ cursor: "pointer" }}
-        onClick={() => setOpen(!open)}
-      >
-        <h3>Electricity Prices</h3>
-        <span className="config-toggle">{open ? "▼" : "▶"}</span>
-      </div>
-      {open && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "1rem",
-          }}
-        >
-          {loading && !state && (
-            <div className="config-loading">
-              <div className="spinner" />
-              <span>Loading prices...</span>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      {loading && !state && (
+        <div className="config-loading">
+          <div className="spinner" />
+          <span>Loading prices...</span>
+        </div>
+      )}
+      {error && <div className="config-error">{error}</div>}
+      {state?.last_error && (
+        <div className="config-error">API error: {state.last_error}</div>
+      )}
+      {state && (
+        <>
+          <div className="prices-meta">
+            <span>
+              Last updated:{" "}
+              {new Date(state.last_updated).toLocaleString()}
+            </span>
+            <span>
+              Next update:{" "}
+              {new Date(state.next_update).toLocaleString()}
+            </span>
+            {loading && <span className="spinner-small" />}
+          </div>
+          {state.today && <DayPanel label="Today" data={state.today} />}
+          {state.tomorrow && (
+            <DayPanel label="Tomorrow" data={state.tomorrow} />
+          )}
+          {!state.today && !state.tomorrow && (
+            <div className="config-empty">
+              No price data available yet.
             </div>
           )}
-          {error && <div className="config-error">{error}</div>}
-          {state?.last_error && (
-            <div className="config-error">API error: {state.last_error}</div>
-          )}
-          {state && (
-            <>
-              <div className="prices-meta">
-                <span>
-                  Last updated:{" "}
-                  {new Date(state.last_updated).toLocaleString()}
-                </span>
-                <span>
-                  Next update:{" "}
-                  {new Date(state.next_update).toLocaleString()}
-                </span>
-                {loading && <span className="spinner-small" />}
-              </div>
-              {state.today && <DayPanel label="Today" data={state.today} />}
-              {state.tomorrow && (
-                <DayPanel label="Tomorrow" data={state.tomorrow} />
-              )}
-              {!state.today && !state.tomorrow && (
-                <div className="config-empty">
-                  No price data available yet.
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        </>
       )}
     </div>
   );

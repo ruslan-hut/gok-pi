@@ -277,7 +277,7 @@ function Dashboard({ onLogout }: DashboardProps) {
                 />
               )}
 
-              {tab === "prices" && <PricesDashboard variant="full" />}
+              {tab === "prices" && <PricesDashboard />}
 
               {tab === "configure" && (
                 <ConfigTab
