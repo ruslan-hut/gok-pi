@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentSummary } from "./types";
+import type { AgentConfig, AgentSummary, PricesState } from "./types";
 
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
 
@@ -193,5 +193,19 @@ export async function fetchAgentLogs(
     throw new Error(text || "Failed to fetch logs");
   }
   return await res.text();
+}
+
+export async function fetchPrices(): Promise<PricesState> {
+  const res = await fetch("/api/prices", {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      clearAuthToken();
+      throw new Error("Unauthorized. Please log in again.");
+    }
+    throw new Error(`Failed to load prices: ${res.statusText}`);
+  }
+  return (await res.json()) as PricesState;
 }
 

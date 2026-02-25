@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gok-pi/electricity/pricefetcher"
 
 	"github.com/gorilla/websocket"
 )
@@ -33,6 +36,7 @@ type Server struct {
 
 	configs *ConfigStore
 	auth    *authManager
+	prices  *pricefetcher.Fetcher
 }
 
 func New(cfg Config, log *slog.Logger) *Server {
@@ -56,16 +60,20 @@ func New(cfg Config, log *slog.Logger) *Server {
 		uiClient: make(map[*uiConnection]struct{}),
 		configs:  store,
 		auth:     newAuthManager(cfg.UIUsername, cfg.UIPassword, log),
+		prices:   pricefetcher.New(log, 5, 5),
 	}
 }
 
 func (s *Server) ListenAndServe(addr string) error {
+	go s.prices.Run(context.Background())
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/login", s.handleLogin)
 	mux.HandleFunc("/api/agent", s.handleAgentWS)
 	mux.HandleFunc("/api/ui", s.requireAuthWS(s.handleUIWS))
 	mux.HandleFunc("/api/agents", s.requireAuth(s.handleAgents))
 	mux.HandleFunc("/api/agents/", s.requireAuth(s.handleAgentRoutes))
+	mux.HandleFunc("/api/prices", s.requireAuth(s.handlePrices))
 
 	if s.cfg.UIStaticDir != "" {
 		fs := http.FileServer(http.Dir(s.cfg.UIStaticDir))
@@ -593,6 +601,20 @@ func (s *Server) versionFilename() string {
 		return "VERSION"
 	}
 	return name
+}
+
+func (s *Server) handlePrices(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	state := s.prices.GetState()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(state); err != nil {
+		s.log.With(slog.Any("error", err)).Error("encode prices response")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) handleAgentLogs(w http.ResponseWriter, r *http.Request, agentID string) {

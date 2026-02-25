@@ -99,3 +99,43 @@ export type DashboardMessage =
   | AgentRemovedMessage
   | ConfigUpdatedMessage;
 
+// Electricity prices types
+
+export interface HourlyPrice {
+  datetime: string;
+  hour: number;
+  price_eur_mwh: number;
+}
+
+export interface ScheduleWindow {
+  start_hour: number;
+  end_hour: number;
+  avg_price_eur_mwh: number;
+}
+
+export interface DaySchedule {
+  charge_windows: ScheduleWindow[] | null;
+  discharge_windows: ScheduleWindow[] | null;
+}
+
+export interface PriceStats {
+  min_price_eur_mwh: number;
+  max_price_eur_mwh: number;
+  avg_price_eur_mwh: number;
+}
+
+export interface DayData {
+  date: string;
+  prices: HourlyPrice[];
+  schedule: DaySchedule;
+  stats: PriceStats;
+}
+
+export interface PricesState {
+  today: DayData | null;
+  tomorrow: DayData | null;
+  last_updated: string;
+  last_error?: string;
+  next_update: string;
+}
+

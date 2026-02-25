@@ -11,6 +11,7 @@ import {
   clearAuthToken,
 } from "./api";
 import Login from "./Login";
+import PricesDashboard from "./PricesDashboard";
 import type {
   AgentConfig,
   AgentSummary,
@@ -741,6 +742,7 @@ export default function App() {
             </button>
           </div>
         )}
+        <PricesDashboard />
         {selectedAgent ? (
           <>
             <header>
