@@ -85,7 +85,7 @@ func (f *Fetcher) Run(ctx context.Context) {
 
 func (f *Fetcher) fetchAll(ctx context.Context) {
 	now := f.madridNow()
-	today := now.Truncate(24 * time.Hour)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	tomorrow := today.Add(24 * time.Hour)
 
 	var lastErr string

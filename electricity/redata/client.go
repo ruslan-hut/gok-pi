@@ -41,7 +41,7 @@ func (c *Client) FetchPrices(ctx context.Context, date time.Time) ([]HourlyPrice
 	endDate := date.Format("2006-01-02T23:59")
 
 	url := fmt.Sprintf(
-		"%s/en/datos/mercados/precios-mercados-tiempo-real?start_date=%s&end_date=%s&time_trunc=hour",
+		"%s/en/datos/mercados/precios-mercados-tiempo-real?start_date=%s&end_date=%s&time_trunc=hour&geo_limit=peninsular",
 		baseURL, startDate, endDate,
 	)
 
@@ -69,6 +69,12 @@ func (c *Client) FetchPrices(ctx context.Context, date time.Time) ([]HourlyPrice
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		c.log.Warn("REData API non-200 response",
+			slog.Int("status", resp.StatusCode),
+			slog.String("url", url),
+			slog.String("body", truncate(string(body), 500)),
+		)
+
 		var apiErr apiError
 		if json.Unmarshal(body, &apiErr) == nil && len(apiErr.Errors) > 0 {
 			detail := apiErr.Errors[0].Detail
@@ -125,4 +131,11 @@ func (c *Client) extractPVPC(resp apiResponse) ([]HourlyPrice, error) {
 	}
 
 	return nil, fmt.Errorf("%w: PVPC series (id %s) not found in response", ErrAPIError, pvpcSeriesID)
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
