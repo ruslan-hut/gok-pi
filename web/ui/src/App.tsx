@@ -224,44 +224,48 @@ function Dashboard({ onLogout }: DashboardProps) {
           onDismiss={() => agents.setMessage(undefined)}
         />
 
-        {agents.selectedAgent ? (
-          <>
-            <header>
-              <div className="agent-header">
-                <h2>
-                  {configHook.agentConfig?.device_name ||
-                    agents.selectedAgent.agent.hostname}
-                </h2>
-                <span
-                  className={`badge ${
-                    agents.selectedAgentOnline ? "online" : "offline"
-                  }`}
-                >
-                  {agents.selectedAgentOnline ? "Connected" : "Offline"}
-                </span>
-              </div>
-              <div className="status-bar">
-                <span>
-                  Last contact:{" "}
-                  {new Date(
-                    agents.selectedAgent.last_seen,
-                  ).toLocaleTimeString()}
-                </span>
-              </div>
-            </header>
+        {agents.selectedAgent && (
+          <header>
+            <div className="agent-header">
+              <h2>
+                {configHook.agentConfig?.device_name ||
+                  agents.selectedAgent.agent.hostname}
+              </h2>
+              <span
+                className={`badge ${
+                  agents.selectedAgentOnline ? "online" : "offline"
+                }`}
+              >
+                {agents.selectedAgentOnline ? "Connected" : "Offline"}
+              </span>
+            </div>
+            <div className="status-bar">
+              <span>
+                Last contact:{" "}
+                {new Date(
+                  agents.selectedAgent.last_seen,
+                ).toLocaleTimeString()}
+              </span>
+            </div>
+          </header>
+        )}
 
-            <TabBar
-              activeTab={tab}
-              onTabChange={handleTabChange}
-              configDirty={configHook.configDirty}
-            />
+        <TabBar
+          activeTab={tab}
+          onTabChange={handleTabChange}
+          configDirty={configHook.configDirty}
+        />
 
-            <div
-              id={`tabpanel-${tab}`}
-              role="tabpanel"
-              aria-labelledby={`tab-${tab}`}
-              className="tab-panel"
-            >
+        <div
+          id={`tabpanel-${tab}`}
+          role="tabpanel"
+          aria-labelledby={`tab-${tab}`}
+          className="tab-panel"
+        >
+          {tab === "prices" && <PricesDashboard />}
+
+          {agents.selectedAgent ? (
+            <>
               {tab === "monitor" && (
                 <MonitorTab
                   selectedAgent={agents.selectedAgent}
@@ -270,8 +274,6 @@ function Dashboard({ onLogout }: DashboardProps) {
                   onCommand={handleCommand}
                 />
               )}
-
-              {tab === "prices" && <PricesDashboard />}
 
               {tab === "configure" && (
                 <ConfigTab
@@ -333,18 +335,20 @@ function Dashboard({ onLogout }: DashboardProps) {
                   logsDisabled={!agents.selectedAgentOnline}
                 />
               )}
-            </div>
-          </>
-        ) : (
-          <div className="empty-state">
-            <h2>No agents connected</h2>
-            <p>
-              Once a gok-pi agent connects to the control server you will see
-              it listed here. Ensure the server URL and shared secret are set
-              in the agent configuration.
-            </p>
-          </div>
-        )}
+            </>
+          ) : (
+            tab !== "prices" && (
+              <div className="empty-state">
+                <h2>No agents connected</h2>
+                <p>
+                  Once a gok-pi agent connects to the control server you will
+                  see it listed here. Ensure the server URL and shared secret
+                  are set in the agent configuration.
+                </p>
+              </div>
+            )
+          )}
+        </div>
       </main>
 
       <BottomNav
