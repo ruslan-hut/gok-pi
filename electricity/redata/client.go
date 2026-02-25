@@ -37,8 +37,9 @@ func NewClient(log *slog.Logger) *Client {
 // FetchPrices fetches hourly PVPC prices for the given date.
 // Returns ErrNoData if prices are not yet published (e.g., tomorrow's prices before ~20:15 CET).
 func (c *Client) FetchPrices(ctx context.Context, date time.Time) ([]HourlyPrice, error) {
-	startDate := date.Format("2006-01-02T00:00")
-	endDate := date.Format("2006-01-02T23:59")
+	dateStr := date.Format("2006-01-02")
+	startDate := dateStr + "T00:00"
+	endDate := dateStr + "T23:59"
 
 	url := fmt.Sprintf(
 		"%s/en/datos/mercados/precios-mercados-tiempo-real?start_date=%s&end_date=%s&time_trunc=hour&geo_limit=peninsular",
