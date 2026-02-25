@@ -1,0 +1,358 @@
+/* monitor.css — battery card, system summary, metrics, quick actions */
+
+.metrics-grid {
+  display: grid;
+  gap: var(--space-lg);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.battery-card.manual-mode {
+  background: rgba(45, 55, 50, 0.95);
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+.battery-card.service-mode {
+  background: rgba(55, 45, 45, 0.95);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.battery-card-header {
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.2s ease;
+}
+
+.battery-card-header:hover {
+  opacity: 0.8;
+}
+
+.battery-card-title {
+  flex: 1;
+}
+
+.battery-card-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.battery-card-toggle {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  transition: transform 0.2s ease, color 0.2s ease;
+  margin-left: var(--space-xs);
+}
+
+.battery-card-header:hover .battery-card-toggle {
+  color: var(--color-primary);
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem var(--space-lg);
+  font-size: 0.95rem;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.metric span:first-child {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+
+.metric span:last-child {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Quick actions — always visible */
+.quick-actions {
+  border-top: 1px solid var(--border-color-subtle);
+  padding-top: var(--space-md);
+}
+
+.quick-actions-row {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.quick-actions-power {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+/* Advanced controls — expandable */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  margin-top: var(--space-sm);
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.3s ease, opacity 0.3s ease, margin-top 0.3s ease;
+}
+
+.battery-card.expanded .controls {
+  max-height: 2000px;
+  opacity: 1;
+  margin-top: var(--space-sm);
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.control-label {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.control-input {
+  height: 40px;
+  padding: 0 0.75rem;
+  font-size: 0.95rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color-input);
+  background: var(--color-bg-input);
+  color: inherit;
+  font-family: inherit;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.control-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--color-bg-input-focus);
+  box-shadow: 0 0 0 3px var(--color-primary-glow);
+}
+
+.control-input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.control-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.control-inputs-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-sm);
+}
+
+.control-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.control-input-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  margin: 0;
+}
+
+.control-inputs-row .control-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.control-button {
+  height: 40px;
+  padding: 0 var(--space-lg);
+  font-size: 0.95rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color-input);
+  background: var(--color-bg-input);
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  white-space: nowrap;
+}
+
+.control-button:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-hover);
+}
+
+.control-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  border-color: var(--border-color-subtle);
+  background: var(--color-bg-disabled);
+}
+
+.control-button:disabled:hover {
+  border-color: var(--border-color-subtle);
+  background: var(--color-bg-disabled);
+}
+
+.control-button.control-button-primary {
+  border-color: var(--color-primary);
+  background: var(--color-primary-bg);
+}
+
+.control-button.control-button-primary:hover:not(:disabled) {
+  background: rgba(14, 116, 144, 0.5);
+}
+
+.control-button.control-button-secondary {
+  width: 100%;
+}
+
+.control-button-icon {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+/* System Summary Strip */
+.system-summary {
+  display: flex;
+  gap: var(--space-xl);
+  flex-wrap: wrap;
+  padding: var(--space-md) var(--space-lg);
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.system-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.system-summary-label {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+
+.system-summary-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.system-summary-statuses {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.system-summary-status {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.system-summary-status.charging {
+  color: var(--color-success);
+}
+
+.system-summary-status.discharging {
+  color: var(--color-danger);
+}
+
+.system-summary-status.idle {
+  color: var(--color-text-muted);
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem var(--space-sm);
+  }
+
+  .metric span:last-child {
+    font-size: 0.95rem;
+  }
+
+  .battery-card:active {
+    transform: scale(0.98);
+  }
+
+  .battery-card .controls {
+    gap: var(--space-md);
+  }
+
+  .control-group {
+    gap: 0.4rem;
+  }
+
+  .control-input,
+  .control-button {
+    height: 44px;
+  }
+
+  .control-inputs-row {
+    grid-template-columns: 1fr;
+  }
+
+  .control-actions {
+    flex-direction: column;
+  }
+
+  .control-actions .control-button {
+    width: 100%;
+  }
+
+  .quick-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .quick-actions-power {
+    width: 100%;
+  }
+
+  .quick-actions-row .control-button {
+    width: 100%;
+  }
+
+  .system-summary {
+    gap: var(--space-md);
+    padding: var(--space-md);
+  }
+
+  .system-summary-item {
+    min-width: calc(50% - var(--space-md));
+  }
+}

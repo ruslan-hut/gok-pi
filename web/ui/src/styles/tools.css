@@ -1,0 +1,62 @@
+/* tools.css — log viewer, status message */
+
+.status-message-content {
+  background-color: #0a0e1a;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  max-height: 400px;
+  overflow: auto;
+  font-family: Monaco, "Courier New", monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: var(--space-sm);
+}
+
+.log-viewer-content {
+  background-color: #0a0e1a;
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  max-height: 600px;
+  overflow: auto;
+  font-family: Monaco, "Courier New", monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-viewer-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .status-message-content {
+    max-height: 250px;
+    padding: var(--space-md);
+    font-size: 0.8rem;
+  }
+
+  .log-viewer-content {
+    max-height: 350px;
+    padding: var(--space-md);
+    font-size: 0.8rem;
+  }
+
+  .log-viewer-controls {
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    width: 100%;
+    margin-top: var(--space-sm);
+  }
+}

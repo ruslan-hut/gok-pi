@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchPrices } from "./api";
-import type { DayData, PricesState, ScheduleWindow } from "./types";
+import { fetchPrices } from "../../api";
+import type { DayData, PricesState, ScheduleWindow } from "../../types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-export default function PricesDashboard() {
-  const [open, setOpen] = useState(false);
+interface PricesDashboardProps {
+  variant?: "compact" | "full";
+}
+
+export default function PricesDashboard({
+  variant = "full",
+}: PricesDashboardProps) {
+  const [open, setOpen] = useState(variant === "compact");
   const [state, setState] = useState<PricesState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
+
+  const isCompact = variant === "compact";
 
   const load = useCallback(async () => {
     try {
@@ -18,7 +26,9 @@ export default function PricesDashboard() {
       const data = await fetchPrices();
       setState(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch prices");
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch prices",
+      );
     } finally {
       setLoading(false);
     }
@@ -33,6 +43,25 @@ export default function PricesDashboard() {
     };
   }, [open, load]);
 
+  // For compact variant, auto-open (no collapsible header)
+  if (isCompact) {
+    return (
+      <div className="prices-compact">
+        {loading && !state && (
+          <div className="config-loading">
+            <div className="spinner" />
+            <span>Loading prices...</span>
+          </div>
+        )}
+        {error && <div className="config-error">{error}</div>}
+        {state?.today && <DayPanel label="Today" data={state.today} />}
+        {!state?.today && !loading && (
+          <div className="config-empty">No price data available.</div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="config-panel">
       <div
@@ -41,10 +70,16 @@ export default function PricesDashboard() {
         onClick={() => setOpen(!open)}
       >
         <h3>Electricity Prices</h3>
-        <span className="config-toggle">{open ? "collapse" : "expand"}</span>
+        <span className="config-toggle">{open ? "▼" : "▶"}</span>
       </div>
       {open && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "1rem",
+          }}
+        >
           {loading && !state && (
             <div className="config-loading">
               <div className="spinner" />
@@ -53,18 +88,18 @@ export default function PricesDashboard() {
           )}
           {error && <div className="config-error">{error}</div>}
           {state?.last_error && (
-            <div className="config-error">
-              API error: {state.last_error}
-            </div>
+            <div className="config-error">API error: {state.last_error}</div>
           )}
           {state && (
             <>
               <div className="prices-meta">
                 <span>
-                  Last updated: {new Date(state.last_updated).toLocaleString()}
+                  Last updated:{" "}
+                  {new Date(state.last_updated).toLocaleString()}
                 </span>
                 <span>
-                  Next update: {new Date(state.next_update).toLocaleString()}
+                  Next update:{" "}
+                  {new Date(state.next_update).toLocaleString()}
                 </span>
                 {loading && <span className="spinner-small" />}
               </div>
@@ -97,7 +132,13 @@ function DayPanel({ label, data }: { label: string; data: DayData }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.75rem",
+      }}
+    >
       <h4>
         {label} — {data.date}
       </h4>
@@ -207,7 +248,8 @@ function PriceChart({
       {prices.map((p) => {
         const x = padding.left + (p.hour / 24) * chartW + 1;
         const barTop = yScale(Math.max(p.price_eur_mwh, 0));
-        const barBottom = p.price_eur_mwh >= 0 ? zeroY : yScale(p.price_eur_mwh);
+        const barBottom =
+          p.price_eur_mwh >= 0 ? zeroY : yScale(p.price_eur_mwh);
         const barHeight = Math.abs(barBottom - barTop);
         const y = Math.min(barTop, barBottom);
 
@@ -247,11 +289,25 @@ function PriceChart({
       ))}
 
       {/* Legend */}
-      <rect x={width - 180} y={4} width={10} height={10} fill="#4ade80" rx="2" />
+      <rect
+        x={width - 180}
+        y={4}
+        width={10}
+        height={10}
+        fill="#4ade80"
+        rx="2"
+      />
       <text x={width - 166} y={13} fill="#94a3b8" fontSize="10">
         Charge
       </text>
-      <rect x={width - 115} y={4} width={10} height={10} fill="#f87171" rx="2" />
+      <rect
+        x={width - 115}
+        y={4}
+        width={10}
+        height={10}
+        fill="#f87171"
+        rx="2"
+      />
       <text x={width - 101} y={13} fill="#94a3b8" fontSize="10">
         Discharge
       </text>

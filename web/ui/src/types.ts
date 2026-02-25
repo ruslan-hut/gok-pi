@@ -139,3 +139,19 @@ export interface PricesState {
   next_update: string;
 }
 
+// Dashboard UI types
+
+export type AgentSummaryWithDeviceName = AgentSummary & {
+  device_name?: string;
+};
+
+export type AgentsMap = Record<string, AgentSummaryWithDeviceName>;
+
+export interface CommandState {
+  power: number;
+  powerLimit: number;
+  socLimit: number;
+}
+
+export type TabId = "monitor" | "configure" | "tools";
+
