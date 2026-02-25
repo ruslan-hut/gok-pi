@@ -1,3 +1,5 @@
+import { Icon } from "../shared/Icon";
+
 interface StatusMessagePreviewProps {
   lastStatusMessage: string;
   showStatusMessage: boolean;
@@ -60,16 +62,17 @@ export function StatusMessagePreview({
             title={
               statusMessageFrozen ? "Unfreeze updates" : "Freeze updates"
             }
-            style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem" }}
+            style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
           >
-            {statusMessageFrozen ? "▶ Resume" : "⏸ Freeze"}
+            <Icon name={statusMessageFrozen ? "play_arrow" : "pause"} size={16} />
+            {statusMessageFrozen ? "Resume" : "Freeze"}
           </button>
           <span
             className="config-toggle"
             onClick={onToggleStatusMessage}
             style={{ cursor: "pointer" }}
           >
-            {showStatusMessage ? "▼" : "▶"}
+            <Icon name={showStatusMessage ? "expand_more" : "chevron_right"} size={20} />
           </span>
         </div>
       </div>

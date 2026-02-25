@@ -3,6 +3,7 @@ import { DeviceSettings } from "./DeviceSettings";
 import { BatteryConfigForm } from "./BatteryConfigForm";
 import { ScheduleConfigForm } from "./ScheduleConfigForm";
 import { ConfigActions } from "./ConfigActions";
+import { Icon } from "../shared/Icon";
 import type { AgentConfig, BatteryConfig, ScheduleConfig } from "../../types";
 
 function formatConfigDraft(config: AgentConfig | null): string {
@@ -189,7 +190,7 @@ export function ConfigTab({
                 onClick={handleBatteryAdd}
                 disabled={saving || !localConfig}
               >
-                + Add Battery
+                <Icon name="add" size={16} /> Add Battery
               </button>
             </div>
             {localConfig?.batteries.length === 0 ? (
@@ -220,7 +221,7 @@ export function ConfigTab({
                 onClick={handleScheduleAdd}
                 disabled={saving || !localConfig}
               >
-                + Add Schedule
+                <Icon name="add" size={16} /> Add Schedule
               </button>
             </div>
             {localConfig?.schedules.length === 0 ? (
@@ -273,7 +274,7 @@ export function ConfigTab({
           onClick={() => setShowJson(!showJson)}
           disabled={saving}
         >
-          {showJson ? "← Back to Forms" : "Advanced: Edit JSON"}
+          {showJson ? <><Icon name="arrow_back" size={16} /> Back to Forms</> : "Advanced: Edit JSON"}
         </button>
       </div>
 

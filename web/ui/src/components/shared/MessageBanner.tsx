@@ -1,3 +1,5 @@
+import { Icon } from "./Icon";
+
 interface MessageBannerProps {
   message?: string;
   onDismiss: () => void;
@@ -13,7 +15,7 @@ export function MessageBanner({ message, onDismiss }: MessageBannerProps) {
         onClick={onDismiss}
         aria-label="Dismiss message"
       >
-        &times;
+        <Icon name="close" size={18} />
       </button>
     </div>
   );

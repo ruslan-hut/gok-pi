@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Icon } from "../shared/Icon";
 import type { BatteryConfig } from "../../types";
 
 interface BatteryConfigFormProps {
@@ -26,7 +27,7 @@ export function BatteryConfigForm({
         <h5>
           {battery.name || "Unnamed Battery"}
           <span className="config-item-toggle">
-            {collapsed ? "▶" : "▼"}
+            <Icon name={collapsed ? "chevron_right" : "expand_more"} size={18} />
           </span>
         </h5>
         <div

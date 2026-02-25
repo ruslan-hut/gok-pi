@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Icon } from "../shared/Icon";
 import type { ScheduleConfig } from "../../types";
 
 interface ScheduleConfigFormProps {
@@ -56,7 +57,7 @@ export function ScheduleConfigForm({
             </span>
           )}
           <span className="config-item-toggle">
-            {collapsed ? "▶" : "▼"}
+            <Icon name={collapsed ? "chevron_right" : "expand_more"} size={18} />
           </span>
         </h5>
         <div
@@ -95,7 +96,7 @@ export function ScheduleConfigForm({
           title={`Goal reached at ${goalReachedAt}`}
         >
           <span className="goal-badge-text">
-            ✓ Goal reached {formatGoalReachedTime(goalReachedAt)}
+            <Icon name="check_circle" size={16} /> Goal reached {formatGoalReachedTime(goalReachedAt)}
           </span>
           {onResetGoal && (
             <button
@@ -109,7 +110,7 @@ export function ScheduleConfigForm({
                   : "Agent offline - cannot reset goal"
               }
             >
-              ↺ Reset
+              <Icon name="restart_alt" size={16} /> Reset
             </button>
           )}
         </div>

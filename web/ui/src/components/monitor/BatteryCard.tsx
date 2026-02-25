@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { MouseEvent } from "react";
 import { Metric } from "./Metric";
+import { Icon } from "../shared/Icon";
 import type { BatteryConfig, CommandState, TelemetrySnapshot } from "../../types";
 
 const defaultCommandState: CommandState = {
@@ -96,11 +97,10 @@ export function BatteryCard({
               title="Schedule goal reached today"
               style={{
                 color: "#22c55e",
-                fontSize: "1rem",
                 marginLeft: "0.25rem",
               }}
             >
-              ✓
+              <Icon name="check_circle" size={18} />
             </span>
           )}
           <span
@@ -116,7 +116,7 @@ export function BatteryCard({
             className="battery-card-toggle"
             title={expanded ? "Collapse controls" : "Expand controls"}
           >
-            {expanded ? "▼" : "▶"}
+            <Icon name={expanded ? "expand_more" : "chevron_right"} size={18} />
           </span>
         </span>
       </h2>
@@ -168,7 +168,7 @@ export function BatteryCard({
               }
               title="Start Discharge"
             >
-              <span className="control-button-icon">▶</span>
+              <span className="control-button-icon"><Icon name="play_arrow" size={16} /></span>
               Start
             </button>
             <button
@@ -177,7 +177,7 @@ export function BatteryCard({
               onClick={() => onCommand("stop_discharge", name)}
               title="Stop Discharge"
             >
-              <span className="control-button-icon">■</span>
+              <span className="control-button-icon"><Icon name="stop" size={16} /></span>
               Stop
             </button>
           </div>
@@ -196,7 +196,7 @@ export function BatteryCard({
               }
               title="Start Charge"
             >
-              <span className="control-button-icon">▶</span>
+              <span className="control-button-icon"><Icon name="play_arrow" size={16} /></span>
               Start
             </button>
             <button
@@ -205,7 +205,7 @@ export function BatteryCard({
               onClick={() => onCommand("stop_charge", name)}
               title="Stop Charge"
             >
-              <span className="control-button-icon">■</span>
+              <span className="control-button-icon"><Icon name="stop" size={16} /></span>
               Stop
             </button>
           </div>

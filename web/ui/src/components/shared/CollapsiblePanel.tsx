@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Icon } from "./Icon";
 
 interface CollapsiblePanelProps {
   title: string;
@@ -27,7 +28,9 @@ export function CollapsiblePanel({
           style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
         >
           {headerExtra}
-          <span className="config-toggle">{collapsed ? "▶" : "▼"}</span>
+          <span className="config-toggle">
+            <Icon name={collapsed ? "chevron_right" : "expand_more"} size={20} />
+          </span>
         </div>
       </div>
       {!collapsed && children}

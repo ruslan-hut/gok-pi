@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Icon } from "../shared/Icon";
 
 interface LogViewerProps {
   agentId?: string;
@@ -113,7 +114,7 @@ export function LogViewer({
           onClick={onToggle}
           style={{ cursor: "pointer", flex: "0 0 auto" }}
         >
-          {isOpen ? "▼" : "▶"}
+          <Icon name={isOpen ? "expand_more" : "chevron_right"} size={20} />
         </span>
       </div>
       {isOpen && (
