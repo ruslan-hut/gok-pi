@@ -95,6 +95,7 @@ func TestHandleAgentConfigPutSuccess(t *testing.T) {
 		},
 		"schedules": []map[string]interface{}{
 			{
+				"name":         "discharge-evening",
 				"start_time":   "18:00",
 				"stop_time":    "20:00",
 				"battery_name": "battery-1",
@@ -149,6 +150,7 @@ func TestOnAgentConfigSyncSeedsStore(t *testing.T) {
 			},
 			Schedules: []entity.Schedule{
 				{
+					Name:        "discharge-morning",
 					StartTime:   "08:00",
 					StopTime:    "09:00",
 					BatteryName: "battery-1",

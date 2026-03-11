@@ -30,6 +30,7 @@ func TestConfigStore_SaveAndGet(t *testing.T) {
 		},
 		Schedules: []entity.Schedule{
 			{
+				Name:        "discharge-evening",
 				StartTime:   "18:00",
 				StopTime:    "20:00",
 				BatteryName: "battery-1",
@@ -156,6 +157,7 @@ func TestConfigStore_Seed(t *testing.T) {
 		},
 	}, []entity.Schedule{
 		{
+			Name:        "discharge-morning",
 			Type:        "discharge",
 			StartTime:   "10:00",
 			StopTime:    "12:00",

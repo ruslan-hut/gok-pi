@@ -40,10 +40,6 @@ func windowsToSchedules(bat entity.BatteryConfig, sched scheduler.DaySchedule) [
 	var out []entity.Schedule
 
 	for _, w := range sched.ChargeWindows {
-		socLimit := bat.SocLimit
-		if socLimit <= 0 {
-			socLimit = 100
-		}
 		powerLimit := bat.PowerLimit
 		if powerLimit <= 0 {
 			powerLimit = 2000
@@ -56,7 +52,7 @@ func windowsToSchedules(bat entity.BatteryConfig, sched scheduler.DaySchedule) [
 			BatteryName: bat.Name,
 			Enabled:     true,
 			PowerLimit:  powerLimit,
-			SocLimit:    socLimit,
+			SocLimit:    100,
 		})
 	}
 
