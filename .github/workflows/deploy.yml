@@ -118,14 +118,18 @@ jobs:
             tar -xzf "/tmp/release.tar.gz" -C "${RELEASE_DIR}"
 
             # Install binary to /usr/local/bin
-            install -m 755 "${RELEASE_DIR}/gok-cs" /usr/local/bin/gok-cs
+            install -o root -g root -m 755 "${RELEASE_DIR}/gok-cs" /usr/local/bin/gok-cs
 
-            # Install config file
+            # Install config file (owner-only read/write, contains secrets)
             mkdir -p /etc/gok-cs
-            install -m 600 /tmp/gok-cs-config.yml /etc/gok-cs/config.yml
+            install -o www-data -g www-data -m 600 /tmp/gok-cs-config.yml /etc/gok-cs/config.yml
+            chown www-data:www-data /etc/gok-cs
+            chmod 700 /etc/gok-cs
 
-            # Ensure data directory exists
+            # Ensure data directory exists with correct ownership
             mkdir -p /var/lib/gok-cs
+            chown www-data:www-data /var/lib/gok-cs
+            chmod 750 /var/lib/gok-cs
 
             # Set up static assets
             chown -R www-data:www-data "${RELEASE_DIR}/app"
@@ -133,9 +137,10 @@ jobs:
             find "${RELEASE_DIR}/app" -type f -print0 | xargs -0 chmod 644
             ln -sfn "${RELEASE_DIR}" "${DEPLOY_PATH}/current"
 
-            # Ensure log file exists and is writable
+            # Ensure log file exists and is writable by service user
             touch /var/log/gok-cs.log
             chown www-data:www-data /var/log/gok-cs.log
+            chmod 640 /var/log/gok-cs.log
 
             # Remove old releases, keep 3 most recent
             cd "${DEPLOY_PATH}/releases"
