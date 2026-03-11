@@ -11,6 +11,18 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// WebSocket message type constants define the protocol between agents and the control server.
+//
+// Agent → Server messages:
+//   - agent.hello:        Initial handshake with agent metadata (ID, env, hostname, version)
+//   - agent.telemetry:    Battery status snapshot (SoC, capacity, power, operating mode)
+//   - agent.heartbeat:    Keep-alive signal (sent every 30s)
+//   - agent.config:       Agent's current config snapshot (batteries + schedules)
+//   - agent.log.response: Response to a log request with log file contents
+//
+// Server → Agent messages:
+//   - server.config.push:  Push updated config (batteries, schedules, limits) to agent
+//   - server.log.request:  Request agent to send back its log file contents
 const (
 	agentMessageHello       = "agent.hello"
 	agentMessageTelemetry   = "agent.telemetry"
@@ -23,24 +35,27 @@ const (
 	serverMessageLogRequest = "server.log.request"
 )
 
+// agentConnection represents a single connected agent's WebSocket session.
+// It manages the agent's lifecycle: handshake → read/write loops → cleanup.
+// Each agent is identified by its ID (from config.yml device_id or hostname).
 type agentConnection struct {
-	id       string
-	info     AgentDescriptor
-	lastSeen time.Time
+	id       string          // Unique agent identifier (from hello message)
+	info     AgentDescriptor // Agent metadata (ID, env, hostname, version)
+	lastSeen time.Time       // Timestamp of last received message
 
-	conn *websocket.Conn
-	req  *http.Request
-	s    *Server
+	conn *websocket.Conn // Underlying WebSocket connection
+	req  *http.Request   // Original HTTP upgrade request (for remote addr logging)
+	s    *Server         // Back-reference to parent server
 
-	send chan interface{}
-	done chan struct{}
+	send chan interface{} // Outbound message queue (buffered, 32 slots)
+	done chan struct{}    // Closed when connection terminates; signals goroutines to exit
 
-	mu                  sync.RWMutex
-	telemetry           map[string]TelemetrySnapshot
-	scheduleGoalReached map[string]time.Time
+	mu                  sync.RWMutex                 // Guards telemetry + scheduleGoalReached
+	telemetry           map[string]TelemetrySnapshot  // Latest telemetry per battery name
+	scheduleGoalReached map[string]time.Time          // Goal reached timestamps per schedule name
 
-	logRequestsMu sync.RWMutex
-	logRequests   map[string]chan AgentLogResponse
+	logRequestsMu sync.RWMutex                        // Guards logRequests map
+	logRequests   map[string]chan AgentLogResponse     // Pending log request-response pairs by request ID
 }
 
 func newAgentConnection(conn *websocket.Conn, r *http.Request, s *Server) *agentConnection {
@@ -55,6 +70,9 @@ func newAgentConnection(conn *websocket.Conn, r *http.Request, s *Server) *agent
 	}
 }
 
+// run is the agent connection lifecycle: handshake → register → read/write loops → unregister.
+// It blocks until the connection drops (either side). On exit, the agent is unregistered
+// from the server and UI clients are notified via "agent.removed" broadcast.
 func (a *agentConnection) run() {
 	defer func() {
 		_ = a.conn.Close()

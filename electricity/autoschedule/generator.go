@@ -1,3 +1,12 @@
+// Package autoschedule converts electricity price analysis into concrete
+// battery charge/discharge schedules.
+//
+// It takes the output of the scheduler package (cheapest/most expensive hour windows)
+// and generates entity.Schedule objects named "auto-{type}-{battery}-{start}-{end}".
+// These auto-schedules are pushed to agents via the control server and are automatically
+// removed by the discharger/charger when their time window expires.
+//
+// Only batteries with AutoSchedule enabled in their config will get auto-schedules.
 package autoschedule
 
 import (
@@ -9,7 +18,7 @@ import (
 	"gok-pi/electricity/scheduler"
 )
 
-const schedulePrefix = "auto-"
+const schedulePrefix = "auto-" // Prefix for auto-generated schedule names
 
 // GenerateSchedules creates charge/discharge schedules from price data
 // for batteries that have AutoSchedule enabled.

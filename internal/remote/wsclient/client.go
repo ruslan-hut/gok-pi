@@ -1,3 +1,25 @@
+// Package wsclient implements the agent-side WebSocket client for connecting
+// to the central control server.
+//
+// It maintains a persistent connection with automatic reconnection using exponential
+// backoff (configurable initial/max seconds). On each connection it:
+//  1. Dials the control server with shared secret + agent ID headers
+//  2. Sends "agent.hello" with agent metadata (ID, env, hostname, version)
+//  3. Sends initial telemetry snapshots and config snapshot
+//  4. Starts concurrent read/write loops
+//
+// Write loop multiplexes three sources:
+//   - Telemetry snapshots from battery observers (buffered, newest-wins on overflow)
+//   - Config snapshots triggered by config changes
+//   - Heartbeats every 30 seconds
+//
+// Read loop dispatches incoming messages:
+//   - "server.config.push" → config updates channel (consumed by cmd/gok)
+//   - "server.log.request" → reads local log files and responds
+//   - Other messages       → command channel (consumed by cmd/gok for battery control)
+//
+// Both Commands() and ConfigUpdates() channels are consumed by the main agent
+// goroutine in cmd/gok/main.go to route commands to discharger/charger workers.
 package wsclient
 
 import (
@@ -166,6 +188,10 @@ func (c *Client) Run(ctx context.Context) {
 	})
 }
 
+// run is the main reconnection loop. It connects to the control server, serves
+// until the connection drops, then reconnects with exponential backoff.
+// Backoff doubles on each failure (e.g., 5s → 10s → 20s → ... → max) and resets
+// implicitly when a new connection succeeds and then fails again.
 func (c *Client) run(ctx context.Context) {
 	defer close(c.commands)
 	defer close(c.configs)
@@ -208,10 +234,15 @@ func (c *Client) run(ctx context.Context) {
 	}
 }
 
+// enqueueSnapshot adds a telemetry snapshot to the send buffer using a "newest-wins" strategy.
+// If the buffer is full, it drops the oldest snapshot to make room for the new one.
+// This ensures the control server always receives the most recent battery state,
+// even if the WebSocket write loop is temporarily slower than the observer update rate.
 func (c *Client) enqueueSnapshot(snapshot observers.Snapshot) {
 	select {
 	case c.telemetryCh <- snapshot:
 	default:
+		// Buffer full: drop oldest, then enqueue newest
 		select {
 		case <-c.telemetryCh:
 		default:

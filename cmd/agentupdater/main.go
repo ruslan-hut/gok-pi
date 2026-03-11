@@ -1,3 +1,12 @@
+// Agent Updater is a standalone daemon that auto-updates the gok agent binary.
+//
+// It periodically fetches a VERSION file (containing a SHA-256 hash) from the
+// control server, compares it to the local agent binary's hash, and if different,
+// downloads the new binary, swaps it atomically, and optionally restarts the
+// agent systemd service.
+//
+// Configuration is via environment variables (GOK_UPDATE_VERSION_URL, GOK_UPDATE_BINARY_URL,
+// GOK_UPDATE_AGENT_PATH, GOK_UPDATE_SERVICE_NAME) or CLI flags.
 package main
 
 import (

@@ -1,3 +1,9 @@
+// types.go defines the WebSocket protocol message types and HTTP API request/response
+// structures shared between agents, the control server, and the web UI.
+//
+// All WebSocket messages include a "type" field for routing and a "sent_at"/"timestamp"
+// field for ordering. JSON field names use snake_case to match the React UI conventions.
+
 package server
 
 import (
@@ -7,21 +13,23 @@ import (
 	"gok-pi/battery/entity"
 )
 
+// HTTP header keys used for agent authentication and identification during WebSocket upgrade.
 const (
-	headerSharedSecret = "X-GOK-Shared-Secret"
-	headerAgentID      = "X-GOK-Agent-ID"
-	headerAgentEnv     = "X-GOK-Agent-Env"
+	headerSharedSecret = "X-GOK-Shared-Secret" // Shared secret for agent auth
+	headerAgentID      = "X-GOK-Agent-ID"      // Agent's unique device ID
+	headerAgentEnv     = "X-GOK-Agent-Env"     // Agent's environment label (e.g., "production")
 )
 
+// Config holds the control server configuration, typically populated from CLI flags or YAML.
 type Config struct {
-	SharedSecret string
-	UIStaticDir  string
-	AgentBinary  string
-	VersionFile  string
-	ConfigStore  string
-	SessionDB    string // path to SQLite session database
-	UIUsername   string
-	UIPassword   string
+	SharedSecret string // If set, agents must present this secret to connect
+	UIStaticDir  string // Path to React UI build output (web/ui/dist)
+	AgentBinary  string // Optional: explicit agent binary name in downloads dir
+	VersionFile  string // Name of the VERSION manifest file (default: "VERSION")
+	ConfigStore  string // Path to agent-configs.json persistence file
+	SessionDB    string // Path to SQLite session database
+	UIUsername   string // Optional: username for UI login (empty = no auth)
+	UIPassword   string // Optional: password for UI login
 }
 
 type TelemetrySnapshot struct {

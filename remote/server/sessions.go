@@ -1,3 +1,9 @@
+// sessions.go tracks charge/discharge energy transfer sessions by observing telemetry.
+//
+// A session starts when a battery transitions to charging or discharging state,
+// and ends when the state changes back. During a session, energy (Wh) is accumulated
+// from power samples, and statistics (peak power, average power, SoC start/end,
+// electricity price) are recorded. Sessions are persisted to SQLite via sessiondb.
 package server
 
 import (
@@ -10,6 +16,7 @@ import (
 	"gok-pi/remote/server/sessiondb"
 )
 
+// batteryState tracks the last known charge/discharge state for edge detection.
 type batteryState struct {
 	charging    bool
 	discharging bool

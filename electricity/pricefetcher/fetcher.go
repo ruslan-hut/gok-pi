@@ -1,3 +1,10 @@
+// Package pricefetcher provides a background poller that fetches hourly electricity
+// prices from the Spanish PVPC market (REData API) and computes optimal charge/discharge
+// schedules using the scheduler package.
+//
+// It fetches today's and tomorrow's prices (tomorrow available after ~20:30 CET),
+// and exposes the current state via GetState() for the control server's auto-scheduler
+// and REST API (/api/prices).
 package pricefetcher
 
 import (

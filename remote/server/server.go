@@ -1,3 +1,25 @@
+// Package server implements the central control server that aggregates agent
+// telemetry, serves the web UI, and routes commands between UI and agents.
+//
+// Architecture:
+//
+//	Agents ←→ [WebSocket /api/agent] ←→ Server ←→ [WebSocket /api/ui] ←→ React UI
+//	                                       ↕
+//	                              [REST /api/agents/*]
+//
+// Message flow:
+//   - Agent → Server: hello, telemetry (every 10s), heartbeat (every 30s), config sync
+//   - Server → Agent: config push, commands (start/stop discharge/charge, set_limits, etc.)
+//   - Server → UI:    agent summaries, telemetry broadcasts, config updates, price data
+//   - UI → Server:    config changes (PUT /api/agents/{id}/config), commands (POST /api/agents/{id}/command)
+//
+// Background goroutines:
+//   - Price fetcher: polls REData API for electricity prices (every 15 min)
+//   - Auto-scheduler: generates charge/discharge schedules from prices (every 5 min)
+//   - Session cleanup: removes sessions older than 1 year (every hour)
+//
+// Config persistence: agent configs are stored in a JSON file (data/agent-configs.json)
+// with optimistic locking (revision field) to prevent concurrent update conflicts.
 package server
 
 import (

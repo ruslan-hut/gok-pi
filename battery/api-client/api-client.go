@@ -1,3 +1,17 @@
+// Package apiclient provides an HTTP client for the Sonnen battery REST API.
+//
+// It wraps all battery control operations (status polling, charge/discharge control,
+// operating mode switching) behind a retry-capable HTTP client. Each request uses
+// a 5-second timeout and will retry up to 5 times with linear backoff (3s, 6s, 9s, 12s, 15s).
+//
+// Sonnen API endpoints used:
+//   - GET  /status                           → battery state (SoC, capacity, power, mode)
+//   - POST /setpoint/discharge/{power}       → start/stop discharge
+//   - POST /setpoint/charge/{power}          → start/stop charge
+//   - PUT  /configurations                   → change operating mode (EM_OperatingMode)
+//
+// Operating modes: "1" = manual (agent-controlled), "2" = automatic (battery self-managed).
+// Auth is via "Auth-Token" header using the token from config.yml.
 package apiclient
 
 import (
@@ -18,10 +32,10 @@ import (
 )
 
 const (
-	maxRetry     = 5
-	retryStep    = 3
-	opModeAuto   = "2"
-	opModeManual = "1"
+	maxRetry     = 5             // Maximum number of HTTP request attempts
+	retryStep    = 3             // Linear backoff step in seconds: attempt_number * retryStep
+	opModeAuto   = "2"           // Sonnen operating mode: automatic (battery self-managed)
+	opModeManual = "1"           // Sonnen operating mode: manual (agent-controlled discharge/charge)
 )
 
 var httpClient = &http.Client{}

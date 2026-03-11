@@ -1,3 +1,15 @@
+// Package scheduler analyzes hourly electricity prices to determine optimal
+// charge and discharge time windows for battery systems.
+//
+// Algorithm:
+//  1. Sort all hours by price (ascending)
+//  2. Pick the N cheapest hours for charging (buy low)
+//  3. Pick the N most expensive hours for discharging (sell high)
+//  4. Ensure charge and discharge sets don't overlap
+//  5. Merge adjacent hours into contiguous windows (e.g., hours 2,3,4 → window 02:00-05:00)
+//
+// The output DaySchedule is consumed by the autoschedule package to generate
+// entity.Schedule objects that are pushed to agents via the control server.
 package scheduler
 
 import (
@@ -63,11 +75,13 @@ func ComputeSchedule(prices []redata.HourlyPrice, chargeHours, dischargeHours in
 		dischargeHours = len(sorted) - chargeHours
 	}
 
+	// Pick cheapest hours for charging (from the low end of sorted prices)
 	chargeSet := make(map[int]bool, chargeHours)
 	for i := 0; i < chargeHours; i++ {
 		chargeSet[sorted[i].hour] = true
 	}
 
+	// Pick most expensive hours for discharging (from the high end of sorted prices)
 	dischargeSet := make(map[int]bool, dischargeHours)
 	for i := len(sorted) - 1; i >= len(sorted)-dischargeHours; i-- {
 		dischargeSet[sorted[i].hour] = true

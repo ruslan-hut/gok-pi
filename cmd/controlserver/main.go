@@ -1,3 +1,12 @@
+// Control Server is the central monitoring and command hub for GOK-Pi agents.
+//
+// It accepts WebSocket connections from agents and the React UI, aggregates
+// telemetry, persists agent configs, fetches electricity prices, generates
+// auto-schedules, and tracks charge/discharge energy sessions.
+//
+// Usage:
+//
+//	go run ./cmd/controlserver -addr :8080 -secret "<shared-secret>" -static ./web/ui/dist
 package main
 
 import (

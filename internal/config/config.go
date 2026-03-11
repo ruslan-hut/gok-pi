@@ -1,3 +1,12 @@
+// Package config manages loading, thread-safe access, and persistence of the agent's
+// YAML configuration file (config.yml).
+//
+// It uses a singleton pattern with RWMutex for concurrent access. The config is loaded
+// once via MustLoad() and can be updated at runtime by the control server via
+// UpdateFromRemoteConfig(). Changes are persisted back to the YAML file via Save().
+//
+// Environment variables can override YAML values via cleanenv tags (e.g., env:"GOK_ENV").
+// If no device_id is set, a random hex ID is generated and persisted on first load.
 package config
 
 import (

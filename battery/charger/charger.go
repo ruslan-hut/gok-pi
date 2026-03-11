@@ -1,3 +1,19 @@
+// Package charger implements the battery charge control loop.
+//
+// It mirrors the discharger package but for charging operations. It runs as a
+// long-lived goroutine that polls battery status every 10 seconds, evaluates
+// time-based schedules, and controls charging via the Sonnen API.
+//
+// Core state machine (per tick):
+//  1. Poll battery status from Sonnen API
+//  2. Sync internal state on first poll (handles agent restarts mid-charge)
+//  3. Check if current time falls within any enabled charge schedule (type="charge")
+//  4. If schedule active: apply schedule's power/SoC limits, start charge
+//  5. If no schedule active: restore battery default limits, stop charge
+//  6. If SoC reaches limit: stop charge, mark "goal reached" for run_once schedules
+//
+// The charger accepts the same remote command types as the discharger
+// (start, stop, set_limits, force_mode, update_config, reset_goal).
 package charger
 
 import (
@@ -13,6 +29,8 @@ import (
 	"time"
 )
 
+// Client abstracts the Sonnen battery API operations needed for charge control.
+// Implemented by battery/api-client.ApiClient.
 type Client interface {
 	Status() (*entity.SystemStatus, error)
 	StartCharge(power int) error
@@ -164,6 +182,11 @@ func (c *Charger) SubmitCommand(cmd ControlCommand) error {
 	}
 }
 
+// Run starts the main charge control loop. It polls battery status every 10 seconds
+// and processes remote commands. The loop runs until Stop() is called.
+//
+// Each tick: poll status → check schedules → start or stop charge as needed.
+// Commands from the WebSocket client are processed with priority over ticks.
 func (c *Charger) Run() error {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()

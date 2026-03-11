@@ -1,3 +1,15 @@
+// Agent (gok) is the primary battery controller daemon that runs on-device
+// (typically a Raspberry Pi) near the Sonnen battery system.
+//
+// Startup flow:
+//  1. Load config.yml → filter enabled batteries and schedules
+//  2. Create a discharger + charger worker pair per battery
+//  3. Start Prometheus metrics server (if enabled)
+//  4. Connect to control server via WebSocket (if remote_control enabled)
+//  5. Enter main loop: poll battery status every 10s, execute schedules, handle commands
+//
+// The agent supports graceful shutdown via SIGINT/SIGTERM, stopping all workers
+// and closing the WebSocket connection cleanly.
 package main
 
 import (

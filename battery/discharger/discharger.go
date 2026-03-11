@@ -1,3 +1,24 @@
+// Package discharger implements the battery discharge control loop.
+//
+// It runs as a long-lived goroutine that polls battery status every 10 seconds,
+// evaluates time-based schedules, and controls discharge via the Sonnen API.
+//
+// Core state machine (per tick):
+//  1. Poll battery status from Sonnen API
+//  2. Sync internal state on first poll (handles agent restarts mid-discharge)
+//  3. Check if current time falls within any enabled discharge schedule
+//  4. If schedule active: apply schedule's power/SoC limits, start discharge
+//  5. If no schedule active: restore battery default limits, stop discharge
+//  6. If SoC drops to limit: stop discharge, mark "goal reached" for run_once schedules
+//
+// The discharger also accepts remote commands (start, stop, set_limits, force_mode,
+// update_config, reset_goal) via a buffered channel from the WebSocket client.
+//
+// Key concepts:
+//   - manualOverride: set by remote start_discharge command, bypasses schedule checks
+//   - run_once schedules: discharge once per day, then skip until next schedule period
+//   - auto-schedules: generated from electricity prices, prefixed "auto-", auto-removed when expired
+//   - goal callbacks: persist "goal reached" state to config.yml so it survives restarts
 package discharger
 
 import (
@@ -13,6 +34,8 @@ import (
 	"time"
 )
 
+// Client abstracts the Sonnen battery API operations needed for discharge control.
+// Implemented by battery/api-client.ApiClient.
 type Client interface {
 	Status() (*entity.SystemStatus, error)
 	StartDischarge(power int) error
@@ -163,6 +186,11 @@ func (d *Discharge) SubmitCommand(cmd ControlCommand) error {
 	}
 }
 
+// Run starts the main discharge control loop. It polls battery status every 10 seconds
+// and processes remote commands. The loop runs until Stop() is called.
+//
+// Each tick: poll status → check schedules → start or stop discharge as needed.
+// Commands from the WebSocket client are processed with priority over ticks.
 func (d *Discharge) Run() error {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
