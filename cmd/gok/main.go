@@ -417,10 +417,10 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 				).Info("restarting workers (URL or token changed)")
 				if removed, ok := m.remove(name); ok {
 					if removed.dischargerWorker != nil {
-						go removed.dischargerWorker.Stop()
+						removed.dischargerWorker.Stop()
 					}
 					if removed.chargerWorker != nil {
-						go removed.chargerWorker.Stop()
+						removed.chargerWorker.Stop()
 					}
 				}
 			} else if entry.config == cfg {
@@ -453,10 +453,10 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 				if removed, ok := m.remove(name); ok {
 					log.With(slog.String("battery", name)).Info("restarting workers (config changed)")
 					if removed.dischargerWorker != nil {
-						go removed.dischargerWorker.Stop()
+						removed.dischargerWorker.Stop()
 					}
 					if removed.chargerWorker != nil {
-						go removed.chargerWorker.Stop()
+						removed.chargerWorker.Stop()
 					}
 				}
 			}

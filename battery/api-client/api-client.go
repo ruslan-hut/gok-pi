@@ -261,6 +261,9 @@ func (c *ApiClient) doRequestChangeConfig(parameter, value string) error {
 		}
 		return err
 	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	log = log.With(slog.Int("status", resp.StatusCode))
 	if resp.StatusCode >= 400 {

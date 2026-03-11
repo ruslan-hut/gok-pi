@@ -310,18 +310,30 @@ func (s *Store) GetStats() (*DBStats, error) {
 
 	// File size
 	var pageCount, pageSize int64
-	s.db.QueryRow("PRAGMA page_count").Scan(&pageCount)
-	s.db.QueryRow("PRAGMA page_size").Scan(&pageSize)
+	if err := s.db.QueryRow("PRAGMA page_count").Scan(&pageCount); err != nil {
+		return nil, fmt.Errorf("query page_count: %w", err)
+	}
+	if err := s.db.QueryRow("PRAGMA page_size").Scan(&pageSize); err != nil {
+		return nil, fmt.Errorf("query page_size: %w", err)
+	}
 	stats.FileSizeBytes = pageCount * pageSize
 
 	// Counts
-	s.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&stats.TotalSessions)
-	s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE ended_at IS NULL").Scan(&stats.OpenSessions)
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&stats.TotalSessions); err != nil {
+		return nil, fmt.Errorf("query total sessions: %w", err)
+	}
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE ended_at IS NULL").Scan(&stats.OpenSessions); err != nil {
+		return nil, fmt.Errorf("query open sessions: %w", err)
+	}
 
 	// Date range
 	var oldest, newest sql.NullString
-	s.db.QueryRow("SELECT MIN(started_at) FROM sessions").Scan(&oldest)
-	s.db.QueryRow("SELECT MAX(started_at) FROM sessions").Scan(&newest)
+	if err := s.db.QueryRow("SELECT MIN(started_at) FROM sessions").Scan(&oldest); err != nil {
+		return nil, fmt.Errorf("query oldest session: %w", err)
+	}
+	if err := s.db.QueryRow("SELECT MAX(started_at) FROM sessions").Scan(&newest); err != nil {
+		return nil, fmt.Errorf("query newest session: %w", err)
+	}
 	if oldest.Valid {
 		stats.OldestSession = oldest.String
 	}
