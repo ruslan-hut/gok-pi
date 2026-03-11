@@ -71,7 +71,18 @@ func (c *uiConnection) sendJSON(v interface{}) {
 	select {
 	case c.send <- v:
 	default:
-		c.log().Warn("dropping ui message; buffer full")
+		c.log().Warn("closing ui connection; buffer full")
+		c.close()
+	}
+}
+
+func (c *uiConnection) close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	select {
+	case <-c.done:
+	default:
+		_ = c.conn.Close()
 	}
 }
 

@@ -13,16 +13,16 @@ import (
 )
 
 type CSConfig struct {
-	Addr         string `yaml:"addr" env:"CONTROL_ADDR" env-default:":8080"`
-	Secret       string `yaml:"secret" env:"CONTROL_SECRET" env-default:""`
-	Static       string `yaml:"static" env:"CONTROL_STATIC" env-default:""`
-	AgentBinary  string `yaml:"agent_binary" env:"GOK_CONTROL_AGENT_BINARY" env-default:""`
-	VersionFile  string `yaml:"version_file" env:"GOK_CONTROL_VERSION_FILE" env-default:"VERSION"`
-	ConfigStore  string `yaml:"config_store" env-default:"data/agent-configs.json"`
-	SessionDB    string `yaml:"session_db" env-default:"data/sessions.db"`
-	UIUsername   string `yaml:"ui_username" env:"GOK_UI_USERNAME" env-default:""`
-	UIPassword   string `yaml:"ui_password" env:"GOK_UI_PASSWORD" env-default:""`
-	LogFile      string `yaml:"log_file" env:"GOK_CS_LOG_FILE" env-default:""`
+	Addr        string `yaml:"addr" env:"CONTROL_ADDR" env-default:":8080"`
+	Secret      string `yaml:"secret" env:"CONTROL_SECRET" env-default:""`
+	Static      string `yaml:"static" env:"CONTROL_STATIC" env-default:""`
+	AgentBinary string `yaml:"agent_binary" env:"GOK_CONTROL_AGENT_BINARY" env-default:""`
+	VersionFile string `yaml:"version_file" env:"GOK_CONTROL_VERSION_FILE" env-default:"VERSION"`
+	ConfigStore string `yaml:"config_store" env-default:"data/agent-configs.json"`
+	SessionDB   string `yaml:"session_db" env-default:"data/sessions.db"`
+	UIUsername  string `yaml:"ui_username" env:"GOK_UI_USERNAME" env-default:""`
+	UIPassword  string `yaml:"ui_password" env:"GOK_UI_PASSWORD" env-default:""`
+	LogFile     string `yaml:"log_file" env:"GOK_CS_LOG_FILE" env-default:""`
 }
 
 func main() {
@@ -53,7 +53,7 @@ func main() {
 		logWriter = f
 	}
 
-	logger := slog.New(slog.NewJSONHandler(logWriter, &slog.HandlerOptions{
+	logger := slog.New(slog.NewTextHandler(logWriter, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
