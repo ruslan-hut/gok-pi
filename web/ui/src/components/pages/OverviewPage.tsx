@@ -66,10 +66,13 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                 {agent.connected === false && (
                   <span className="agent-last-seen">
                     Last seen{" "}
-                    {new Date(agent.last_seen).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {(() => {
+                      const d = new Date(agent.last_seen);
+                      const isToday = d.toDateString() === new Date().toDateString();
+                      return isToday
+                        ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                        : d.toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                    })()}
                   </span>
                 )}
               </div>
@@ -118,7 +121,7 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                 <span className="db-stats-label">Data range</span>
                 <span className="db-stats-value">
                   {dbStats.oldest_session
-                    ? `${new Date(dbStats.oldest_session).toLocaleDateString()} — ${new Date(dbStats.newest_session!).toLocaleDateString()}`
+                    ? `${new Date(dbStats.oldest_session).toLocaleDateString()} — ${dbStats.newest_session ? new Date(dbStats.newest_session).toLocaleDateString() : "—"}`
                     : "—"}
                 </span>
               </div>

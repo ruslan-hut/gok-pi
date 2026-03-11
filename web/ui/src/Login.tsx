@@ -2,7 +2,7 @@ import { useState } from "react";
 import { login } from "./api";
 
 interface LoginProps {
-  onLogin: (token: string) => void;
+  onLogin: (token: string, expiresAt?: string) => void;
   onBack?: () => void;
 }
 
@@ -20,7 +20,7 @@ export default function Login({ onLogin, onBack }: LoginProps) {
     try {
       const response = await login(username, password);
       if (response.token) {
-        onLogin(response.token);
+        onLogin(response.token, response.expires_at);
       } else {
         // No auth configured, allow access
         onLogin("");

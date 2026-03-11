@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { Icon } from "../shared/Icon";
 
 interface LogViewerProps {
-  agentId?: string;
   isOpen: boolean;
   logs: string;
   loading: boolean;
@@ -49,12 +48,15 @@ export function LogViewer({
           gap: "1rem",
         }}
       >
-        <h3
+        <button
+          type="button"
+          className="button-link"
           onClick={onToggle}
-          style={{ cursor: "pointer", margin: 0, flex: "0 0 auto" }}
+          aria-expanded={isOpen}
+          style={{ cursor: "pointer", margin: 0, flex: "0 0 auto", textDecoration: "none", fontSize: "1.25rem", fontWeight: 600 }}
         >
           Agent Logs
-        </h3>
+        </button>
         {isOpen && (
           <div className="log-viewer-controls">
             <select

@@ -4,19 +4,8 @@ import { BatteryConfigForm } from "./BatteryConfigForm";
 import { ScheduleConfigForm } from "./ScheduleConfigForm";
 import { ConfigActions } from "./ConfigActions";
 import { Icon } from "../shared/Icon";
+import { formatConfigDraft } from "../../hooks/useConfig";
 import type { AgentConfig, BatteryConfig, ScheduleConfig } from "../../types";
-
-function formatConfigDraft(config: AgentConfig | null): string {
-  const payload = {
-    device_name: config?.device_name ?? "",
-    env: config?.env ?? "",
-    timezone: config?.timezone ?? "",
-    revision: config?.revision ?? 0,
-    batteries: config?.batteries ?? [],
-    schedules: config?.schedules ?? [],
-  };
-  return JSON.stringify(payload, null, 2);
-}
 
 interface ConfigTabProps {
   config: AgentConfig | null;
@@ -206,6 +195,7 @@ export function ConfigTab({
                 {localConfig?.batteries.map((battery, index) => (
                   <BatteryConfigForm
                     key={`battery-${index}-${battery.name || "new"}`}
+                    index={index}
                     battery={battery}
                     onChange={(b) => handleBatteryChange(index, b)}
                     onRemove={() => handleBatteryRemove(index)}
@@ -240,6 +230,7 @@ export function ConfigTab({
                 {localConfig?.schedules.map((schedule, index) => (
                   <ScheduleConfigForm
                     key={`schedule-${index}-${schedule.battery_name || "new"}`}
+                    index={index}
                     schedule={schedule}
                     batteryNames={
                       localConfig?.batteries.map((b) => b.name) || []

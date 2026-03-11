@@ -80,7 +80,7 @@
 }
 
 .status-banner-action:hover {
-  background: var(--color-success-bg);
+  background: rgba(0, 0, 0, 0.08);
   border-color: currentColor;
 }
 
@@ -244,6 +244,11 @@
 
 .switch input[type="checkbox"]:checked + .switch-slider::before {
   transform: translateX(20px);
+}
+
+.switch input[type="checkbox"]:focus-visible + .switch-slider {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
 }
 
 .switch input[type="checkbox"]:disabled + .switch-slider {

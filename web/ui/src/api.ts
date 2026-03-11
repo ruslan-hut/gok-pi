@@ -1,21 +1,31 @@
 import type { AgentConfig, AgentSummary, DBStatsResponse, PricesState, SessionsResponse } from "./types";
 
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
+const AUTH_EXPIRY_KEY = "gok-pi-auth-expires";
 
 export function getAuthToken(): string | null {
-  return localStorage.getItem(AUTH_TOKEN_KEY);
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  if (!token) return null;
+  const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
+  if (expiry && Date.now() > new Date(expiry).getTime()) {
+    clearAuthToken();
+    return null;
+  }
+  return token;
 }
 
-export function setAuthToken(token: string) {
+export function setAuthToken(token: string, expiresAt?: string) {
   if (token) {
     localStorage.setItem(AUTH_TOKEN_KEY, token);
+    if (expiresAt) localStorage.setItem(AUTH_EXPIRY_KEY, expiresAt);
   } else {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
+    clearAuthToken();
   }
 }
 
 export function clearAuthToken() {
   localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_EXPIRY_KEY);
 }
 
 export interface LoginResponse {

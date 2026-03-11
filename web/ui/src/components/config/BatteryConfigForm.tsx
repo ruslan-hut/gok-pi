@@ -3,6 +3,7 @@ import { Icon } from "../shared/Icon";
 import type { BatteryConfig } from "../../types";
 
 interface BatteryConfigFormProps {
+  index: number;
   battery: BatteryConfig;
   onChange: (battery: BatteryConfig) => void;
   onRemove: () => void;
@@ -11,6 +12,7 @@ interface BatteryConfigFormProps {
 }
 
 export function BatteryConfigForm({
+  index,
   battery,
   onChange,
   onRemove,
@@ -24,6 +26,10 @@ export function BatteryConfigForm({
       <div
         className={`config-item-header ${collapsed ? "config-item-header-collapsed" : ""}`}
         onClick={() => setCollapsed(!collapsed)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed(!collapsed); } }}
+        tabIndex={0}
+        role="button"
+        aria-expanded={!collapsed}
         style={{ cursor: "pointer" }}
       >
         <h5>
@@ -74,11 +80,11 @@ export function BatteryConfigForm({
       {!collapsed && (
         <div className="config-form-grid">
           <div className="form-field">
-            <label htmlFor={`battery-name-${battery.name || "new"}`}>
+            <label htmlFor={`battery-name-${index}`}>
               Name *
             </label>
             <input
-              id={`battery-name-${battery.name || "new"}`}
+              id={`battery-name-${index}`}
               type="text"
               value={battery.name}
               onChange={(e) => onChange({ ...battery, name: e.target.value })}
@@ -88,11 +94,11 @@ export function BatteryConfigForm({
             />
           </div>
           <div className="form-field">
-            <label htmlFor={`battery-url-${battery.name || "new"}`}>
+            <label htmlFor={`battery-url-${index}`}>
               URL *
             </label>
             <input
-              id={`battery-url-${battery.name || "new"}`}
+              id={`battery-url-${index}`}
               type="url"
               value={battery.url}
               onChange={(e) => onChange({ ...battery, url: e.target.value })}
@@ -102,11 +108,11 @@ export function BatteryConfigForm({
             />
           </div>
           <div className="form-field">
-            <label htmlFor={`battery-token-${battery.name || "new"}`}>
+            <label htmlFor={`battery-token-${index}`}>
               Token *
             </label>
             <input
-              id={`battery-token-${battery.name || "new"}`}
+              id={`battery-token-${index}`}
               type="password"
               value={battery.token}
               onChange={(e) =>
@@ -118,11 +124,11 @@ export function BatteryConfigForm({
             />
           </div>
           <div className="form-field">
-            <label htmlFor={`battery-capacity-${battery.name || "new"}`}>
+            <label htmlFor={`battery-capacity-${index}`}>
               Capacity Limit (Wh)
             </label>
             <input
-              id={`battery-capacity-${battery.name || "new"}`}
+              id={`battery-capacity-${index}`}
               type="number"
               value={battery.capacity_limit}
               onChange={(e) =>
@@ -138,11 +144,11 @@ export function BatteryConfigForm({
           </div>
           <div className="form-field-pair">
             <div className="form-field">
-              <label htmlFor={`battery-power-${battery.name || "new"}`}>
+              <label htmlFor={`battery-power-${index}`}>
                 Power Limit (W)
               </label>
               <input
-                id={`battery-power-${battery.name || "new"}`}
+                id={`battery-power-${index}`}
                 type="number"
                 value={battery.power_limit ?? 0}
                 onChange={(e) =>
@@ -158,11 +164,11 @@ export function BatteryConfigForm({
               />
             </div>
             <div className="form-field">
-              <label htmlFor={`battery-soc-${battery.name || "new"}`}>
+              <label htmlFor={`battery-soc-${index}`}>
                 SoC Limit (%)
               </label>
               <input
-                id={`battery-soc-${battery.name || "new"}`}
+                id={`battery-soc-${index}`}
                 type="number"
                 value={battery.soc_limit ?? 0}
                 onChange={(e) =>

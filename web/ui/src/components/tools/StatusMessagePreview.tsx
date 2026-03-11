@@ -25,17 +25,23 @@ export function StatusMessagePreview({
           alignItems: "center",
         }}
       >
-        <div
+        <button
+          type="button"
+          className="button-link"
           onClick={onToggleStatusMessage}
+          aria-expanded={showStatusMessage}
           style={{
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
             gap: "0.5rem",
             flex: 1,
+            textDecoration: "none",
+            fontSize: "1.25rem",
+            fontWeight: 600,
           }}
         >
-          <h3 style={{ margin: 0 }}>Last Status Message</h3>
+          Last Status Message
           {statusMessageFrozen && (
             <span
               className="badge"
@@ -48,7 +54,7 @@ export function StatusMessagePreview({
               Frozen
             </span>
           )}
-        </div>
+        </button>
         <div
           style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
         >

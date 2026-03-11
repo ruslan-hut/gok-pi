@@ -32,8 +32,8 @@ export default function App() {
   const browserOnline = useOnlineStatus();
   const { updateAvailable, applyUpdate } = useServiceWorker();
 
-  const handleLogin = useCallback((token: string) => {
-    if (token) setAuthToken(token);
+  const handleLogin = useCallback((token: string, expiresAt?: string) => {
+    if (token) setAuthToken(token, expiresAt);
     setLoggedIn(true);
     setShowLogin(false);
   }, []);
@@ -152,12 +152,8 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, b
     [nav, configHook.configDirty, setNav],
   );
 
-  const selectedAgent = currentAgentId
-    ? agents.agents[currentAgentId]
-    : undefined;
-  const selectedAgentOnline = selectedAgent
-    ? selectedAgent.connected !== false
-    : false;
+  const selectedAgent = agents.selectedAgent;
+  const selectedAgentOnline = agents.selectedAgentOnline;
 
   const deviceName =
     configHook.agentConfig?.device_name ||

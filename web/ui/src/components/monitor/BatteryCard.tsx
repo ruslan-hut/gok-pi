@@ -85,7 +85,14 @@ export function BatteryCard({
     <div
       className={`card battery-card ${expanded ? "expanded" : ""} ${isManualMode ? "manual-mode" : ""} ${isServiceMode ? "service-mode" : ""}`}
     >
-      <h2 className="battery-card-header" onClick={handleHeaderClick}>
+      <h2
+        className="battery-card-header"
+        onClick={handleHeaderClick}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(!expanded); } }}
+        tabIndex={0}
+        role="button"
+        aria-expanded={expanded}
+      >
         <span className="battery-card-title">{name}</span>
         <span className="battery-card-badges">
           <span
@@ -143,8 +150,9 @@ export function BatteryCard({
       {/* All controls — expandable */}
       {!readonly && <div className="controls" onClick={(e) => e.stopPropagation()}>
         <div className="control-group">
-          <label className="control-label">Power (W)</label>
+          <label className="control-label" htmlFor={`power-${name}`}>Power (W)</label>
           <input
+            id={`power-${name}`}
             type="number"
             className="control-input"
             value={commandState.power}
@@ -160,7 +168,7 @@ export function BatteryCard({
         </div>
 
         <div className="control-group">
-          <label className="control-label">Discharge</label>
+          <span className="control-label">Discharge</span>
           <div className="control-actions">
             <button
               className="control-button control-button-primary"
@@ -188,7 +196,7 @@ export function BatteryCard({
         </div>
 
         <div className="control-group">
-          <label className="control-label">Charge</label>
+          <span className="control-label">Charge</span>
           <div className="control-actions">
             <button
               className="control-button control-button-primary"
@@ -217,7 +225,7 @@ export function BatteryCard({
 
         {!hasConfigLimits && (
           <div className="control-group">
-            <label className="control-label">Limits</label>
+            <span className="control-label">Limits</span>
             <div className="control-inputs-row">
               <div className="control-input-wrapper">
                 <label
@@ -280,7 +288,7 @@ export function BatteryCard({
         )}
 
         <div className="control-group">
-          <label className="control-label">Mode</label>
+          <span className="control-label">Mode</span>
           <div className="control-actions">
             <button
               className="control-button"

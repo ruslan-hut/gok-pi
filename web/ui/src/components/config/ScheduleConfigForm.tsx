@@ -3,6 +3,7 @@ import { Icon } from "../shared/Icon";
 import type { ScheduleConfig } from "../../types";
 
 interface ScheduleConfigFormProps {
+  index: number;
   schedule: ScheduleConfig;
   batteryNames: string[];
   onChange: (schedule: ScheduleConfig) => void;
@@ -29,6 +30,7 @@ function formatGoalReachedTime(isoTime: string): string {
 }
 
 export function ScheduleConfigForm({
+  index,
   schedule,
   batteryNames,
   onChange,
@@ -46,6 +48,10 @@ export function ScheduleConfigForm({
       <div
         className={`config-item-header ${collapsed ? "config-item-header-collapsed" : ""}`}
         onClick={() => setCollapsed(!collapsed)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed(!collapsed); } }}
+        tabIndex={0}
+        role="button"
+        aria-expanded={!collapsed}
         style={{ cursor: "pointer" }}
       >
         <h5>
@@ -128,12 +134,12 @@ export function ScheduleConfigForm({
         <div className="config-form-grid">
           <div className="form-field">
             <label
-              htmlFor={`schedule-name-${schedule.battery_name || "new"}`}
+              htmlFor={`schedule-name-${index}`}
             >
               Schedule Name
             </label>
             <input
-              id={`schedule-name-${schedule.battery_name || "new"}`}
+              id={`schedule-name-${index}`}
               type="text"
               value={schedule.name ?? ""}
               onChange={(e) =>
@@ -145,12 +151,12 @@ export function ScheduleConfigForm({
           </div>
           <div className="form-field">
             <label
-              htmlFor={`schedule-type-${schedule.battery_name || "new"}`}
+              htmlFor={`schedule-type-${index}`}
             >
               Type *
             </label>
             <select
-              id={`schedule-type-${schedule.battery_name || "new"}`}
+              id={`schedule-type-${index}`}
               value={schedule.type || "discharge"}
               onChange={(e) =>
                 onChange({ ...schedule, type: e.target.value })
@@ -164,12 +170,12 @@ export function ScheduleConfigForm({
           </div>
           <div className="form-field">
             <label
-              htmlFor={`schedule-battery-${schedule.battery_name || "new"}`}
+              htmlFor={`schedule-battery-${index}`}
             >
               Battery Name *
             </label>
             <select
-              id={`schedule-battery-${schedule.battery_name || "new"}`}
+              id={`schedule-battery-${index}`}
               value={schedule.battery_name}
               onChange={(e) =>
                 onChange({ ...schedule, battery_name: e.target.value })
@@ -188,12 +194,12 @@ export function ScheduleConfigForm({
           <div className="form-field-pair">
             <div className="form-field">
               <label
-                htmlFor={`schedule-start-${schedule.battery_name || "new"}`}
+                htmlFor={`schedule-start-${index}`}
               >
                 Start Time *
               </label>
               <input
-                id={`schedule-start-${schedule.battery_name || "new"}`}
+                id={`schedule-start-${index}`}
                 type="time"
                 value={schedule.start_time}
                 onChange={(e) =>
@@ -205,12 +211,12 @@ export function ScheduleConfigForm({
             </div>
             <div className="form-field">
               <label
-                htmlFor={`schedule-stop-${schedule.battery_name || "new"}`}
+                htmlFor={`schedule-stop-${index}`}
               >
                 Stop Time *
               </label>
               <input
-                id={`schedule-stop-${schedule.battery_name || "new"}`}
+                id={`schedule-stop-${index}`}
                 type="time"
                 value={schedule.stop_time}
                 onChange={(e) =>
@@ -224,12 +230,12 @@ export function ScheduleConfigForm({
           <div className="form-field-pair">
             <div className="form-field">
               <label
-                htmlFor={`schedule-power-${schedule.battery_name || "new"}`}
+                htmlFor={`schedule-power-${index}`}
               >
                 Power Limit (W) *
               </label>
               <input
-                id={`schedule-power-${schedule.battery_name || "new"}`}
+                id={`schedule-power-${index}`}
                 type="number"
                 value={schedule.power_limit}
                 onChange={(e) =>
@@ -246,12 +252,12 @@ export function ScheduleConfigForm({
             </div>
             <div className="form-field">
               <label
-                htmlFor={`schedule-soc-${schedule.battery_name || "new"}`}
+                htmlFor={`schedule-soc-${index}`}
               >
                 SoC Limit (%) *
               </label>
               <input
-                id={`schedule-soc-${schedule.battery_name || "new"}`}
+                id={`schedule-soc-${index}`}
                 type="number"
                 value={schedule.soc_limit}
                 onChange={(e) =>

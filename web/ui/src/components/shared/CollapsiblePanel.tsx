@@ -18,9 +18,11 @@ export function CollapsiblePanel({
 }: CollapsiblePanelProps) {
   return (
     <section className="config-panel">
-      <div
+      <button
+        type="button"
         className="config-panel-header"
         onClick={onToggle}
+        aria-expanded={!collapsed}
         style={{ cursor: "pointer" }}
       >
         <h3>{title}</h3>
@@ -32,7 +34,7 @@ export function CollapsiblePanel({
             <Icon name={collapsed ? "chevron_right" : "expand_more"} size={20} />
           </span>
         </div>
-      </div>
+      </button>
       {!collapsed && children}
     </section>
   );

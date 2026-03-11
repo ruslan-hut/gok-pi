@@ -52,7 +52,6 @@ export function ToolsTab({
         onToggleStatusMessageFrozen={onToggleStatusMessageFrozen}
       />
       <LogViewer
-        agentId={agentId}
         isOpen={logsOpen}
         logs={logs}
         loading={logsLoading}

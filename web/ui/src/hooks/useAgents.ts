@@ -253,7 +253,13 @@ export function useAgents({
         retryMs = 1000;
       };
       socket.onmessage = (event) => {
-        const data = JSON.parse(event.data) as DashboardMessage;
+        let data: DashboardMessage;
+        try {
+          data = JSON.parse(event.data) as DashboardMessage;
+        } catch {
+          console.warn("WS: failed to parse message", event.data);
+          return;
+        }
         const currentAgentId = selectedAgentIdRef.current;
 
         let isForSelectedAgent = false;
