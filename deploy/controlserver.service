@@ -7,17 +7,10 @@ Wants=network-online.target
 Type=simple
 User={{DEPLOY_USER}}
 Group={{DEPLOY_GROUP}}
-Environment=CONTROL_ADDR=:8080
-Environment=CONTROL_SECRET=
-Environment=CONTROL_STATIC={{DEPLOY_PATH}}/current/app
-EnvironmentFile=-/etc/default/controlserver
-WorkingDirectory={{DEPLOY_PATH}}/current
-ExecStart={{DEPLOY_PATH}}/current/gok --addr=${CONTROL_ADDR} --secret=${CONTROL_SECRET} --static=${CONTROL_STATIC}
+WorkingDirectory=/var/lib/gok-cs
+ExecStart=/usr/local/bin/gok-cs --config=/etc/gok-cs/config.yml
 Restart=on-failure
 RestartSec=5s
-StandardOutput=journal
-StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-

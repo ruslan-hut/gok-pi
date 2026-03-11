@@ -2,54 +2,76 @@ package main
 
 import (
 	"flag"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
 
+	"github.com/ilyakaznacheev/cleanenv"
+
 	"gok-pi/remote/server"
 )
 
-const (
-	envAgentBinary = "GOK_CONTROL_AGENT_BINARY"
-	envVersionFile = "GOK_CONTROL_VERSION_FILE"
-	envUIUsername  = "GOK_UI_USERNAME"
-	envUIPassword  = "GOK_UI_PASSWORD"
-)
+type CSConfig struct {
+	Addr         string `yaml:"addr" env:"CONTROL_ADDR" env-default:":8080"`
+	Secret       string `yaml:"secret" env:"CONTROL_SECRET" env-default:""`
+	Static       string `yaml:"static" env:"CONTROL_STATIC" env-default:""`
+	AgentBinary  string `yaml:"agent_binary" env:"GOK_CONTROL_AGENT_BINARY" env-default:""`
+	VersionFile  string `yaml:"version_file" env:"GOK_CONTROL_VERSION_FILE" env-default:"VERSION"`
+	ConfigStore  string `yaml:"config_store" env-default:"data/agent-configs.json"`
+	SessionDB    string `yaml:"session_db" env-default:"data/sessions.db"`
+	UIUsername   string `yaml:"ui_username" env:"GOK_UI_USERNAME" env-default:""`
+	UIPassword   string `yaml:"ui_password" env:"GOK_UI_PASSWORD" env-default:""`
+	LogFile      string `yaml:"log_file" env:"GOK_CS_LOG_FILE" env-default:""`
+}
 
 func main() {
-	addr := flag.String("addr", ":8080", "address to bind the control server")
-	sharedSecret := flag.String("secret", "", "shared secret required from gok-pi agents")
-	staticDir := flag.String("static", "", "path to serve pre-built React UI assets")
-	agentBinary := flag.String("agent-binary", envOrDefault(envAgentBinary, ""), "filename of the agent binary inside the downloads directory")
-	versionFile := flag.String("version-file", envOrDefault(envVersionFile, "VERSION"), "filename served under /downloads that contains the agent hash manifest")
-	configStore := flag.String("config-store", "data/agent-configs.json", "path to persisted agent configuration store")
-	sessionDB := flag.String("session-db", "data/sessions.db", "path to SQLite session database")
+	configPath := flag.String("config", "", "path to YAML config file")
 	flag.Parse()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	var cfg CSConfig
+	if *configPath != "" {
+		if err := cleanenv.ReadConfig(*configPath, &cfg); err != nil {
+			slog.Error("failed to load config file", slog.Any("error", err))
+			os.Exit(1)
+		}
+	} else {
+		if err := cleanenv.ReadEnv(&cfg); err != nil {
+			slog.Error("failed to read env config", slog.Any("error", err))
+			os.Exit(1)
+		}
+	}
+
+	var logWriter io.Writer = os.Stdout
+	if cfg.LogFile != "" {
+		f, err := os.OpenFile(cfg.LogFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			slog.Error("failed to open log file", slog.Any("error", err))
+			os.Exit(1)
+		}
+		defer f.Close()
+		logWriter = f
+	}
+
+	logger := slog.New(slog.NewJSONHandler(logWriter, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
 	srv := server.New(server.Config{
-		SharedSecret: *sharedSecret,
-		UIStaticDir:  *staticDir,
-		AgentBinary:  strings.TrimSpace(*agentBinary),
-		VersionFile:  strings.TrimSpace(*versionFile),
-		ConfigStore:  strings.TrimSpace(*configStore),
-		SessionDB:    strings.TrimSpace(*sessionDB),
-		UIUsername:   envOrDefault(envUIUsername, ""),
-		UIPassword:   envOrDefault(envUIPassword, ""),
+		SharedSecret: strings.TrimSpace(cfg.Secret),
+		UIStaticDir:  strings.TrimSpace(cfg.Static),
+		AgentBinary:  strings.TrimSpace(cfg.AgentBinary),
+		VersionFile:  strings.TrimSpace(cfg.VersionFile),
+		ConfigStore:  strings.TrimSpace(cfg.ConfigStore),
+		SessionDB:    strings.TrimSpace(cfg.SessionDB),
+		UIUsername:   strings.TrimSpace(cfg.UIUsername),
+		UIPassword:   strings.TrimSpace(cfg.UIPassword),
 	}, logger)
 
-	if err := srv.ListenAndServe(*addr); err != nil {
+	logger.Info("starting control server", slog.String("addr", cfg.Addr))
+
+	if err := srv.ListenAndServe(cfg.Addr); err != nil {
 		logger.Error("control server exited", slog.Any("error", err))
 		os.Exit(1)
 	}
-}
-
-func envOrDefault(key, fallback string) string {
-	if val := strings.TrimSpace(os.Getenv(key)); val != "" {
-		return val
-	}
-	return fallback
 }

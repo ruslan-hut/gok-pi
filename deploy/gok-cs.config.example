@@ -1,0 +1,15 @@
+# GOK Control Server configuration
+# Copy to /etc/gok-cs/config.yml and adjust values
+
+addr: ":8080"
+secret: ""
+static: "/opt/gok-pi/current/app"
+agent_binary: ""
+version_file: "VERSION"
+config_store: "/var/lib/gok-cs/agent-configs.json"
+session_db: "/var/lib/gok-cs/sessions.db"
+log_file: "/var/log/gok-cs.log"
+
+# UI basic auth (leave empty to disable)
+ui_username: ""
+ui_password: ""
