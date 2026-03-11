@@ -60,7 +60,7 @@ func New(cfg Config, log *slog.Logger) *Server {
 		uiClient: make(map[*uiConnection]struct{}),
 		configs:  store,
 		auth:     newAuthManager(cfg.UIUsername, cfg.UIPassword, log),
-		prices:   pricefetcher.New(log, 5, 5),
+		prices:   pricefetcher.New(log),
 	}
 }
 

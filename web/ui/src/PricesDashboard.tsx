@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchPrices } from "../../api";
-import type { DayData, PricesState, ScheduleWindow } from "../../types";
+import { fetchPrices } from "./api";
+import type { DayData, PricesState, ScheduleWindow } from "./types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 export default function PricesDashboard() {
+  const [open, setOpen] = useState(false);
   const [state, setState] = useState<PricesState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
@@ -17,57 +18,65 @@ export default function PricesDashboard() {
       const data = await fetchPrices();
       setState(data);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch prices",
-      );
+      setError(err instanceof Error ? err.message : "Failed to fetch prices");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    if (!open) return;
     load();
     intervalRef.current = setInterval(load, POLL_INTERVAL_MS);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [load]);
+  }, [open, load]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {loading && !state && (
-        <div className="config-loading">
-          <div className="spinner" />
-          <span>Loading prices...</span>
-        </div>
-      )}
-      {error && <div className="config-error">{error}</div>}
-      {state?.last_error && (
-        <div className="config-error">API error: {state.last_error}</div>
-      )}
-      {state && (
-        <>
-          <div className="prices-meta">
-            <span>
-              Last updated:{" "}
-              {new Date(state.last_updated).toLocaleString()}
-            </span>
-            <span>
-              Next update:{" "}
-              {new Date(state.next_update).toLocaleString()}
-            </span>
-            {loading && <span className="spinner-small" />}
-          </div>
-          {state.today && <DayPanel label="Today" data={state.today} />}
-          {state.tomorrow && (
-            <DayPanel label="Tomorrow" data={state.tomorrow} />
-          )}
-          {!state.today && !state.tomorrow && (
-            <div className="config-empty">
-              No price data available yet.
+    <div className="config-panel">
+      <div
+        className="config-panel-header"
+        style={{ cursor: "pointer" }}
+        onClick={() => setOpen(!open)}
+      >
+        <h3>Electricity Prices</h3>
+        <span className="config-toggle">{open ? "collapse" : "expand"}</span>
+      </div>
+      {open && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {loading && !state && (
+            <div className="config-loading">
+              <div className="spinner" />
+              <span>Loading prices...</span>
             </div>
           )}
-        </>
+          {error && <div className="config-error">{error}</div>}
+          {state?.last_error && (
+            <div className="config-error">
+              API error: {state.last_error}
+            </div>
+          )}
+          {state && (
+            <>
+              <div className="config-meta">
+                Last updated:{" "}
+                {new Date(state.last_updated).toLocaleString()} | Next
+                update: {new Date(state.next_update).toLocaleString()}
+                {loading && <span className="spinner-small" />}
+              </div>
+              {state.today && <DayPanel label="Today" data={state.today} />}
+              {state.tomorrow && (
+                <DayPanel label="Tomorrow" data={state.tomorrow} />
+              )}
+              {!state.today && !state.tomorrow && (
+                <div className="config-empty">
+                  No price data available yet.
+                </div>
+              )}
+            </>
+          )}
+        </div>
       )}
     </div>
   );
@@ -85,13 +94,7 @@ function DayPanel({ label, data }: { label: string; data: DayData }) {
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.75rem",
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <h4>
         {label} — {data.date}
       </h4>
@@ -201,8 +204,7 @@ function PriceChart({
       {prices.map((p) => {
         const x = padding.left + (p.hour / 24) * chartW + 1;
         const barTop = yScale(Math.max(p.price_eur_mwh, 0));
-        const barBottom =
-          p.price_eur_mwh >= 0 ? zeroY : yScale(p.price_eur_mwh);
+        const barBottom = p.price_eur_mwh >= 0 ? zeroY : yScale(p.price_eur_mwh);
         const barHeight = Math.abs(barBottom - barTop);
         const y = Math.min(barTop, barBottom);
 
@@ -242,27 +244,13 @@ function PriceChart({
       ))}
 
       {/* Legend */}
-      <rect
-        x={width - 180}
-        y={4}
-        width={10}
-        height={10}
-        fill="#4ade80"
-        rx="2"
-      />
+      <rect x={width - 180} y={4} width={10} height={10} fill="#4ade80" rx="2" />
       <text x={width - 166} y={13} fill="#94a3b8" fontSize="10">
-        Cheapest 3
+        Charge
       </text>
-      <rect
-        x={width - 115}
-        y={4}
-        width={10}
-        height={10}
-        fill="#f87171"
-        rx="2"
-      />
+      <rect x={width - 115} y={4} width={10} height={10} fill="#f87171" rx="2" />
       <text x={width - 101} y={13} fill="#94a3b8" fontSize="10">
-        Priciest 3
+        Discharge
       </text>
       <line
         x1={width - 46}
@@ -309,7 +297,7 @@ function ScheduleTable({
             <tr key={`c-${i}`} className="schedule-row-charge">
               <td>
                 <span className="schedule-badge schedule-badge-charge">
-                  CHEAPEST
+                  CHARGE
                 </span>
               </td>
               <td>
@@ -322,7 +310,7 @@ function ScheduleTable({
             <tr key={`d-${i}`} className="schedule-row-discharge">
               <td>
                 <span className="schedule-badge schedule-badge-discharge">
-                  PRICIEST
+                  DISCHARGE
                 </span>
               </td>
               <td>

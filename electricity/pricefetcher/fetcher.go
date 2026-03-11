@@ -29,29 +29,23 @@ type State struct {
 	NextUpdate  time.Time `json:"next_update"`
 }
 
+const (
+	chargePeriods    = 3
+	dischargePeriods = 3
+)
+
 type Fetcher struct {
-	client         *redata.Client
-	log            *slog.Logger
-	chargeHours    int
-	dischargeHours int
+	client *redata.Client
+	log    *slog.Logger
 
 	mu    sync.RWMutex
 	state State
 }
 
-func New(log *slog.Logger, chargeHours, dischargeHours int) *Fetcher {
-	if chargeHours <= 0 {
-		chargeHours = 5
-	}
-	if dischargeHours <= 0 {
-		dischargeHours = 5
-	}
-
+func New(log *slog.Logger) *Fetcher {
 	return &Fetcher{
-		client:         redata.NewClient(log),
-		log:            log.With(slog.String("component", "price-fetcher")),
-		chargeHours:    chargeHours,
-		dischargeHours: dischargeHours,
+		client: redata.NewClient(log),
+		log:    log.With(slog.String("component", "price-fetcher")),
 	}
 }
 
@@ -64,7 +58,7 @@ func (f *Fetcher) GetState() State {
 
 // Run starts the background fetch loop. Blocks until ctx is cancelled.
 func (f *Fetcher) Run(ctx context.Context) {
-	f.log.Info("price fetcher started", slog.Int("charge_hours", f.chargeHours), slog.Int("discharge_hours", f.dischargeHours))
+	f.log.Info("price fetcher started", slog.Int("charge_periods", chargePeriods), slog.Int("discharge_periods", dischargePeriods))
 
 	// Initial fetch
 	f.fetchAll(ctx)
@@ -143,7 +137,7 @@ func (f *Fetcher) fetchDay(ctx context.Context, date time.Time) (*DayData, error
 		return nil, err
 	}
 
-	sched := scheduler.ComputeSchedule(prices, f.chargeHours, f.dischargeHours)
+	sched := scheduler.ComputeSchedule(prices, chargePeriods, dischargePeriods)
 	stats := scheduler.ComputeStats(prices)
 
 	return &DayData{
