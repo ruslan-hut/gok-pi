@@ -8,6 +8,7 @@ import (
 	"gok-pi/internal/lib/timer"
 	"gok-pi/metrics/observers"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -83,6 +84,7 @@ type Discharge struct {
 	timezone          *time.Location                // Timezone for schedule time parsing
 	updateGoalReached func(string, time.Time) error // Callback to persist goal reached state
 	clearGoalReached  func(string) error            // Callback to clear goal reached state
+	removeSchedule    func(string) error            // Callback to remove a schedule from config
 	stop              chan struct{}
 	stopped           chan struct{}
 	stopOnce          sync.Once
@@ -107,6 +109,11 @@ func New(name string, client Client, log *slog.Logger) (*Discharge, error) {
 func (d *Discharge) SetGoalCallbacks(updateFn func(string, time.Time) error, clearFn func(string) error) {
 	d.updateGoalReached = updateFn
 	d.clearGoalReached = clearFn
+}
+
+// SetRemoveScheduleCallback sets the callback for removing expired auto-schedules from config.
+func (d *Discharge) SetRemoveScheduleCallback(fn func(string) error) {
+	d.removeSchedule = fn
 }
 
 func (d *Discharge) SetTimezone(timezone string) error {
@@ -396,6 +403,58 @@ func (d *Discharge) checkTime() {
 		d.powerLimit = d.batteryPowerLimit
 		d.socLimit = d.batterySocLimit
 	}
+
+	// Remove expired auto-schedules (prefixed "auto-") whose time window has passed
+	d.removeExpiredAutoSchedules()
+}
+
+// removeExpiredAutoSchedules removes auto-schedules whose time window has ended.
+func (d *Discharge) removeExpiredAutoSchedules() {
+	if d.removeSchedule == nil {
+		return
+	}
+
+	now := time.Now().In(d.timezone)
+	var remaining []entity.Schedule
+
+	for _, s := range d.schedules {
+		if !strings.HasPrefix(s.Name, "auto-") {
+			remaining = append(remaining, s)
+			continue
+		}
+
+		startTime, err := timer.ParseTimeInLocation(s.StartTime, d.timezone)
+		if err != nil {
+			remaining = append(remaining, s)
+			continue
+		}
+		stopTime, err := timer.ParseTimeInLocation(s.StopTime, d.timezone)
+		if err != nil {
+			remaining = append(remaining, s)
+			continue
+		}
+
+		expired := false
+		if startTime.Before(stopTime) {
+			// Non-midnight-spanning: expired if now >= stopTime
+			expired = !now.Before(stopTime)
+		} else {
+			// Midnight-spanning (e.g., 22:00-02:00): expired if between stop and start
+			expired = !now.Before(stopTime) && now.Before(startTime)
+		}
+
+		if expired {
+			d.log.With(slog.String("schedule", s.Name)).Info("removing expired auto-schedule")
+			if err := d.removeSchedule(s.Name); err != nil {
+				d.log.With(slog.String("schedule", s.Name), sl.Err(err)).Warn("failed to remove expired auto-schedule")
+			}
+			continue
+		}
+
+		remaining = append(remaining, s)
+	}
+
+	d.schedules = remaining
 }
 
 // runDischarge manages the discharge process of the battery based on its current status and predefined limits.

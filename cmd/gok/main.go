@@ -580,6 +580,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}
 		// Set goal callbacks for persisting goal reached state
 		dischargerWorker.SetGoalCallbacks(config.UpdateScheduleGoalReached, config.ClearScheduleGoalReached)
+		dischargerWorker.SetRemoveScheduleCallback(config.RemoveSchedule)
 		entry.dischargerWorker = dischargerWorker
 
 		wg.Add(1)
@@ -639,6 +640,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}
 		// Set goal callbacks for persisting goal reached state
 		chargerWorker.SetGoalCallbacks(config.UpdateScheduleGoalReached, config.ClearScheduleGoalReached)
+		chargerWorker.SetRemoveScheduleCallback(config.RemoveSchedule)
 		entry.chargerWorker = chargerWorker
 
 		wg.Add(1)

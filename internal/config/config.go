@@ -262,6 +262,27 @@ func UpdateScheduleGoalReached(scheduleName string, reachedAt time.Time) error {
 	return Save()
 }
 
+// RemoveSchedule removes a schedule by name from the config and persists to config file.
+// Used to clean up expired auto-schedules after their time window ends.
+func RemoveSchedule(scheduleName string) error {
+	mu.Lock()
+	if instance == nil {
+		mu.Unlock()
+		return fmt.Errorf("config not loaded")
+	}
+	for i := range instance.Schedules {
+		if instance.Schedules[i].Name == scheduleName {
+			instance.Schedules = append(instance.Schedules[:i], instance.Schedules[i+1:]...)
+			break
+		}
+	}
+	mu.Unlock()
+
+	notifyGoalStateChanged()
+
+	return Save()
+}
+
 // ClearScheduleGoalReached clears the goal reached state for a schedule and persists to config file.
 func ClearScheduleGoalReached(scheduleName string) error {
 	mu.Lock()

@@ -8,6 +8,7 @@ import (
 	"gok-pi/internal/lib/timer"
 	"gok-pi/metrics/observers"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -84,6 +85,7 @@ type Charger struct {
 	timezone          *time.Location                // Timezone for schedule time parsing
 	updateGoalReached func(string, time.Time) error // Callback to persist goal reached state
 	clearGoalReached  func(string) error            // Callback to clear goal reached state
+	removeSchedule    func(string) error            // Callback to remove a schedule from config
 	stop              chan struct{}
 	stopped           chan struct{}
 	stopOnce          sync.Once
@@ -108,6 +110,11 @@ func New(name string, client Client, log *slog.Logger) (*Charger, error) {
 func (c *Charger) SetGoalCallbacks(updateFn func(string, time.Time) error, clearFn func(string) error) {
 	c.updateGoalReached = updateFn
 	c.clearGoalReached = clearFn
+}
+
+// SetRemoveScheduleCallback sets the callback for removing expired auto-schedules from config.
+func (c *Charger) SetRemoveScheduleCallback(fn func(string) error) {
+	c.removeSchedule = fn
 }
 
 func (c *Charger) SetTimezone(timezone string) error {
@@ -397,6 +404,58 @@ func (c *Charger) checkTime() {
 		c.powerLimit = c.batteryPowerLimit
 		c.socLimit = c.batterySocLimit
 	}
+
+	// Remove expired auto-schedules (prefixed "auto-") whose time window has passed
+	c.removeExpiredAutoSchedules()
+}
+
+// removeExpiredAutoSchedules removes auto-schedules whose time window has ended.
+func (c *Charger) removeExpiredAutoSchedules() {
+	if c.removeSchedule == nil {
+		return
+	}
+
+	now := time.Now().In(c.timezone)
+	var remaining []entity.Schedule
+
+	for _, s := range c.schedules {
+		if !strings.HasPrefix(s.Name, "auto-") {
+			remaining = append(remaining, s)
+			continue
+		}
+
+		startTime, err := timer.ParseTimeInLocation(s.StartTime, c.timezone)
+		if err != nil {
+			remaining = append(remaining, s)
+			continue
+		}
+		stopTime, err := timer.ParseTimeInLocation(s.StopTime, c.timezone)
+		if err != nil {
+			remaining = append(remaining, s)
+			continue
+		}
+
+		expired := false
+		if startTime.Before(stopTime) {
+			// Non-midnight-spanning: expired if now >= stopTime
+			expired = !now.Before(stopTime)
+		} else {
+			// Midnight-spanning (e.g., 22:00-02:00): expired if between stop and start
+			expired = !now.Before(stopTime) && now.Before(startTime)
+		}
+
+		if expired {
+			c.log.With(slog.String("schedule", s.Name)).Info("removing expired auto-schedule")
+			if err := c.removeSchedule(s.Name); err != nil {
+				c.log.With(slog.String("schedule", s.Name), sl.Err(err)).Warn("failed to remove expired auto-schedule")
+			}
+			continue
+		}
+
+		remaining = append(remaining, s)
+	}
+
+	c.schedules = remaining
 }
 
 // runCharge manages the charge process of the battery based on its current status and predefined limits.
