@@ -68,7 +68,7 @@ export default function Login({ onLogin, onBack }: LoginProps) {
           </button>
         </form>
         {onBack && (
-          <button type="button" className="button-link login-back" onClick={onBack}>
+          <button type="button" className="login-back" onClick={onBack}>
             Continue without signing in
           </button>
         )}

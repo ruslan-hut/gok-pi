@@ -372,14 +372,14 @@
   justify-content: center;
   min-height: 100vh;
   background-color: var(--color-bg);
-  padding: var(--space-2xl);
-  padding-top: calc(var(--space-2xl) + env(safe-area-inset-top, 0px));
+  padding: var(--space-lg);
+  padding-top: calc(var(--space-lg) + env(safe-area-inset-top, 0px));
 }
 
 .login-icon {
-  width: 72px;
-  height: 72px;
-  margin-bottom: var(--space-xl);
+  width: 64px;
+  height: 64px;
+  margin-bottom: var(--space-lg);
   border-radius: var(--radius-xl);
 }
 
@@ -387,48 +387,48 @@
   background: var(--color-bg-sidebar);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
-  padding: 2.5rem;
+  padding: 1.5rem;
   width: 100%;
-  max-width: 400px;
+  max-width: 360px;
   backdrop-filter: blur(14px);
 }
 
 .login-card h1 {
-  margin: 0 0 var(--space-sm) 0;
-  font-size: 1.5rem;
+  margin: 0 0 var(--space-xs) 0;
+  font-size: 1.25rem;
   text-align: center;
 }
 
 .login-subtitle {
   text-align: center;
   color: var(--color-text-muted);
-  font-size: 0.9rem;
-  margin: 0 0 var(--space-2xl) 0;
+  font-size: 0.85rem;
+  margin: 0 0 var(--space-lg) 0;
 }
 
 .login-field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
-  margin-bottom: 1.25rem;
+  gap: var(--space-xs);
+  margin-bottom: 1rem;
 }
 
 .login-field label {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--color-text);
   font-weight: 500;
 }
 
 .login-field input {
   width: 100%;
-  padding: 0.6rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   box-sizing: border-box;
 }
 
 .login-error {
   color: var(--color-danger-text);
-  font-size: 0.9rem;
-  margin-bottom: var(--space-lg);
+  font-size: 0.85rem;
+  margin-bottom: var(--space-md);
   padding: var(--space-sm);
   background: var(--color-danger-bg);
   border-radius: var(--radius-md);
@@ -438,14 +438,20 @@
 .login-card button {
   width: 100%;
   padding: 0.6rem 0.75rem;
-  font-size: 1rem;
+  font-size: 0.95rem;
   box-sizing: border-box;
 }
 
 .login-back {
-  margin-top: var(--space-lg);
-  text-align: center;
-  font-size: 0.9rem;
+  margin-top: var(--space-sm);
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--color-text-muted);
+}
+
+.login-back:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
 }
 
 /* DB stats (overview page) */
