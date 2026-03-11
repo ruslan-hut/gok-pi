@@ -46,6 +46,18 @@ export function BatteryConfigForm({
             <span className="switch-slider"></span>
             <span className="switch-label">Enabled</span>
           </label>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={battery.auto_schedule ?? false}
+              onChange={(e) =>
+                onChange({ ...battery, auto_schedule: e.target.checked })
+              }
+              disabled={disabled}
+            />
+            <span className="switch-slider"></span>
+            <span className="switch-label">Auto Schedule</span>
+          </label>
         </div>
       </div>
       {collapsed && (

@@ -1125,3 +1125,23 @@ button.primary {
   background: rgba(248, 113, 113, 0.1);
 }
 
+.session-active {
+  background: rgba(74, 222, 128, 0.05);
+}
+
+.session-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+

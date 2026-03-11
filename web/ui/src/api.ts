@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentSummary, PricesState } from "./types";
+import type { AgentConfig, AgentSummary, ChargingSession, PricesState } from "./types";
 
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
 
@@ -207,5 +207,20 @@ export async function fetchPrices(): Promise<PricesState> {
     throw new Error(`Failed to load prices: ${res.statusText}`);
   }
   return (await res.json()) as PricesState;
+}
+
+export async function fetchSessions(agentId?: string): Promise<ChargingSession[]> {
+  const params = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+  const res = await fetch(`/api/sessions${params}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      clearAuthToken();
+      throw new Error("Unauthorized. Please log in again.");
+    }
+    throw new Error(`Failed to load sessions: ${res.statusText}`);
+  }
+  return (await res.json()) as ChargingSession[];
 }
 

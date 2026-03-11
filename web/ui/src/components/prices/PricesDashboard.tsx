@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchPrices } from "../../api";
-import type { DayData, PricesState, ScheduleWindow } from "../../types";
+import { fetchPrices, fetchSessions } from "../../api";
+import type { ChargingSession, DayData, PricesState, ScheduleWindow } from "../../types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 export default function PricesDashboard() {
   const [state, setState] = useState<PricesState | null>(null);
+  const [sessions, setSessions] = useState<ChargingSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
@@ -14,8 +15,12 @@ export default function PricesDashboard() {
     try {
       setLoading(true);
       setError(undefined);
-      const data = await fetchPrices();
+      const [data, sessData] = await Promise.all([
+        fetchPrices(),
+        fetchSessions(),
+      ]);
       setState(data);
+      setSessions(sessData);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to fetch prices",
@@ -67,6 +72,7 @@ export default function PricesDashboard() {
               No price data available yet.
             </div>
           )}
+          <SessionsPanel sessions={sessions} />
         </>
       )}
     </div>
@@ -335,6 +341,82 @@ function ScheduleTable({
       </table>
     </div>
   );
+}
+
+function SessionsPanel({ sessions }: { sessions: ChargingSession[] }) {
+  if (sessions.length === 0) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        <h4>Charging Sessions</h4>
+        <div className="config-empty">No sessions recorded yet.</div>
+      </div>
+    );
+  }
+
+  // Sort: active first, then by start time descending
+  const sorted = [...sessions].sort((a, b) => {
+    if (!a.ended_at && b.ended_at) return -1;
+    if (a.ended_at && !b.ended_at) return 1;
+    return new Date(b.started_at).getTime() - new Date(a.started_at).getTime();
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+      <h4>Charging Sessions</h4>
+      <div className="schedule-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Battery</th>
+              <th>Start</th>
+              <th>End</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((s, i) => {
+              const isActive = !s.ended_at;
+              const badgeClass =
+                s.type === "charge"
+                  ? "schedule-badge-charge"
+                  : "schedule-badge-discharge";
+              return (
+                <tr key={i} className={isActive ? "session-active" : ""}>
+                  <td>
+                    <span className={`schedule-badge ${badgeClass}`}>
+                      {s.type.toUpperCase()}
+                    </span>
+                    {isActive && <span className="session-live-dot" />}
+                  </td>
+                  <td>{s.battery_name}</td>
+                  <td>{new Date(s.started_at).toLocaleTimeString()}</td>
+                  <td>
+                    {s.ended_at
+                      ? new Date(s.ended_at).toLocaleTimeString()
+                      : "—"}
+                  </td>
+                  <td>{formatDuration(s.duration_seconds, isActive ? s.started_at : undefined)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function formatDuration(seconds?: number, startedAt?: string): string {
+  if (startedAt) {
+    // Active session — compute from start time
+    seconds = (Date.now() - new Date(startedAt).getTime()) / 1000;
+  }
+  if (seconds == null || seconds <= 0) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 function fmt2(n: number): string {

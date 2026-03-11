@@ -176,6 +176,66 @@ func (cs *ConfigStore) Seed(agentID string, batteries []entity.BatteryConfig, sc
 	return cloneAgentConfig(cfg), true, nil
 }
 
+// UpdateAutoSchedules replaces all auto-prefixed schedules for the given agent
+// while preserving manual schedules. It bumps the revision atomically.
+func (cs *ConfigStore) UpdateAutoSchedules(agentID string, autoSchedules []entity.Schedule) (AgentConfig, bool, error) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	current, exists := cs.records[agentID]
+	if !exists {
+		return AgentConfig{}, false, nil
+	}
+
+	// Keep only manual schedules
+	var manual []entity.Schedule
+	for _, s := range current.Schedules {
+		if !isAutoScheduleName(s.Name) {
+			manual = append(manual, s)
+		}
+	}
+
+	merged := append(manual, autoSchedules...)
+
+	// Check if schedules actually changed
+	if schedulesEqual(current.Schedules, merged) {
+		return cloneAgentConfig(current), false, nil
+	}
+
+	next := cloneAgentConfig(current)
+	next.Schedules = cloneSchedules(merged)
+	next.Revision = current.Revision + 1
+	next.UpdatedAt = time.Now().UTC()
+
+	cs.records[agentID] = next
+
+	if err := cs.persistLocked(); err != nil {
+		cs.records[agentID] = current
+		return AgentConfig{}, false, err
+	}
+
+	return cloneAgentConfig(next), true, nil
+}
+
+func isAutoScheduleName(name string) bool {
+	return len(name) >= 5 && name[:5] == "auto-"
+}
+
+func schedulesEqual(a, b []entity.Schedule) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || a[i].Type != b[i].Type ||
+			a[i].StartTime != b[i].StartTime || a[i].StopTime != b[i].StopTime ||
+			a[i].BatteryName != b[i].BatteryName || a[i].Enabled != b[i].Enabled ||
+			a[i].PowerLimit != b[i].PowerLimit || a[i].SocLimit != b[i].SocLimit {
+			return false
+		}
+	}
+	return true
+}
+
 // snapshot returns a copy of all stored configs.
 func (cs *ConfigStore) snapshot() configSnapshot {
 	cs.mu.RLock()

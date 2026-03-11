@@ -32,6 +32,8 @@ type TelemetrySnapshot struct {
 	PacTotalW             float64   `json:"pac_total_w"`
 	BatteryDischarging    bool      `json:"battery_discharging"`
 	BatteryDischargingSet bool      `json:"battery_discharging_set"`
+	BatteryCharging       bool      `json:"battery_charging"`
+	BatteryChargingSet    bool      `json:"battery_charging_set"`
 	OperatingMode         string    `json:"operating_mode"`
 	OperatingModeSet      bool      `json:"operating_mode_set"`
 	Status                string    `json:"status"`

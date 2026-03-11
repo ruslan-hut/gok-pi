@@ -35,6 +35,7 @@ export interface BatteryConfig {
   url: string;
   token: string;
   enabled: boolean;
+  auto_schedule?: boolean;
   capacity_limit: number;
   power_limit?: number;  // Default power limit in W (used when no schedule is active)
   soc_limit?: number;    // Default SoC limit in % (used when no schedule is active)
@@ -154,4 +155,15 @@ export interface CommandState {
 }
 
 export type TabId = "monitor" | "prices" | "configure" | "tools";
+
+// Charging session types
+
+export interface ChargingSession {
+  battery_name: string;
+  agent_id: string;
+  type: "charge" | "discharge";
+  started_at: string;
+  ended_at?: string;
+  duration_seconds?: number;
+}
 

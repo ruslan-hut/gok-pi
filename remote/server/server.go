@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"gok-pi/electricity/autoschedule"
 	"gok-pi/electricity/pricefetcher"
 
 	"github.com/gorilla/websocket"
@@ -34,9 +35,10 @@ type Server struct {
 	uiMu     sync.RWMutex
 	uiClient map[*uiConnection]struct{}
 
-	configs *ConfigStore
-	auth    *authManager
-	prices  *pricefetcher.Fetcher
+	configs  *ConfigStore
+	auth     *authManager
+	prices   *pricefetcher.Fetcher
+	sessions *SessionTracker
 }
 
 func New(cfg Config, log *slog.Logger) *Server {
@@ -61,11 +63,15 @@ func New(cfg Config, log *slog.Logger) *Server {
 		configs:  store,
 		auth:     newAuthManager(cfg.UIUsername, cfg.UIPassword, log),
 		prices:   pricefetcher.New(log),
+		sessions: NewSessionTracker(log),
 	}
 }
 
 func (s *Server) ListenAndServe(addr string) error {
-	go s.prices.Run(context.Background())
+	ctx := context.Background()
+	go s.prices.Run(ctx)
+	go s.runAutoScheduler(ctx)
+	go s.runSessionCleanup(ctx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/login", s.handleLogin)
@@ -74,6 +80,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/agents", s.requireAuth(s.handleAgents))
 	mux.HandleFunc("/api/agents/", s.requireAuth(s.handleAgentRoutes))
 	mux.HandleFunc("/api/prices", s.requireAuth(s.handlePrices))
+	mux.HandleFunc("/api/sessions", s.requireAuth(s.handleSessions))
 
 	if s.cfg.UIStaticDir != "" {
 		fs := http.FileServer(http.Dir(s.cfg.UIStaticDir))
@@ -344,6 +351,7 @@ func (s *Server) sendCommand(agentID string, req CommandRequest) error {
 }
 
 func (s *Server) onTelemetry(agentID string, snapshot TelemetrySnapshot) {
+	s.sessions.OnTelemetry(agentID, snapshot)
 	s.broadcastTelemetry(agentID, snapshot)
 }
 
@@ -614,6 +622,82 @@ func (s *Server) handlePrices(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(state); err != nil {
 		s.log.With(slog.Any("error", err)).Error("encode prices response")
 		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	agentID := r.URL.Query().Get("agent_id")
+	sessions := s.sessions.GetSessions(agentID)
+	if sessions == nil {
+		sessions = []Session{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(sessions); err != nil {
+		s.log.With(slog.Any("error", err)).Error("encode sessions response")
+	}
+}
+
+func (s *Server) runAutoScheduler(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	// Run once on startup after a short delay to let prices load
+	time.Sleep(30 * time.Second)
+	s.updateAutoSchedules()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.updateAutoSchedules()
+		}
+	}
+}
+
+func (s *Server) updateAutoSchedules() {
+	state := s.prices.GetState()
+	if state.Today == nil && state.Tomorrow == nil {
+		return
+	}
+
+	configs := s.configs.snapshot()
+	for agentID, cfg := range configs {
+		autoScheds := autoschedule.GenerateSchedules(cfg.Batteries, state.Today, state.Tomorrow)
+		updated, changed, err := s.configs.UpdateAutoSchedules(agentID, autoScheds)
+		if err != nil {
+			s.log.With(slog.String("agent", agentID), slog.Any("error", err)).Warn("auto-schedule update failed")
+			continue
+		}
+		if !changed {
+			continue
+		}
+
+		s.log.Info("auto-schedules updated", slog.String("agent", agentID), slog.Int("count", len(autoScheds)))
+		s.broadcastConfigUpdated(agentID, updated)
+		if err := s.pushConfigToAgent(agentID, updated); err != nil {
+			s.log.With(slog.String("agent", agentID), slog.Any("error", err)).Warn("push auto-schedule config to agent")
+		}
+	}
+}
+
+func (s *Server) runSessionCleanup(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.sessions.Cleanup()
+		}
 	}
 }
 
