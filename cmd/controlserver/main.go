@@ -23,6 +23,7 @@ func main() {
 	agentBinary := flag.String("agent-binary", envOrDefault(envAgentBinary, ""), "filename of the agent binary inside the downloads directory")
 	versionFile := flag.String("version-file", envOrDefault(envVersionFile, "VERSION"), "filename served under /downloads that contains the agent hash manifest")
 	configStore := flag.String("config-store", "data/agent-configs.json", "path to persisted agent configuration store")
+	sessionDB := flag.String("session-db", "data/sessions.db", "path to SQLite session database")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -35,6 +36,7 @@ func main() {
 		AgentBinary:  strings.TrimSpace(*agentBinary),
 		VersionFile:  strings.TrimSpace(*versionFile),
 		ConfigStore:  strings.TrimSpace(*configStore),
+		SessionDB:    strings.TrimSpace(*sessionDB),
 		UIUsername:   envOrDefault(envUIUsername, ""),
 		UIPassword:   envOrDefault(envUIPassword, ""),
 	}, logger)

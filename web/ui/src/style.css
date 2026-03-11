@@ -1145,3 +1145,56 @@ button.primary {
   50% { opacity: 0.3; }
 }
 
+.db-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.db-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+
+.db-stats-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(148, 163, 184, 0.06);
+  border-radius: 6px;
+}
+
+.db-stats-label {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.db-stats-value {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.db-stats-agents table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.db-stats-agents th {
+  text-align: left;
+  color: #94a3b8;
+  font-weight: 500;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.db-stats-agents td {
+  padding: 0.35rem 0.5rem;
+  color: #e2e8f0;
+}
+

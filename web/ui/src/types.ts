@@ -156,14 +156,62 @@ export interface CommandState {
 
 export type TabId = "monitor" | "prices" | "configure" | "tools";
 
+// Database stats types
+
+export interface DBStats {
+  file_size_bytes: number;
+  total_sessions: number;
+  open_sessions: number;
+  oldest_session?: string;
+  newest_session?: string;
+}
+
+export interface AgentDBStats {
+  agent_id: string;
+  total_sessions: number;
+  charge_sessions: number;
+  discharge_sessions: number;
+  total_energy_wh: number;
+  total_cost_eur: number;
+}
+
+export interface DBStatsResponse {
+  stats: DBStats | null;
+  agents: AgentDBStats[];
+}
+
 // Charging session types
 
-export interface ChargingSession {
+export interface SessionRecord {
+  id: number;
   battery_name: string;
   agent_id: string;
   type: "charge" | "discharge";
   started_at: string;
   ended_at?: string;
   duration_seconds?: number;
+  energy_wh: number;
+  avg_power_w: number;
+  peak_power_w: number;
+  soc_start: number;
+  soc_end: number;
+  avg_price_eur_mwh: number;
+  cost_eur: number;
+  samples: number;
+}
+
+export interface BatterySummary {
+  battery_name: string;
+  charge_energy_wh: number;
+  charge_cost_eur: number;
+  discharge_energy_wh: number;
+  discharge_cost_eur: number;
+  active_charge: boolean;
+  active_discharge: boolean;
+}
+
+export interface SessionsResponse {
+  summaries: BatterySummary[];
+  sessions: SessionRecord[];
 }
 

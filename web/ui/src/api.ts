@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentSummary, ChargingSession, PricesState } from "./types";
+import type { AgentConfig, AgentSummary, DBStatsResponse, PricesState, SessionsResponse } from "./types";
 
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
 
@@ -209,9 +209,12 @@ export async function fetchPrices(): Promise<PricesState> {
   return (await res.json()) as PricesState;
 }
 
-export async function fetchSessions(agentId?: string): Promise<ChargingSession[]> {
-  const params = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
-  const res = await fetch(`/api/sessions${params}`, {
+export async function fetchSessions(agentId?: string, hours?: number): Promise<SessionsResponse> {
+  const params = new URLSearchParams();
+  if (agentId) params.set("agent_id", agentId);
+  if (hours) params.set("hours", hours.toString());
+  const qs = params.toString();
+  const res = await fetch(`/api/sessions${qs ? `?${qs}` : ""}`, {
     headers: getAuthHeaders(),
   });
   if (!res.ok) {
@@ -221,6 +224,20 @@ export async function fetchSessions(agentId?: string): Promise<ChargingSession[]
     }
     throw new Error(`Failed to load sessions: ${res.statusText}`);
   }
-  return (await res.json()) as ChargingSession[];
+  return (await res.json()) as SessionsResponse;
+}
+
+export async function fetchDBStats(): Promise<DBStatsResponse> {
+  const res = await fetch("/api/db-stats", {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      clearAuthToken();
+      throw new Error("Unauthorized. Please log in again.");
+    }
+    throw new Error(`Failed to load DB stats: ${res.statusText}`);
+  }
+  return (await res.json()) as DBStatsResponse;
 }
 

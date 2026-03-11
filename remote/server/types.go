@@ -19,6 +19,7 @@ type Config struct {
 	AgentBinary  string
 	VersionFile  string
 	ConfigStore  string
+	SessionDB    string // path to SQLite session database
 	UIUsername   string
 	UIPassword   string
 }

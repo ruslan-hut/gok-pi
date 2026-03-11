@@ -19,6 +19,7 @@ import (
 
 	"gok-pi/electricity/autoschedule"
 	"gok-pi/electricity/pricefetcher"
+	"gok-pi/remote/server/sessiondb"
 
 	"github.com/gorilla/websocket"
 )
@@ -48,6 +49,22 @@ func New(cfg Config, log *slog.Logger) *Server {
 		store, _ = NewConfigStore("")
 	}
 
+	sessionDBPath := cfg.SessionDB
+	if sessionDBPath == "" {
+		sessionDBPath = "data/sessions.db"
+	}
+	sessDB, err := sessiondb.Open(sessionDBPath, log)
+	if err != nil {
+		log.With(slog.Any("error", err)).Error("opening session database")
+	}
+
+	prices := pricefetcher.New(log)
+
+	var sessions *SessionTracker
+	if sessDB != nil {
+		sessions = NewSessionTracker(log, sessDB, prices)
+	}
+
 	return &Server{
 		cfg: cfg,
 		log: log,
@@ -62,8 +79,8 @@ func New(cfg Config, log *slog.Logger) *Server {
 		uiClient: make(map[*uiConnection]struct{}),
 		configs:  store,
 		auth:     newAuthManager(cfg.UIUsername, cfg.UIPassword, log),
-		prices:   pricefetcher.New(log),
-		sessions: NewSessionTracker(log),
+		prices:   prices,
+		sessions: sessions,
 	}
 }
 
@@ -81,6 +98,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/agents/", s.requireAuth(s.handleAgentRoutes))
 	mux.HandleFunc("/api/prices", s.requireAuth(s.handlePrices))
 	mux.HandleFunc("/api/sessions", s.requireAuth(s.handleSessions))
+	mux.HandleFunc("/api/db-stats", s.requireAuth(s.handleDBStats))
 
 	if s.cfg.UIStaticDir != "" {
 		fs := http.FileServer(http.Dir(s.cfg.UIStaticDir))
@@ -351,7 +369,9 @@ func (s *Server) sendCommand(agentID string, req CommandRequest) error {
 }
 
 func (s *Server) onTelemetry(agentID string, snapshot TelemetrySnapshot) {
-	s.sessions.OnTelemetry(agentID, snapshot)
+	if s.sessions != nil {
+		s.sessions.OnTelemetry(agentID, snapshot)
+	}
 	s.broadcastTelemetry(agentID, snapshot)
 }
 
@@ -631,16 +651,94 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.sessions == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"summaries":[],"sessions":[]}`))
+		return
+	}
+
 	agentID := r.URL.Query().Get("agent_id")
-	sessions := s.sessions.GetSessions(agentID)
+	hoursStr := r.URL.Query().Get("hours")
+	hours := 48
+	if hoursStr != "" {
+		if h, err := strconv.Atoi(hoursStr); err == nil && h > 0 {
+			hours = h
+		}
+	}
+
+	summaries, err := s.sessions.GetSummaries(agentID, hours)
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("get session summaries")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if summaries == nil {
+		summaries = []sessiondb.BatterySummary{}
+	}
+
+	sessions, err := s.sessions.GetRecentSessions(agentID, hours)
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("get recent sessions")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 	if sessions == nil {
-		sessions = []Session{}
+		sessions = []sessiondb.SessionRecord{}
+	}
+
+	resp := struct {
+		Summaries []sessiondb.BatterySummary `json:"summaries"`
+		Sessions  []sessiondb.SessionRecord  `json:"sessions"`
+	}{
+		Summaries: summaries,
+		Sessions:  sessions,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(sessions); err != nil {
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		s.log.With(slog.Any("error", err)).Error("encode sessions response")
 	}
+}
+
+func (s *Server) handleDBStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.sessions == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"stats":null,"agents":[]}`))
+		return
+	}
+
+	stats, err := s.sessions.Store().GetStats()
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("get db stats")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	agents, err := s.sessions.Store().GetAgentStats()
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("get agent db stats")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if agents == nil {
+		agents = []sessiondb.AgentDBStats{}
+	}
+
+	resp := struct {
+		Stats  *sessiondb.DBStats       `json:"stats"`
+		Agents []sessiondb.AgentDBStats `json:"agents"`
+	}{
+		Stats:  stats,
+		Agents: agents,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (s *Server) runAutoScheduler(ctx context.Context) {
@@ -688,6 +786,9 @@ func (s *Server) updateAutoSchedules() {
 }
 
 func (s *Server) runSessionCleanup(ctx context.Context) {
+	if s.sessions == nil {
+		return
+	}
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
@@ -696,7 +797,7 @@ func (s *Server) runSessionCleanup(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.sessions.Cleanup()
+			s.sessions.Cleanup(365 * 24 * time.Hour) // 1 year retention
 		}
 	}
 }

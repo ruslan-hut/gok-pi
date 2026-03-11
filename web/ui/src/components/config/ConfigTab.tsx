@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { fetchDBStats } from "../../api";
 import { DeviceSettings } from "./DeviceSettings";
 import { BatteryConfigForm } from "./BatteryConfigForm";
 import { ScheduleConfigForm } from "./ScheduleConfigForm";
 import { ConfigActions } from "./ConfigActions";
 import { Icon } from "../shared/Icon";
-import type { AgentConfig, BatteryConfig, ScheduleConfig } from "../../types";
+import type { AgentConfig, AgentDBStats, BatteryConfig, DBStats, ScheduleConfig } from "../../types";
 
 function formatConfigDraft(config: AgentConfig | null): string {
   const payload = {
@@ -55,6 +56,22 @@ export function ConfigTab({
 }: ConfigTabProps) {
   const [showJson, setShowJson] = useState(false);
   const [localConfig, setLocalConfig] = useState<AgentConfig | null>(null);
+  const [dbStats, setDbStats] = useState<DBStats | null>(null);
+  const [agentStats, setAgentStats] = useState<AgentDBStats[]>([]);
+
+  const loadDBStats = useCallback(async () => {
+    try {
+      const data = await fetchDBStats();
+      setDbStats(data.stats);
+      setAgentStats(data.agents);
+    } catch {
+      // non-critical, ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDBStats();
+  }, [loadDBStats]);
 
   // Parse draft into local config state
   useEffect(() => {
@@ -256,6 +273,66 @@ export function ConfigTab({
               </div>
             )}
           </div>
+
+          {dbStats && (
+            <div className="config-section">
+              <div className="config-section-header">
+                <h4>Session Database</h4>
+              </div>
+              <div className="db-stats">
+                <div className="db-stats-grid">
+                  <div className="db-stats-item">
+                    <span className="db-stats-label">Size</span>
+                    <span className="db-stats-value">{fmtBytes(dbStats.file_size_bytes)}</span>
+                  </div>
+                  <div className="db-stats-item">
+                    <span className="db-stats-label">Sessions</span>
+                    <span className="db-stats-value">{dbStats.total_sessions}</span>
+                  </div>
+                  <div className="db-stats-item">
+                    <span className="db-stats-label">Active</span>
+                    <span className="db-stats-value">{dbStats.open_sessions}</span>
+                  </div>
+                  <div className="db-stats-item">
+                    <span className="db-stats-label">Data range</span>
+                    <span className="db-stats-value">
+                      {dbStats.oldest_session
+                        ? `${new Date(dbStats.oldest_session).toLocaleDateString()} — ${new Date(dbStats.newest_session!).toLocaleDateString()}`
+                        : "—"}
+                    </span>
+                  </div>
+                </div>
+                {agentStats.length > 0 && (
+                  <div className="db-stats-agents">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Device</th>
+                          <th>Sessions</th>
+                          <th>Charge</th>
+                          <th>Discharge</th>
+                          <th>Energy</th>
+                          <th>Cost</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {agentStats.map((a) => (
+                          <tr key={a.agent_id}>
+                            <td>{a.agent_id}</td>
+                            <td>{a.total_sessions}</td>
+                            <td>{a.charge_sessions}</td>
+                            <td>{a.discharge_sessions}</td>
+                            <td>{fmtEnergyWh(a.total_energy_wh)}</td>
+                            <td>{a.total_cost_eur > 0 ? `${a.total_cost_eur.toFixed(2)} EUR` : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <textarea
@@ -287,4 +364,16 @@ export function ConfigTab({
       />
     </div>
   );
+}
+
+function fmtBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fmtEnergyWh(wh: number): string {
+  if (wh <= 0) return "—";
+  if (wh >= 1000) return `${(wh / 1000).toFixed(1)} kWh`;
+  return `${wh.toFixed(0)} Wh`;
 }

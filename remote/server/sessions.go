@@ -2,19 +2,13 @@ package server
 
 import (
 	"log/slog"
+	"math"
 	"sync"
 	"time"
-)
 
-// Session represents a recorded charge or discharge event.
-type Session struct {
-	BatteryName string     `json:"battery_name"`
-	AgentID     string     `json:"agent_id"`
-	Type        string     `json:"type"` // "charge" or "discharge"
-	StartedAt   time.Time  `json:"started_at"`
-	EndedAt     *time.Time `json:"ended_at,omitempty"`
-	DurationSec float64    `json:"duration_seconds,omitempty"`
-}
+	"gok-pi/electricity/pricefetcher"
+	"gok-pi/remote/server/sessiondb"
+)
 
 type batteryState struct {
 	charging    bool
@@ -22,24 +16,81 @@ type batteryState struct {
 	initialized bool
 }
 
-// SessionTracker watches telemetry and records charge/discharge sessions.
-type SessionTracker struct {
-	log     *slog.Logger
-	mu      sync.RWMutex
-	states  map[string]*batteryState // key: "agentID:batteryName"
-	active  map[string]*Session      // key: "agentID:batteryName:type"
-	history []Session
+// activeSession tracks in-flight telemetry accumulation for an open session.
+type activeSession struct {
+	dbID       int64
+	startedAt  time.Time
+	lastSample time.Time
+	energyWh   float64 // accumulated energy (Wh)
+	powerSum   float64 // sum of power samples (W) for averaging
+	peakPowerW float64
+	socEnd     float64
+	samples    int
+	priceSum   float64 // sum of hourly prices seen
+	priceHours int     // distinct hours counted
 }
 
-func NewSessionTracker(log *slog.Logger) *SessionTracker {
-	return &SessionTracker{
+// SessionTracker watches telemetry, records charge/discharge sessions to the database,
+// and accumulates energy from telemetry power samples.
+type SessionTracker struct {
+	log    *slog.Logger
+	store  *sessiondb.Store
+	prices *pricefetcher.Fetcher
+
+	mu     sync.Mutex
+	states map[string]*batteryState  // key: "agentID:batteryName"
+	active map[string]*activeSession // key: "agentID:batteryName:type"
+}
+
+func NewSessionTracker(log *slog.Logger, store *sessiondb.Store, prices *pricefetcher.Fetcher) *SessionTracker {
+	st := &SessionTracker{
 		log:    log.With(slog.String("component", "session-tracker")),
+		store:  store,
+		prices: prices,
 		states: make(map[string]*batteryState),
-		active: make(map[string]*Session),
+		active: make(map[string]*activeSession),
+	}
+	st.recoverOpenSessions()
+	return st
+}
+
+// recoverOpenSessions restores active sessions from the database after restart.
+func (st *SessionTracker) recoverOpenSessions() {
+	open, err := st.store.GetOpenSessions()
+	if err != nil {
+		st.log.Warn("failed to recover open sessions", slog.Any("error", err))
+		return
+	}
+	for _, rec := range open {
+		key := rec.AgentID + ":" + rec.BatteryName + ":" + rec.Type
+		st.active[key] = &activeSession{
+			dbID:       rec.ID,
+			startedAt:  rec.StartedAt,
+			lastSample: rec.StartedAt,
+			energyWh:   rec.EnergyWh,
+			powerSum:   rec.AvgPowerW * float64(rec.Samples),
+			peakPowerW: rec.PeakPowerW,
+			socEnd:     rec.SocEnd,
+			samples:    rec.Samples,
+		}
+		// Initialize state so we don't re-create the session
+		stateKey := rec.AgentID + ":" + rec.BatteryName
+		state, ok := st.states[stateKey]
+		if !ok {
+			state = &batteryState{initialized: true}
+			st.states[stateKey] = state
+		}
+		switch rec.Type {
+		case "charge":
+			state.charging = true
+		case "discharge":
+			state.discharging = true
+		}
+		st.log.Info("recovered open session", slog.String("battery", rec.BatteryName), slog.String("type", rec.Type), slog.Int64("id", rec.ID))
 	}
 }
 
-// OnTelemetry processes a telemetry update and detects session transitions.
+// OnTelemetry processes a telemetry update: detects session transitions and accumulates energy.
 func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot) {
 	if snapshot.Name == "" {
 		return
@@ -57,32 +108,20 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 
 	now := time.Now().UTC()
 
-	// Process charging transitions (only when the field was explicitly set)
+	// Process charging transitions
 	if snapshot.BatteryChargingSet {
+		activeKey := stateKey + ":charge"
 		if !prev.initialized {
-			// First telemetry with this field — just record state, don't create session
 			prev.charging = snapshot.BatteryCharging
+			// If already charging on first telemetry, start tracking
+			if snapshot.BatteryCharging {
+				st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC)
+			}
 		} else {
-			activeKey := stateKey + ":charge"
 			if !prev.charging && snapshot.BatteryCharging {
-				// Started charging
-				st.active[activeKey] = &Session{
-					BatteryName: snapshot.Name,
-					AgentID:     agentID,
-					Type:        "charge",
-					StartedAt:   now,
-				}
-				st.log.Debug("charge session started", slog.String("battery", snapshot.Name), slog.String("agent", agentID))
+				st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC)
 			} else if prev.charging && !snapshot.BatteryCharging {
-				// Stopped charging
-				if sess, ok := st.active[activeKey]; ok {
-					ended := now
-					sess.EndedAt = &ended
-					sess.DurationSec = ended.Sub(sess.StartedAt).Seconds()
-					st.history = append(st.history, *sess)
-					delete(st.active, activeKey)
-					st.log.Debug("charge session ended", slog.String("battery", snapshot.Name), slog.Float64("duration_s", sess.DurationSec))
-				}
+				st.endSession(activeKey, now, snapshot.USOC)
 			}
 			prev.charging = snapshot.BatteryCharging
 		}
@@ -90,80 +129,253 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 
 	// Process discharging transitions
 	if snapshot.BatteryDischargingSet {
+		activeKey := stateKey + ":discharge"
 		if !prev.initialized {
 			prev.discharging = snapshot.BatteryDischarging
+			if snapshot.BatteryDischarging {
+				st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC)
+			}
 		} else {
-			activeKey := stateKey + ":discharge"
 			if !prev.discharging && snapshot.BatteryDischarging {
-				st.active[activeKey] = &Session{
-					BatteryName: snapshot.Name,
-					AgentID:     agentID,
-					Type:        "discharge",
-					StartedAt:   now,
-				}
-				st.log.Debug("discharge session started", slog.String("battery", snapshot.Name), slog.String("agent", agentID))
+				st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC)
 			} else if prev.discharging && !snapshot.BatteryDischarging {
-				if sess, ok := st.active[activeKey]; ok {
-					ended := now
-					sess.EndedAt = &ended
-					sess.DurationSec = ended.Sub(sess.StartedAt).Seconds()
-					st.history = append(st.history, *sess)
-					delete(st.active, activeKey)
-					st.log.Debug("discharge session ended", slog.String("battery", snapshot.Name), slog.Float64("duration_s", sess.DurationSec))
-				}
+				st.endSession(activeKey, now, snapshot.USOC)
 			}
 			prev.discharging = snapshot.BatteryDischarging
 		}
 	}
 
-	// Mark as initialized after first telemetry with any Set field
 	if snapshot.BatteryChargingSet || snapshot.BatteryDischargingSet {
 		prev.initialized = true
 	}
+
+	// Accumulate energy for active sessions of this battery
+	st.accumulateEnergy(stateKey+":charge", snapshot.PacTotalW, snapshot.USOC, now)
+	st.accumulateEnergy(stateKey+":discharge", snapshot.PacTotalW, snapshot.USOC, now)
 }
 
-// GetSessions returns active and completed sessions for the given agent (or all if agentID is empty).
-// Results are limited to the last 48 hours.
-func (st *SessionTracker) GetSessions(agentID string) []Session {
-	st.mu.RLock()
-	defer st.mu.RUnlock()
-
-	cutoff := time.Now().UTC().Add(-48 * time.Hour)
-	var result []Session
-
-	// Active sessions
-	for _, sess := range st.active {
-		if agentID != "" && sess.AgentID != agentID {
-			continue
-		}
-		result = append(result, *sess)
+func (st *SessionTracker) startSession(key, agentID, batteryName, sessionType string, now time.Time, soc float64) {
+	rec := &sessiondb.SessionRecord{
+		AgentID:     agentID,
+		BatteryName: batteryName,
+		Type:        sessionType,
+		StartedAt:   now,
+		SocStart:    soc,
 	}
-
-	// Completed sessions (within 48h)
-	for _, sess := range st.history {
-		if sess.StartedAt.Before(cutoff) {
-			continue
-		}
-		if agentID != "" && sess.AgentID != agentID {
-			continue
-		}
-		result = append(result, sess)
+	id, err := st.store.InsertSession(rec)
+	if err != nil {
+		st.log.Warn("failed to insert session", slog.Any("error", err), slog.String("battery", batteryName))
+		return
 	}
-
-	return result
+	st.active[key] = &activeSession{
+		dbID:       id,
+		startedAt:  now,
+		lastSample: now,
+		socEnd:     soc,
+	}
+	st.log.Debug("session started", slog.String("type", sessionType), slog.String("battery", batteryName), slog.Int64("id", id))
 }
 
-// Cleanup removes completed sessions older than 48 hours.
-func (st *SessionTracker) Cleanup() {
+func (st *SessionTracker) endSession(key string, now time.Time, soc float64) {
+	sess, ok := st.active[key]
+	if !ok {
+		return
+	}
+
+	sess.socEnd = soc
+	duration := now.Sub(sess.startedAt).Seconds()
+	avgPower := 0.0
+	if sess.samples > 0 {
+		avgPower = sess.powerSum / float64(sess.samples)
+	}
+
+	avgPrice := st.getAvgPrice(sess.startedAt, now)
+	costEur := sess.energyWh / 1e6 * avgPrice // energy_Wh / 1e6 * EUR/MWh = EUR
+
+	if err := st.store.CloseSession(
+		sess.dbID, now, duration,
+		sess.energyWh, avgPower, sess.peakPowerW,
+		sess.socEnd, avgPrice, costEur, sess.samples,
+	); err != nil {
+		st.log.Warn("failed to close session", slog.Any("error", err), slog.Int64("id", sess.dbID))
+	}
+
+	st.log.Debug("session ended",
+		slog.Int64("id", sess.dbID),
+		slog.Float64("energy_wh", sess.energyWh),
+		slog.Float64("cost_eur", costEur),
+		slog.Float64("duration_s", duration),
+	)
+	delete(st.active, key)
+}
+
+func (st *SessionTracker) accumulateEnergy(key string, pacTotalW, soc float64, now time.Time) {
+	sess, ok := st.active[key]
+	if !ok {
+		return
+	}
+
+	dt := now.Sub(sess.lastSample).Seconds()
+	if dt <= 0 || dt > 120 { // skip if gap too large (>2min = likely reconnection)
+		sess.lastSample = now
+		return
+	}
+
+	// PacTotalW: positive = discharge, negative = charge
+	power := math.Abs(pacTotalW)
+	energyIncrement := power * dt / 3600.0 // Wh = W * s / 3600
+
+	sess.energyWh += energyIncrement
+	sess.powerSum += power
+	sess.samples++
+	if power > sess.peakPowerW {
+		sess.peakPowerW = power
+	}
+	sess.socEnd = soc
+	sess.lastSample = now
+
+	// Periodically flush to DB (every 30 samples ≈ 5 min at 10s interval)
+	if sess.samples%30 == 0 {
+		avgPower := sess.powerSum / float64(sess.samples)
+		if err := st.store.UpdateSession(sess.dbID, sess.energyWh, avgPower, sess.peakPowerW, sess.socEnd, sess.samples); err != nil {
+			st.log.Warn("failed to flush session", slog.Any("error", err), slog.Int64("id", sess.dbID))
+		}
+	}
+}
+
+// getAvgPrice looks up the average electricity price for the hours spanned by a session.
+func (st *SessionTracker) getAvgPrice(start, end time.Time) float64 {
+	state := st.prices.GetState()
+	if state.Today == nil {
+		return 0
+	}
+
+	startHour := start.Hour()
+	endHour := end.Hour()
+	if end.Minute() > 0 || end.Second() > 0 {
+		endHour++
+	}
+	if endHour > 24 {
+		endHour = 24
+	}
+
+	var sum float64
+	var count int
+	for _, p := range state.Today.Prices {
+		if p.Hour >= startHour && p.Hour < endHour {
+			sum += p.Price
+			count++
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return sum / float64(count)
+}
+
+// GetSummaries returns per-battery aggregated data.
+func (st *SessionTracker) GetSummaries(agentID string, hours int) ([]sessiondb.BatterySummary, error) {
+	summaries, err := st.store.GetSummaries(agentID, hours)
+	if err != nil {
+		return nil, err
+	}
+
+	// Mark active sessions
 	st.mu.Lock()
-	defer st.mu.Unlock()
+	activeByBattery := make(map[string]map[string]bool)
+	for _, sess := range st.active {
+		key := sess.dbID // use battery name from DB record lookup
+		_ = key
+	}
+	for k := range st.active {
+		// Parse key: "agentID:batteryName:type"
+		// Find last two colons
+		parts := splitSessionKey(k)
+		if parts == nil {
+			continue
+		}
+		if agentID != "" && parts[0] != agentID {
+			continue
+		}
+		if _, ok := activeByBattery[parts[1]]; !ok {
+			activeByBattery[parts[1]] = make(map[string]bool)
+		}
+		activeByBattery[parts[1]][parts[2]] = true
+	}
+	st.mu.Unlock()
 
-	cutoff := time.Now().UTC().Add(-48 * time.Hour)
-	filtered := st.history[:0]
-	for _, sess := range st.history {
-		if !sess.StartedAt.Before(cutoff) {
-			filtered = append(filtered, sess)
+	for i := range summaries {
+		if types, ok := activeByBattery[summaries[i].BatteryName]; ok {
+			summaries[i].ActiveCharge = types["charge"]
+			summaries[i].ActiveDischarge = types["discharge"]
 		}
 	}
-	st.history = filtered
+
+	// Add batteries that only have active sessions (not yet in DB summaries)
+	existing := make(map[string]bool)
+	for _, s := range summaries {
+		existing[s.BatteryName] = true
+	}
+	for battery, types := range activeByBattery {
+		if !existing[battery] {
+			summaries = append(summaries, sessiondb.BatterySummary{
+				BatteryName:     battery,
+				ActiveCharge:    types["charge"],
+				ActiveDischarge: types["discharge"],
+			})
+		}
+	}
+
+	return summaries, nil
+}
+
+// GetRecentSessions returns sessions from the last N hours.
+func (st *SessionTracker) GetRecentSessions(agentID string, hours int) ([]sessiondb.SessionRecord, error) {
+	return st.store.GetRecentSessions(agentID, hours)
+}
+
+// Store returns the underlying database store for direct queries.
+func (st *SessionTracker) Store() *sessiondb.Store {
+	return st.store
+}
+
+// Cleanup removes old sessions beyond retention.
+func (st *SessionTracker) Cleanup(retention time.Duration) {
+	deleted, err := st.store.Cleanup(retention)
+	if err != nil {
+		st.log.Warn("session cleanup failed", slog.Any("error", err))
+		return
+	}
+	if deleted > 0 {
+		st.log.Info("session cleanup", slog.Int64("deleted", deleted))
+	}
+}
+
+func splitSessionKey(key string) []string {
+	// key format: "agentID:batteryName:type"
+	// Find last colon for type, then split the rest
+	lastColon := -1
+	for i := len(key) - 1; i >= 0; i-- {
+		if key[i] == ':' {
+			lastColon = i
+			break
+		}
+	}
+	if lastColon < 0 {
+		return nil
+	}
+	typ := key[lastColon+1:]
+	rest := key[:lastColon]
+
+	firstColon := -1
+	for i := 0; i < len(rest); i++ {
+		if rest[i] == ':' {
+			firstColon = i
+			break
+		}
+	}
+	if firstColon < 0 {
+		return nil
+	}
+	return []string{rest[:firstColon], rest[firstColon+1:], typ}
 }
