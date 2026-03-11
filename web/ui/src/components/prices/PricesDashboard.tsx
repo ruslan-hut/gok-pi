@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchPrices, fetchSessions } from "../../api";
-import type { BatterySummary, DayData, PricesState, ScheduleWindow, SessionsResponse } from "../../types";
+import type { BatterySummary, DayData, PricesState, ScheduleWindow, SessionRecord, SessionsResponse } from "../../types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -9,25 +9,33 @@ export default function PricesDashboard() {
   const [sessData, setSessData] = useState<SessionsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const [sessError, setSessError] = useState<string>();
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
 
   const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(undefined);
-      const [data, sessions] = await Promise.all([
-        fetchPrices(),
-        fetchSessions(),
-      ]);
-      setState(data);
-      setSessData(sessions);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch prices",
-      );
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true);
+
+    // Fetch prices and sessions independently
+    const pricesPromise = fetchPrices()
+      .then((data) => {
+        setState(data);
+        setError(undefined);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to fetch prices");
+      });
+
+    const sessionsPromise = fetchSessions()
+      .then((data) => {
+        setSessData(data);
+        setSessError(undefined);
+      })
+      .catch((err) => {
+        setSessError(err instanceof Error ? err.message : "Failed to fetch sessions");
+      });
+
+    await Promise.all([pricesPromise, sessionsPromise]);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -40,7 +48,7 @@ export default function PricesDashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {loading && !state && (
+      {loading && !state && !sessData && (
         <div className="config-loading">
           <div className="spinner" />
           <span>Loading prices...</span>
@@ -72,8 +80,14 @@ export default function PricesDashboard() {
               No price data available yet.
             </div>
           )}
-          {sessData && <SessionsPanel summaries={sessData.summaries} />}
         </>
+      )}
+      {sessError && <div className="config-error">{sessError}</div>}
+      {sessData && (
+        <SessionsPanel
+          summaries={sessData.summaries}
+          sessions={sessData.sessions}
+        />
       )}
     </div>
   );
@@ -343,8 +357,17 @@ function ScheduleTable({
   );
 }
 
-function SessionsPanel({ summaries }: { summaries: BatterySummary[] }) {
-  if (summaries.length === 0) {
+function SessionsPanel({
+  summaries,
+  sessions,
+}: {
+  summaries: BatterySummary[];
+  sessions: SessionRecord[];
+}) {
+  const hasSummaries = summaries.length > 0;
+  const hasSessions = sessions.length > 0;
+
+  if (!hasSummaries && !hasSessions) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
         <h4>Battery Sessions (48h)</h4>
@@ -354,36 +377,85 @@ function SessionsPanel({ summaries }: { summaries: BatterySummary[] }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <h4>Battery Sessions (48h)</h4>
-      <div className="schedule-table">
-        <table>
-          <thead>
-            <tr>
-              <th>Battery</th>
-              <th>Charged</th>
-              <th>Charge Cost</th>
-              <th>Discharged</th>
-              <th>Discharge Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summaries.map((s) => (
-              <tr key={s.battery_name}>
-                <td>
-                  {s.battery_name}
-                  {s.active_charge && <span className="session-live-dot" />}
-                  {s.active_discharge && <span className="session-live-dot" />}
-                </td>
-                <td>{fmtEnergy(s.charge_energy_wh)}</td>
-                <td>{fmtCost(s.charge_cost_eur)}</td>
-                <td>{fmtEnergy(s.discharge_energy_wh)}</td>
-                <td>{fmtCost(s.discharge_cost_eur)}</td>
+
+      {hasSummaries && (
+        <div className="schedule-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Battery</th>
+                <th>Charged</th>
+                <th>Charge Cost</th>
+                <th>Discharged</th>
+                <th>Discharge Value</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {summaries.map((s) => (
+                <tr key={s.battery_name}>
+                  <td>
+                    {s.battery_name}
+                    {s.active_charge && <span className="session-live-dot" />}
+                    {s.active_discharge && <span className="session-live-dot" />}
+                  </td>
+                  <td>{fmtEnergy(s.charge_energy_wh)}</td>
+                  <td>{fmtCost(s.charge_cost_eur)}</td>
+                  <td>{fmtEnergy(s.discharge_energy_wh)}</td>
+                  <td>{fmtCost(s.discharge_cost_eur)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {hasSessions && (
+        <div className="schedule-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Battery</th>
+                <th>Type</th>
+                <th>Started</th>
+                <th>Duration</th>
+                <th>Energy</th>
+                <th>Avg Power</th>
+                <th>SoC</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((s) => (
+                <tr key={s.id} className={!s.ended_at ? "session-active" : ""}>
+                  <td>
+                    {s.battery_name}
+                    {!s.ended_at && <span className="session-live-dot" />}
+                  </td>
+                  <td>
+                    <span
+                      className={`schedule-badge ${s.type === "charge" ? "schedule-badge-charge" : "schedule-badge-discharge"}`}
+                    >
+                      {s.type.toUpperCase()}
+                    </span>
+                  </td>
+                  <td>{fmtTime(s.started_at)}</td>
+                  <td>{fmtDuration(s.duration_seconds)}</td>
+                  <td>{fmtEnergy(s.energy_wh)}</td>
+                  <td>{s.avg_power_w > 0 ? `${s.avg_power_w.toFixed(0)} W` : "—"}</td>
+                  <td>
+                    {s.soc_start > 0 || s.soc_end > 0
+                      ? `${s.soc_start.toFixed(0)}% → ${s.soc_end.toFixed(0)}%`
+                      : "—"}
+                  </td>
+                  <td>{fmtCost(s.cost_eur)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -397,6 +469,24 @@ function fmtEnergy(wh: number): string {
 function fmtCost(eur: number): string {
   if (eur <= 0) return "—";
   return `${eur.toFixed(4)} EUR`;
+}
+
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function fmtDuration(seconds?: number): string {
+  if (!seconds || seconds <= 0) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 function fmt2(n: number): string {
