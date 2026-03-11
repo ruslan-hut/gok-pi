@@ -174,7 +174,7 @@ export function ConfigTab({
 
       {!showJson ? (
         <div className="config-forms">
-          {localConfig && (
+          {localConfig && !readonly && (
             <DeviceSettings
               config={localConfig}
               agentEnv={agentEnv}
