@@ -5,11 +5,9 @@ const PRECACHE_URLS = ["/", "/index.html"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting()),
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)),
   );
+  // Don't skipWaiting — let the app control when to activate
 });
 
 self.addEventListener("activate", (event) => {
@@ -25,6 +23,13 @@ self.addEventListener("activate", (event) => {
       )
       .then(() => self.clients.claim()),
   );
+});
+
+// Listen for skip-waiting message from the app
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", (event) => {

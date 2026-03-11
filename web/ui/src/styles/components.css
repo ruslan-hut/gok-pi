@@ -42,6 +42,48 @@
   border-color: var(--border-color-strong);
 }
 
+/* Status banners (persistent, non-dismissible) */
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 0.6rem var(--space-lg);
+  border-radius: var(--radius-lg);
+  font-size: 0.85rem;
+  font-weight: 500;
+  animation: slideIn 0.3s ease;
+}
+
+.status-banner-offline {
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+.status-banner-update {
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
+  color: var(--color-success);
+}
+
+.status-banner-action {
+  margin-left: auto;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.status-banner-action:hover {
+  background: var(--color-success-bg);
+  border-color: currentColor;
+}
+
 .message-banner {
   display: flex;
   align-items: center;

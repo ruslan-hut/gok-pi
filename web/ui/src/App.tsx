@@ -10,6 +10,8 @@ import { useAgents } from "./hooks/useAgents";
 import { useConfig } from "./hooks/useConfig";
 import { useLogs } from "./hooks/useLogs";
 import { useNavigation } from "./hooks/useNavigation";
+import { useOnlineStatus } from "./hooks/useOnlineStatus";
+import { useServiceWorker } from "./hooks/useServiceWorker";
 import { useTheme } from "./hooks/useTheme";
 import type { AppPage } from "./types";
 import { TopNav } from "./components/layout/TopNav";
@@ -21,11 +23,14 @@ import { ConfigTab } from "./components/config/ConfigTab";
 import { ToolsTab } from "./components/tools/ToolsTab";
 import PricesDashboard from "./components/prices/PricesDashboard";
 import { MessageBanner } from "./components/shared/MessageBanner";
+import { Icon } from "./components/shared/Icon";
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(() => !!getAuthToken());
   const [showLogin, setShowLogin] = useState(false);
   const [theme, toggleTheme] = useTheme();
+  const browserOnline = useOnlineStatus();
+  const { updateAvailable, applyUpdate } = useServiceWorker();
 
   const handleLogin = useCallback((token: string) => {
     if (token) setAuthToken(token);
@@ -49,6 +54,9 @@ export default function App() {
       onLogout={handleLogout}
       theme={theme}
       onToggleTheme={toggleTheme}
+      browserOnline={browserOnline}
+      updateAvailable={updateAvailable}
+      onApplyUpdate={applyUpdate}
     />
   );
 }
@@ -59,9 +67,12 @@ interface DashboardProps {
   onLogout: () => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
+  browserOnline: boolean;
+  updateAvailable: boolean;
+  onApplyUpdate: () => void;
 }
 
-function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme }: DashboardProps) {
+function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, browserOnline, updateAvailable, onApplyUpdate }: DashboardProps) {
   const [nav, setNav] = useNavigation();
   const [showStatusMessage, setShowStatusMessage] = useState(false);
 
@@ -169,6 +180,21 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme }:
       />
 
       <main className="content">
+        {!browserOnline && (
+          <div className="status-banner status-banner-offline">
+            <Icon name="cloud_off" size={18} />
+            <span>You are offline. Some features may be unavailable.</span>
+          </div>
+        )}
+        {updateAvailable && (
+          <div className="status-banner status-banner-update">
+            <Icon name="system_update" size={18} />
+            <span>A new version is available.</span>
+            <button className="status-banner-action" onClick={onApplyUpdate}>
+              Update now
+            </button>
+          </div>
+        )}
         <MessageBanner
           message={agents.message}
           onDismiss={() => agents.setMessage(undefined)}

@@ -34,6 +34,7 @@ export default function Login({ onLogin, onBack }: LoginProps) {
 
   return (
     <div className="login-container">
+      <img src="/icon-192.png" alt="GOK-Pi" className="login-icon" />
       <div className="login-card">
         <h1>GOK-Pi Dashboard</h1>
         <p className="login-subtitle">Please sign in to continue</p>
