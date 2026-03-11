@@ -19,7 +19,7 @@
 .log-viewer-content {
   background-color: var(--color-bg-code);
   border: 1px solid var(--border-color-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: var(--space-lg);
   max-height: 600px;
   overflow: auto;
@@ -29,6 +29,7 @@
   color: var(--color-text);
   white-space: pre-wrap;
   word-break: break-word;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .log-viewer-controls {

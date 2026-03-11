@@ -13,15 +13,16 @@
 }
 
 .config-panel {
-  border: 1px solid var(--border-color-strong);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
   padding: 1.25rem;
   background: var(--color-bg-card);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(16px) saturate(1.1);
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  animation: fadeInUp 0.4s ease both;
 }
 
 .config-panel-header {
@@ -108,9 +109,8 @@
   border: 1px solid var(--border-color-input);
   border-radius: var(--radius-lg);
   padding: var(--space-lg);
-  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-  transition: border-color 0.2s ease, background 0.2s ease,
-    box-shadow 0.2s ease;
+  box-shadow: var(--shadow-card);
+  transition: all var(--transition-smooth);
 }
 
 .config-item-battery {
@@ -121,7 +121,8 @@
 .config-item-battery:hover {
   border-color: var(--color-config-battery-border-hover);
   background: var(--color-config-battery-bg-hover);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-card-hover), 0 0 16px rgba(56, 189, 248, 0.08);
+  transform: translateY(-1px);
 }
 
 .config-item-schedule {
@@ -132,7 +133,8 @@
 .config-item-schedule:hover {
   border-color: var(--color-config-schedule-border-hover);
   background: var(--color-config-schedule-bg-hover);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-card-hover), 0 0 16px rgba(74, 222, 128, 0.08);
+  transform: translateY(-1px);
 }
 
 .config-item-header {
@@ -201,12 +203,14 @@
   align-items: center;
   gap: var(--space-md);
   padding: 0.4rem 0.65rem;
-  border: 1px solid var(--color-success-border);
+  border: 1px solid rgba(74, 222, 128, 0.2);
   border-radius: var(--radius-md);
   background: var(--color-success-bg);
+  background-image: linear-gradient(135deg, rgba(74, 222, 128, 0.08), rgba(52, 211, 153, 0.04));
   font-size: 0.8rem;
   color: var(--color-success);
   margin-top: var(--space-xs);
+  box-shadow: 0 1px 4px rgba(74, 222, 128, 0.1);
 }
 
 .goal-badge-text {

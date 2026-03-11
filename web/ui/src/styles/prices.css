@@ -33,8 +33,14 @@
   height: auto;
   min-height: 140px;
   background: var(--color-bg-overlay);
-  border-radius: var(--radius-md);
+  background-image: var(--gradient-surface);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color-subtle);
+  transition: border-color var(--transition-base);
+}
+
+.price-chart-svg:hover {
+  border-color: var(--border-color);
 }
 
 .schedule-table {
@@ -77,15 +83,17 @@
 }
 
 .schedule-badge-charge {
-  color: var(--color-success);
-  border: 1px solid var(--color-success-border);
-  background: var(--color-success-bg);
+  color: var(--badge-charge-text);
+  border: none;
+  background: var(--gradient-success);
+  box-shadow: 0 1px 4px rgba(74, 222, 128, 0.3);
 }
 
 .schedule-badge-discharge {
-  color: var(--color-danger);
-  border: 1px solid var(--color-danger-border);
-  background: var(--color-danger-bg);
+  color: var(--badge-discharge-text);
+  border: none;
+  background: var(--gradient-danger);
+  box-shadow: 0 1px 4px rgba(248, 113, 113, 0.3);
 }
 
 .prices-meta {
@@ -130,12 +138,19 @@
 
 .data-card {
   background: var(--color-bg-overlay);
+  background-image: var(--gradient-surface);
   border: 1px solid var(--border-color-subtle);
   border-radius: var(--radius-md);
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  transition: all var(--transition-base);
+}
+
+.data-card:hover {
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-card);
 }
 
 .data-card-header {

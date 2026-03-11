@@ -6,24 +6,32 @@
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
+/* Staggered animation for battery cards */
+.metrics-grid > :nth-child(1) { animation-delay: 0s; }
+.metrics-grid > :nth-child(2) { animation-delay: 0.06s; }
+.metrics-grid > :nth-child(3) { animation-delay: 0.12s; }
+.metrics-grid > :nth-child(4) { animation-delay: 0.18s; }
+
 .battery-card.manual-mode {
   background: var(--color-manual-mode-bg);
   border-color: var(--color-manual-mode-border);
+  box-shadow: var(--shadow-card), var(--shadow-glow-success);
 }
 
 .battery-card.service-mode {
   background: var(--color-service-mode-bg);
   border-color: var(--color-service-mode-border);
+  box-shadow: var(--shadow-card), 0 0 20px rgba(248, 113, 113, 0.1);
 }
 
 .battery-card-header {
   cursor: pointer;
   user-select: none;
-  transition: opacity 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .battery-card-header:hover {
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .battery-card-title {
@@ -202,12 +210,22 @@
 }
 
 .control-button.control-button-primary {
-  border-color: var(--color-primary);
-  background: var(--color-primary-bg);
+  border: none;
+  background: var(--gradient-primary);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--shadow-primary-button);
 }
 
 .control-button.control-button-primary:hover:not(:disabled) {
-  background: var(--color-primary-bg-hover);
+  background: var(--gradient-primary);
+  box-shadow: var(--shadow-primary-button-hover);
+  transform: translateY(-1px);
+}
+
+.control-button.control-button-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-primary-button);
 }
 
 .control-button.control-button-secondary {
@@ -226,8 +244,11 @@
   flex-wrap: wrap;
   padding: var(--space-md) var(--space-lg);
   background: var(--color-bg-card);
+  background-image: var(--gradient-surface);
   border: 1px solid var(--border-color-subtle);
   border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+  animation: fadeInUp 0.3s ease both;
 }
 
 .system-summary-item {
@@ -265,10 +286,18 @@
 
 .system-summary-status.charging {
   color: var(--color-success);
+  background: var(--gradient-success);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .system-summary-status.discharging {
   color: var(--color-danger);
+  background: var(--gradient-danger);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .system-summary-status.idle {
