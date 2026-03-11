@@ -117,6 +117,60 @@
   50% { opacity: 0.3; }
 }
 
+/* Card list (mobile alternative to tables) */
+.show-mobile {
+  display: none;
+}
+
+.card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.data-card {
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.data-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+
+.data-card-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.data-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.data-card-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.data-card-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
 /* Mobile */
 @media (max-width: 600px) {
   .prices-stats {
@@ -128,15 +182,6 @@
     font-size: 0.9rem;
   }
 
-  .schedule-table table {
-    font-size: 0.8rem;
-  }
-
-  .schedule-table th,
-  .schedule-table td {
-    padding: 0.4rem 0.5rem;
-  }
-
   .schedule-badge {
     font-size: 0.6rem;
     padding: 0.1rem 0.35rem;
@@ -146,5 +191,13 @@
     font-size: 0.75rem;
     flex-direction: column;
     gap: 0.15rem;
+  }
+
+  .hide-mobile {
+    display: none;
+  }
+
+  .show-mobile {
+    display: flex;
   }
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchPrices, fetchSessions } from "../../api";
-import type { BatterySummary, DayData, PricesState, ScheduleWindow, SessionRecord, SessionsResponse } from "../../types";
+import type { BatterySummary, DayData, PricesState, ScheduleWindow, SessionsResponse } from "../../types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -84,10 +84,7 @@ export default function PricesDashboard() {
       )}
       {sessError && <div className="config-error">{sessError}</div>}
       {sessData && (
-        <SessionsPanel
-          summaries={sessData.summaries}
-          sessions={sessData.sessions}
-        />
+        <SessionsPanel summaries={sessData.summaries} />
       )}
     </div>
   );
@@ -314,60 +311,69 @@ function ScheduleTable({
     return <div className="config-empty">No schedule computed.</div>;
   }
 
+  const all = [
+    ...charge.map((w, i) => ({ key: `c-${i}`, type: "charge" as const, w })),
+    ...discharge.map((w, i) => ({ key: `d-${i}`, type: "discharge" as const, w })),
+  ];
+
   return (
-    <div className="schedule-table">
-      <table>
-        <thead>
-          <tr>
-            <th>Type</th>
-            <th>Window</th>
-            <th>Avg Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          {charge.map((w, i) => (
-            <tr key={`c-${i}`} className="schedule-row-charge">
-              <td>
-                <span className="schedule-badge schedule-badge-charge">
-                  CHEAPEST
-                </span>
-              </td>
-              <td>
-                {fmt2(w.start_hour)}:00 — {fmt2(w.end_hour)}:00
-              </td>
-              <td>{w.avg_price_eur_mwh.toFixed(1)} EUR/MWh</td>
+    <>
+      <div className="schedule-table hide-mobile">
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Window</th>
+              <th>Avg Price</th>
             </tr>
-          ))}
-          {discharge.map((w, i) => (
-            <tr key={`d-${i}`} className="schedule-row-discharge">
-              <td>
-                <span className="schedule-badge schedule-badge-discharge">
-                  PRICIEST
-                </span>
-              </td>
-              <td>
-                {fmt2(w.start_hour)}:00 — {fmt2(w.end_hour)}:00
-              </td>
-              <td>{w.avg_price_eur_mwh.toFixed(1)} EUR/MWh</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {all.map(({ key, type, w }) => (
+              <tr key={key}>
+                <td>
+                  <span className={`schedule-badge ${type === "charge" ? "schedule-badge-charge" : "schedule-badge-discharge"}`}>
+                    {type === "charge" ? "CHEAPEST" : "PRICIEST"}
+                  </span>
+                </td>
+                <td>
+                  {fmt2(w.start_hour)}:00 — {fmt2(w.end_hour)}:00
+                </td>
+                <td>{w.avg_price_eur_mwh.toFixed(1)} EUR/MWh</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card-list show-mobile">
+        {all.map(({ key, type, w }) => (
+          <div key={key} className="data-card">
+            <div className="data-card-header">
+              <span className={`schedule-badge ${type === "charge" ? "schedule-badge-charge" : "schedule-badge-discharge"}`}>
+                {type === "charge" ? "CHEAPEST" : "PRICIEST"}
+              </span>
+            </div>
+            <div className="data-card-row">
+              <span className="data-card-label">Window</span>
+              <span className="data-card-value">{fmt2(w.start_hour)}:00 — {fmt2(w.end_hour)}:00</span>
+            </div>
+            <div className="data-card-row">
+              <span className="data-card-label">Avg Price</span>
+              <span className="data-card-value">{w.avg_price_eur_mwh.toFixed(1)} EUR/MWh</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
 function SessionsPanel({
   summaries,
-  sessions,
 }: {
   summaries: BatterySummary[];
-  sessions: SessionRecord[];
 }) {
-  const hasSummaries = summaries.length > 0;
-  const hasSessions = sessions.length > 0;
-
-  if (!hasSummaries && !hasSessions) {
+  if (summaries.length === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
         <h4>Battery Sessions (48h)</h4>
@@ -380,82 +386,64 @@ function SessionsPanel({
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <h4>Battery Sessions (48h)</h4>
 
-      {hasSummaries && (
-        <div className="schedule-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Battery</th>
-                <th>Charged</th>
-                <th>Charge Cost</th>
-                <th>Discharged</th>
-                <th>Discharge Value</th>
+      <div className="schedule-table hide-mobile">
+        <table>
+          <thead>
+            <tr>
+              <th>Battery</th>
+              <th>Charged</th>
+              <th>Charge Cost</th>
+              <th>Discharged</th>
+              <th>Discharge Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summaries.map((s) => (
+              <tr key={s.battery_name}>
+                <td>
+                  {s.battery_name}
+                  {s.active_charge && <span className="session-live-dot" />}
+                  {s.active_discharge && <span className="session-live-dot" />}
+                </td>
+                <td>{fmtEnergy(s.charge_energy_wh)}</td>
+                <td>{fmtCost(s.charge_cost_eur)}</td>
+                <td>{fmtEnergy(s.discharge_energy_wh)}</td>
+                <td>{fmtCost(s.discharge_cost_eur)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {summaries.map((s) => (
-                <tr key={s.battery_name}>
-                  <td>
-                    {s.battery_name}
-                    {s.active_charge && <span className="session-live-dot" />}
-                    {s.active_discharge && <span className="session-live-dot" />}
-                  </td>
-                  <td>{fmtEnergy(s.charge_energy_wh)}</td>
-                  <td>{fmtCost(s.charge_cost_eur)}</td>
-                  <td>{fmtEnergy(s.discharge_energy_wh)}</td>
-                  <td>{fmtCost(s.discharge_cost_eur)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      {hasSessions && (
-        <div className="schedule-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Battery</th>
-                <th>Type</th>
-                <th>Started</th>
-                <th>Duration</th>
-                <th>Energy</th>
-                <th>Avg Power</th>
-                <th>SoC</th>
-                <th>Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((s) => (
-                <tr key={s.id} className={!s.ended_at ? "session-active" : ""}>
-                  <td>
-                    {s.battery_name}
-                    {!s.ended_at && <span className="session-live-dot" />}
-                  </td>
-                  <td>
-                    <span
-                      className={`schedule-badge ${s.type === "charge" ? "schedule-badge-charge" : "schedule-badge-discharge"}`}
-                    >
-                      {s.type.toUpperCase()}
-                    </span>
-                  </td>
-                  <td>{fmtTime(s.started_at)}</td>
-                  <td>{fmtDuration(s.duration_seconds)}</td>
-                  <td>{fmtEnergy(s.energy_wh)}</td>
-                  <td>{s.avg_power_w > 0 ? `${s.avg_power_w.toFixed(0)} W` : "—"}</td>
-                  <td>
-                    {s.soc_start > 0 || s.soc_end > 0
-                      ? `${s.soc_start.toFixed(0)}% → ${s.soc_end.toFixed(0)}%`
-                      : "—"}
-                  </td>
-                  <td>{fmtCost(s.cost_eur)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="card-list show-mobile">
+        {summaries.map((s) => (
+          <div key={s.battery_name} className="data-card">
+            <div className="data-card-header">
+              <span className="data-card-title">
+                {s.battery_name}
+                {s.active_charge && <span className="session-live-dot" />}
+                {s.active_discharge && <span className="session-live-dot" />}
+              </span>
+            </div>
+            <div className="data-card-row">
+              <span className="data-card-label">Charged</span>
+              <span className="data-card-value">{fmtEnergy(s.charge_energy_wh)}</span>
+            </div>
+            <div className="data-card-row">
+              <span className="data-card-label">Charge Cost</span>
+              <span className="data-card-value">{fmtCost(s.charge_cost_eur)}</span>
+            </div>
+            <div className="data-card-row">
+              <span className="data-card-label">Discharged</span>
+              <span className="data-card-value">{fmtEnergy(s.discharge_energy_wh)}</span>
+            </div>
+            <div className="data-card-row">
+              <span className="data-card-label">Discharge Value</span>
+              <span className="data-card-value">{fmtCost(s.discharge_cost_eur)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -469,24 +457,6 @@ function fmtEnergy(wh: number): string {
 function fmtCost(eur: number): string {
   if (eur <= 0) return "—";
   return `${eur.toFixed(4)} EUR`;
-}
-
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function fmtDuration(seconds?: number): string {
-  if (!seconds || seconds <= 0) return "—";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
 }
 
 function fmt2(n: number): string {
