@@ -34,6 +34,7 @@ interface ConfigTabProps {
   scheduleGoalReached?: Record<string, string>;
   onResetGoal?: (scheduleName: string) => void;
   isOnline?: boolean;
+  readonly?: boolean;
 }
 
 export function ConfigTab({
@@ -52,6 +53,7 @@ export function ConfigTab({
   scheduleGoalReached,
   onResetGoal,
   isOnline,
+  readonly,
 }: ConfigTabProps) {
   const [showJson, setShowJson] = useState(false);
   const [localConfig, setLocalConfig] = useState<AgentConfig | null>(null);
@@ -184,14 +186,16 @@ export function ConfigTab({
           <div className="config-section">
             <div className="config-section-header">
               <h4>Batteries</h4>
-              <button
-                type="button"
-                className="button-small"
-                onClick={handleBatteryAdd}
-                disabled={saving || !localConfig}
-              >
-                <Icon name="add" size={16} /> Add Battery
-              </button>
+              {!readonly && (
+                <button
+                  type="button"
+                  className="button-small"
+                  onClick={handleBatteryAdd}
+                  disabled={saving || !localConfig}
+                >
+                  <Icon name="add" size={16} /> Add Battery
+                </button>
+              )}
             </div>
             {localConfig?.batteries.length === 0 ? (
               <p className="config-empty">
@@ -205,7 +209,8 @@ export function ConfigTab({
                     battery={battery}
                     onChange={(b) => handleBatteryChange(index, b)}
                     onRemove={() => handleBatteryRemove(index)}
-                    disabled={saving}
+                    disabled={saving || readonly}
+                    readonly={readonly}
                   />
                 ))}
               </div>
@@ -215,14 +220,16 @@ export function ConfigTab({
           <div className="config-section">
             <div className="config-section-header">
               <h4>Schedules</h4>
-              <button
-                type="button"
-                className="button-small"
-                onClick={handleScheduleAdd}
-                disabled={saving || !localConfig}
-              >
-                <Icon name="add" size={16} /> Add Schedule
-              </button>
+              {!readonly && (
+                <button
+                  type="button"
+                  className="button-small"
+                  onClick={handleScheduleAdd}
+                  disabled={saving || !localConfig}
+                >
+                  <Icon name="add" size={16} /> Add Schedule
+                </button>
+              )}
             </div>
             {localConfig?.schedules.length === 0 ? (
               <p className="config-empty">
@@ -239,7 +246,8 @@ export function ConfigTab({
                     }
                     onChange={(s) => handleScheduleChange(index, s)}
                     onRemove={() => handleScheduleRemove(index)}
-                    disabled={saving}
+                    disabled={saving || readonly}
+                    readonly={readonly}
                     goalReachedAt={
                       schedule.name
                         ? scheduleGoalReached?.[schedule.name]
@@ -268,24 +276,28 @@ export function ConfigTab({
         />
       )}
 
-      <div className="config-view-toggle">
-        <button
-          type="button"
-          className="button-link"
-          onClick={() => setShowJson(!showJson)}
-          disabled={saving}
-        >
-          {showJson ? <><Icon name="arrow_back" size={16} /> Back to Forms</> : "Advanced: Edit JSON"}
-        </button>
-      </div>
+      {!readonly && (
+        <div className="config-view-toggle">
+          <button
+            type="button"
+            className="button-link"
+            onClick={() => setShowJson(!showJson)}
+            disabled={saving}
+          >
+            {showJson ? <><Icon name="arrow_back" size={16} /> Back to Forms</> : "Advanced: Edit JSON"}
+          </button>
+        </div>
+      )}
 
       {error ? <div className="config-error">{error}</div> : null}
-      <ConfigActions
-        dirty={dirty}
-        saving={saving}
-        onSave={onSave}
-        onReset={onReset}
-      />
+      {!readonly && (
+        <ConfigActions
+          dirty={dirty}
+          saving={saving}
+          onSave={onSave}
+          onReset={onReset}
+        />
+      )}
     </div>
   );
 }

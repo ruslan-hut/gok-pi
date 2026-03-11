@@ -22,53 +22,44 @@ import PricesDashboard from "./components/prices/PricesDashboard";
 import { MessageBanner } from "./components/shared/MessageBanner";
 
 export default function App() {
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const token = getAuthToken();
-    setAuthenticated(token ? true : false);
-  }, []);
+  const [loggedIn, setLoggedIn] = useState(() => !!getAuthToken());
+  const [showLogin, setShowLogin] = useState(false);
 
   const handleLogin = useCallback((token: string) => {
-    setAuthToken(token);
-    setAuthenticated(true);
+    if (token) setAuthToken(token);
+    setLoggedIn(true);
+    setShowLogin(false);
   }, []);
 
   const handleLogout = useCallback(() => {
     clearAuthToken();
-    setAuthenticated(false);
+    setLoggedIn(false);
   }, []);
 
-  if (authenticated === null) {
-    return (
-      <div className="app">
-        <div className="empty-state">Loading...</div>
-      </div>
-    );
+  if (showLogin) {
+    return <Login onLogin={handleLogin} onBack={() => setShowLogin(false)} />;
   }
 
-  if (!authenticated) {
-    return <Login onLogin={handleLogin} />;
-  }
-
-  return <Dashboard onLogout={handleLogout} />;
+  return (
+    <Dashboard
+      readonly={!loggedIn}
+      onLoginRequest={() => setShowLogin(true)}
+      onLogout={handleLogout}
+    />
+  );
 }
 
 interface DashboardProps {
+  readonly: boolean;
+  onLoginRequest: () => void;
   onLogout: () => void;
 }
 
-function Dashboard({ onLogout }: DashboardProps) {
+function Dashboard({ readonly, onLoginRequest, onLogout }: DashboardProps) {
   const [nav, setNav] = useNavigation();
   const [showStatusMessage, setShowStatusMessage] = useState(false);
 
-  const handleAuthError = useCallback(() => {
-    onLogout();
-  }, [onLogout]);
-
   const agents = useAgents({
-    authenticated: true,
-    onAuthError: handleAuthError,
     onConfigUpdate: (agentId, config) => {
       configHook.handleRemoteConfigUpdate(agentId, config);
     },
@@ -86,9 +77,7 @@ function Dashboard({ onLogout }: DashboardProps) {
 
   const configHook = useConfig({
     agentId: currentAgentId,
-    authenticated: true,
     onDeviceNameUpdate: agents.updateDeviceName,
-    onAuthError: handleAuthError,
     onMessage: useCallback((msg: string) => {
       agents.setMessage(msg);
     }, []),
@@ -101,6 +90,10 @@ function Dashboard({ onLogout }: DashboardProps) {
 
   const handleCommand = useCallback(
     async (command: string, target: string, payload?: unknown) => {
+      if (readonly) {
+        agents.setMessage("Log in to send commands.");
+        return;
+      }
       if (!agents.selectedAgent) return;
       try {
         await sendCommand(
@@ -116,7 +109,7 @@ function Dashboard({ onLogout }: DashboardProps) {
         );
       }
     },
-    [agents.selectedAgent],
+    [agents.selectedAgent, readonly],
   );
 
   const handleNavigate = useCallback(
@@ -162,6 +155,8 @@ function Dashboard({ onLogout }: DashboardProps) {
         onNavigate={handleNavigate}
         connectionActive={agents.connectionActive}
         deviceName={deviceName}
+        readonly={readonly}
+        onLoginRequest={onLoginRequest}
         onLogout={onLogout}
       />
 
@@ -218,6 +213,7 @@ function Dashboard({ onLogout }: DashboardProps) {
                       selectedAgentOnline={selectedAgentOnline}
                       agentConfig={configHook.agentConfig}
                       onCommand={handleCommand}
+                      readonly={readonly}
                     />
                   )}
 
@@ -235,6 +231,7 @@ function Dashboard({ onLogout }: DashboardProps) {
                       onDraftChange={configHook.handleDraftChange}
                       onSave={configHook.handleConfigSave}
                       onReset={configHook.handleConfigReset}
+                      readonly={readonly}
                       scheduleGoalReached={
                         selectedAgent?.schedule_goal_reached
                       }

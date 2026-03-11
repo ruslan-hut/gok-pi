@@ -6,6 +6,8 @@ interface TopNavProps {
   onNavigate: (page: AppPage) => void;
   connectionActive: boolean;
   deviceName?: string;
+  readonly?: boolean;
+  onLoginRequest?: () => void;
   onLogout: () => void;
 }
 
@@ -14,6 +16,8 @@ export function TopNav({
   onNavigate,
   connectionActive,
   deviceName,
+  readonly,
+  onLoginRequest,
   onLogout,
 }: TopNavProps) {
   const isDevice = currentPage.page === "device";
@@ -62,9 +66,15 @@ export function TopNav({
         )}
       </div>
 
-      <button className="top-nav-logout" onClick={onLogout} title="Logout">
-        <Icon name="logout" size={20} />
-      </button>
+      {readonly ? (
+        <button className="top-nav-logout" onClick={onLoginRequest} title="Login">
+          <Icon name="login" size={20} />
+        </button>
+      ) : (
+        <button className="top-nav-logout" onClick={onLogout} title="Logout">
+          <Icon name="logout" size={20} />
+        </button>
+      )}
     </nav>
   );
 }

@@ -3,9 +3,10 @@ import { login } from "./api";
 
 interface LoginProps {
   onLogin: (token: string) => void;
+  onBack?: () => void;
 }
 
-export default function Login({ onLogin }: LoginProps) {
+export default function Login({ onLogin, onBack }: LoginProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>();
@@ -65,6 +66,11 @@ export default function Login({ onLogin }: LoginProps) {
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
+        {onBack && (
+          <button type="button" className="button-link login-back" onClick={onBack}>
+            Continue without signing in
+          </button>
+        )}
       </div>
     </div>
   );

@@ -193,3 +193,17 @@ func (s *Server) requireAuthWS(next func(http.ResponseWriter, *http.Request)) fu
 	}
 }
 
+func (s *Server) requireAuthForWrites(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			next(w, r)
+			return
+		}
+		token := r.Header.Get(headerAuthToken)
+		if !s.auth.validateToken(token) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
+}

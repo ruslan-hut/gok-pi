@@ -402,6 +402,12 @@
   box-sizing: border-box;
 }
 
+.login-back {
+  margin-top: var(--space-lg);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
 /* DB stats (overview page) */
 .db-stats {
   display: flex;

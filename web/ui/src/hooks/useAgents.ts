@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchAgentConfig, fetchAgents, getAuthToken } from "../api";
+import { fetchAgentConfig, fetchAgents } from "../api";
 import type {
   AgentConfig,
   AgentSummary,
@@ -19,20 +19,14 @@ function computeConnectionStatus(agent: AgentSummary): boolean {
 function getWsUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const host = window.location.host;
-  const token = getAuthToken();
-  const url = `${protocol}://${host}/api/ui`;
-  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+  return `${protocol}://${host}/api/ui`;
 }
 
 interface UseAgentsOptions {
-  authenticated: boolean;
-  onAuthError: () => void;
   onConfigUpdate?: (agentId: string, config: AgentConfig) => void;
 }
 
 export function useAgents({
-  authenticated,
-  onAuthError,
   onConfigUpdate,
 }: UseAgentsOptions) {
   const [agents, setAgents] = useState<AgentsMap>({});
@@ -42,17 +36,12 @@ export function useAgents({
   const [lastStatusMessage, setLastStatusMessage] = useState("");
   const [statusMessageFrozen, setStatusMessageFrozen] = useState(false);
 
-  const isLoggingOutRef = useRef(false);
-  const onAuthErrorRef = useRef(onAuthError);
   const onConfigUpdateRef = useRef(onConfigUpdate);
   const prefetchedConfigAgentsRef = useRef<Set<string>>(new Set());
   const selectedAgentIdRef = useRef<string | undefined>();
   const statusMessageFrozenRef = useRef(false);
 
   // Keep refs in sync
-  useEffect(() => {
-    onAuthErrorRef.current = onAuthError;
-  }, [onAuthError]);
   useEffect(() => {
     onConfigUpdateRef.current = onConfigUpdate;
   }, [onConfigUpdate]);
@@ -80,13 +69,12 @@ export function useAgents({
   // Prefetch agent config for device names
   const prefetchAgentConfig = useCallback(
     (agentId: string) => {
-      if (!authenticated) return;
       if (prefetchedConfigAgentsRef.current.has(agentId)) return;
       prefetchedConfigAgentsRef.current.add(agentId);
 
       fetchAgentConfig(agentId)
         .then((cfg) => {
-          if (!cfg || isLoggingOutRef.current) return;
+          if (!cfg) return;
           setAgents((prev) => {
             const agent = prev[agentId];
             if (!agent) return prev;
@@ -100,7 +88,7 @@ export function useAgents({
           // Best-effort
         });
     },
-    [authenticated],
+    [],
   );
 
   // Message handlers
@@ -216,12 +204,11 @@ export function useAgents({
 
   // Fetch agents on mount
   useEffect(() => {
-    if (!authenticated || isLoggingOutRef.current) return;
     let cancelled = false;
 
     fetchAgents()
       .then((data) => {
-        if (cancelled || isLoggingOutRef.current) return;
+        if (cancelled) return;
         setAgents((prev) => {
           const next: AgentsMap = { ...prev };
           Object.entries(data).forEach(([id, agent]) => {
@@ -242,29 +229,23 @@ export function useAgents({
         });
       })
       .catch((err) => {
-        if (cancelled || isLoggingOutRef.current) return;
-        if (err.message.includes("Unauthorized")) {
-          onAuthErrorRef.current();
-        } else {
-          setMessage(err.message);
-        }
+        if (cancelled) return;
+        setMessage(err.message);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [authenticated]);
+  }, []);
 
   // WebSocket
   useEffect(() => {
-    if (!authenticated) return;
-
     let isActive = true;
     let retryMs = 1000;
     let socket: WebSocket | null = null;
 
     const connect = () => {
-      if (!isActive || !authenticated) return;
+      if (!isActive) return;
       socket = new WebSocket(getWsUrl());
       socket.onopen = () => {
         setConnectionActive(true);
@@ -295,7 +276,7 @@ export function useAgents({
       };
       socket.onclose = () => {
         setConnectionActive(false);
-        if (!isActive || !authenticated) return;
+        if (!isActive) return;
         setTimeout(() => {
           retryMs = Math.min(retryMs * 2, 8000);
           connect();
@@ -311,7 +292,7 @@ export function useAgents({
       isActive = false;
       socket?.close();
     };
-  }, [authenticated, handleMessage]);
+  }, [handleMessage]);
 
   // Connection status polling
   useEffect(() => {

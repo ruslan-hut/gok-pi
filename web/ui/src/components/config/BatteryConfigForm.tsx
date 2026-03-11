@@ -7,6 +7,7 @@ interface BatteryConfigFormProps {
   onChange: (battery: BatteryConfig) => void;
   onRemove: () => void;
   disabled?: boolean;
+  readonly?: boolean;
 }
 
 export function BatteryConfigForm({
@@ -14,6 +15,7 @@ export function BatteryConfigForm({
   onChange,
   onRemove,
   disabled,
+  readonly,
 }: BatteryConfigFormProps) {
   const [collapsed, setCollapsed] = useState(true);
 
@@ -180,14 +182,16 @@ export function BatteryConfigForm({
           <small className="form-help-text">
             Used when no schedule is active
           </small>
-          <button
-            type="button"
-            className="config-item-remove"
-            onClick={onRemove}
-            disabled={disabled}
-          >
-            Remove Battery
-          </button>
+          {!readonly && (
+            <button
+              type="button"
+              className="config-item-remove"
+              onClick={onRemove}
+              disabled={disabled}
+            >
+              Remove Battery
+            </button>
+          )}
         </div>
       )}
     </div>

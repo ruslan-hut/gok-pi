@@ -16,6 +16,7 @@ interface BatteryCardProps {
   onCommand: (command: string, target: string, payload?: unknown) => void;
   isOnline: boolean;
   hasGoalReachedToday?: boolean;
+  readonly?: boolean;
 }
 
 export function BatteryCard({
@@ -24,6 +25,7 @@ export function BatteryCard({
   onCommand,
   isOnline,
   hasGoalReachedToday,
+  readonly,
 }: BatteryCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [commandState, setCommandState] =
@@ -112,12 +114,14 @@ export function BatteryCard({
                 ? "Charging"
                 : "Idle"}
           </span>
-          <span
-            className="battery-card-toggle"
-            title={expanded ? "Collapse controls" : "Expand controls"}
-          >
-            <Icon name={expanded ? "expand_more" : "chevron_right"} size={18} />
-          </span>
+          {!readonly && (
+            <span
+              className="battery-card-toggle"
+              title={expanded ? "Collapse controls" : "Expand controls"}
+            >
+              <Icon name={expanded ? "expand_more" : "chevron_right"} size={18} />
+            </span>
+          )}
         </span>
       </h2>
 
@@ -137,7 +141,7 @@ export function BatteryCard({
       </div>
 
       {/* All controls — expandable */}
-      <div className="controls" onClick={(e) => e.stopPropagation()}>
+      {!readonly && <div className="controls" onClick={(e) => e.stopPropagation()}>
         <div className="control-group">
           <label className="control-label">Power (W)</label>
           <input
@@ -298,7 +302,7 @@ export function BatteryCard({
             </button>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

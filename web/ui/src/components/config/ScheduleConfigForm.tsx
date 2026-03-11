@@ -8,6 +8,7 @@ interface ScheduleConfigFormProps {
   onChange: (schedule: ScheduleConfig) => void;
   onRemove: () => void;
   disabled?: boolean;
+  readonly?: boolean;
   goalReachedAt?: string;
   onResetGoal?: () => void;
   isOnline?: boolean;
@@ -33,6 +34,7 @@ export function ScheduleConfigForm({
   onChange,
   onRemove,
   disabled,
+  readonly,
   goalReachedAt,
   onResetGoal,
   isOnline,
@@ -98,7 +100,7 @@ export function ScheduleConfigForm({
           <span className="goal-badge-text">
             <Icon name="check_circle" size={16} /> Goal reached {formatGoalReachedTime(goalReachedAt)}
           </span>
-          {onResetGoal && (
+          {onResetGoal && !readonly && (
             <button
               type="button"
               className="goal-reset-button"
@@ -266,14 +268,16 @@ export function ScheduleConfigForm({
               />
             </div>
           </div>
-          <button
-            type="button"
-            className="config-item-remove"
-            onClick={onRemove}
-            disabled={disabled}
-          >
-            Remove Schedule
-          </button>
+          {!readonly && (
+            <button
+              type="button"
+              className="config-item-remove"
+              onClick={onRemove}
+              disabled={disabled}
+            >
+              Remove Schedule
+            </button>
+          )}
         </div>
       )}
     </div>

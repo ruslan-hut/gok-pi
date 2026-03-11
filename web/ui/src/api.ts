@@ -54,14 +54,8 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 export async function fetchAgents(): Promise<Record<string, AgentSummary>> {
-  const res = await fetch("/api/agents", {
-    headers: getAuthHeaders(),
-  });
+  const res = await fetch("/api/agents");
   if (!res.ok) {
-    if (res.status === 401) {
-      clearAuthToken();
-      throw new Error("Unauthorized. Please log in again.");
-    }
     throw new Error(`Failed to load agents: ${res.statusText}`);
   }
   const data = (await res.json()) as AgentSummary[];
@@ -95,8 +89,7 @@ export async function sendCommand(
   });
   if (!res.ok) {
     if (res.status === 401) {
-      clearAuthToken();
-      throw new Error("Unauthorized. Please log in again.");
+      throw new Error("Login required to send commands.");
     }
     const text = await res.text();
     throw new Error(text || "Command failed");
@@ -109,20 +102,13 @@ export async function fetchAgentConfig(
   const res = await fetch(
     `/api/agents/${encodeURIComponent(agentId)}/config`,
     {
-      headers: {
-        "Accept": "application/json",
-        ...getAuthHeaders(),
-      },
+      headers: { "Accept": "application/json" },
     },
   );
   if (res.status === 404) {
     return null;
   }
   if (!res.ok) {
-    if (res.status === 401) {
-      clearAuthToken();
-      throw new Error("Unauthorized. Please log in again.");
-    }
     throw new Error(`Failed to load config: ${res.statusText}`);
   }
   return (await res.json()) as AgentConfig;
@@ -154,8 +140,7 @@ export async function updateAgentConfig(
   );
   if (!res.ok) {
     if (res.status === 401) {
-      clearAuthToken();
-      throw new Error("Unauthorized. Please log in again.");
+      throw new Error("Login required to update configuration.");
     }
     const text = await res.text();
     throw new Error(text || "Failed to update config");
@@ -181,14 +166,8 @@ export async function fetchAgentLogs(
   }
 
   const url = `/api/agents/${encodeURIComponent(agentId)}/logs${params.toString() ? `?${params.toString()}` : ""}`;
-  const res = await fetch(url, {
-    headers: getAuthHeaders(),
-  });
+  const res = await fetch(url);
   if (!res.ok) {
-    if (res.status === 401) {
-      clearAuthToken();
-      throw new Error("Unauthorized. Please log in again.");
-    }
     const text = await res.text();
     throw new Error(text || "Failed to fetch logs");
   }
@@ -196,14 +175,8 @@ export async function fetchAgentLogs(
 }
 
 export async function fetchPrices(): Promise<PricesState> {
-  const res = await fetch("/api/prices", {
-    headers: getAuthHeaders(),
-  });
+  const res = await fetch("/api/prices");
   if (!res.ok) {
-    if (res.status === 401) {
-      clearAuthToken();
-      throw new Error("Unauthorized. Please log in again.");
-    }
     throw new Error(`Failed to load prices: ${res.statusText}`);
   }
   return (await res.json()) as PricesState;
@@ -214,28 +187,16 @@ export async function fetchSessions(agentId?: string, hours?: number): Promise<S
   if (agentId) params.set("agent_id", agentId);
   if (hours) params.set("hours", hours.toString());
   const qs = params.toString();
-  const res = await fetch(`/api/sessions${qs ? `?${qs}` : ""}`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await fetch(`/api/sessions${qs ? `?${qs}` : ""}`);
   if (!res.ok) {
-    if (res.status === 401) {
-      clearAuthToken();
-      throw new Error("Unauthorized. Please log in again.");
-    }
     throw new Error(`Failed to load sessions: ${res.statusText}`);
   }
   return (await res.json()) as SessionsResponse;
 }
 
 export async function fetchDBStats(): Promise<DBStatsResponse> {
-  const res = await fetch("/api/db-stats", {
-    headers: getAuthHeaders(),
-  });
+  const res = await fetch("/api/db-stats");
   if (!res.ok) {
-    if (res.status === 401) {
-      clearAuthToken();
-      throw new Error("Unauthorized. Please log in again.");
-    }
     throw new Error(`Failed to load DB stats: ${res.statusText}`);
   }
   return (await res.json()) as DBStatsResponse;

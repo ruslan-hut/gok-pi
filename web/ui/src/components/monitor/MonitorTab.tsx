@@ -13,6 +13,7 @@ interface MonitorTabProps {
   selectedAgentOnline: boolean;
   agentConfig: AgentConfig | null;
   onCommand: (command: string, target: string, payload?: unknown) => void;
+  readonly?: boolean;
 }
 
 export function MonitorTab({
@@ -20,6 +21,7 @@ export function MonitorTab({
   selectedAgentOnline,
   agentConfig,
   onCommand,
+  readonly,
 }: MonitorTabProps) {
   const batteries = useMemo(() => {
     if (!selectedAgent) return [];
@@ -84,6 +86,7 @@ export function MonitorTab({
               onCommand={onCommand}
               isOnline={selectedAgentOnline}
               hasGoalReachedToday={hasGoalReachedToday}
+              readonly={readonly}
             />
           );
         })}

@@ -16,17 +16,13 @@ export function formatConfigDraft(config: AgentConfig | null): string {
 
 interface UseConfigOptions {
   agentId: string | undefined;
-  authenticated: boolean;
   onDeviceNameUpdate: (agentId: string, name: string) => void;
-  onAuthError: () => void;
   onMessage: (msg: string) => void;
 }
 
 export function useConfig({
   agentId,
-  authenticated,
   onDeviceNameUpdate,
-  onAuthError,
   onMessage,
 }: UseConfigOptions) {
   const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
@@ -37,16 +33,12 @@ export function useConfig({
   const [configError, setConfigError] = useState<string>();
 
   const configDirtyRef = useRef(false);
-  const onAuthErrorRef = useRef(onAuthError);
   const onDeviceNameUpdateRef = useRef(onDeviceNameUpdate);
   const onMessageRef = useRef(onMessage);
 
   useEffect(() => {
     configDirtyRef.current = configDirty;
   }, [configDirty]);
-  useEffect(() => {
-    onAuthErrorRef.current = onAuthError;
-  }, [onAuthError]);
   useEffect(() => {
     onDeviceNameUpdateRef.current = onDeviceNameUpdate;
   }, [onDeviceNameUpdate]);
@@ -56,7 +48,7 @@ export function useConfig({
 
   // Fetch config when agent changes
   useEffect(() => {
-    if (!agentId || !authenticated) {
+    if (!agentId) {
       setAgentConfig(null);
       setConfigDraft("");
       setConfigDirty(false);
@@ -80,16 +72,12 @@ export function useConfig({
       })
       .catch((err) => {
         if (cancelled) return;
-        if (err instanceof Error && err.message.includes("Unauthorized")) {
-          onAuthErrorRef.current();
-        } else {
-          setAgentConfig(null);
-          setConfigDraft(formatConfigDraft(null));
-          setConfigDirty(false);
-          setConfigError(
-            err instanceof Error ? err.message : "Failed to load configuration",
-          );
-        }
+        setAgentConfig(null);
+        setConfigDraft(formatConfigDraft(null));
+        setConfigDirty(false);
+        setConfigError(
+          err instanceof Error ? err.message : "Failed to load configuration",
+        );
       })
       .finally(() => {
         if (!cancelled) setConfigLoading(false);
@@ -98,7 +86,7 @@ export function useConfig({
     return () => {
       cancelled = true;
     };
-  }, [agentId, authenticated]);
+  }, [agentId]);
 
   const handleRemoteConfigUpdate = useCallback(
     (updateAgentId: string, config: AgentConfig) => {
