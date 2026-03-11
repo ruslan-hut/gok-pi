@@ -156,6 +156,13 @@ export interface CommandState {
 
 export type TabId = "monitor" | "prices" | "configure" | "tools";
 
+export type DeviceTab = "monitor" | "configure" | "tools";
+
+export type AppPage =
+  | { page: "overview" }
+  | { page: "electricity" }
+  | { page: "device"; agentId: string; tab: DeviceTab };
+
 // Database stats types
 
 export interface DBStats {

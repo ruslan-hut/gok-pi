@@ -1,98 +1,149 @@
-/* layout.css — app shell, sidebar, tabs, responsive */
+/* layout.css — app shell, top nav, tabs, overview, responsive */
 
 .app {
-  display: grid;
-  grid-template-columns: 280px 1fr;
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
-.sidebar {
-  border-right: 1px solid var(--border-color);
-  padding: var(--space-xl);
-  padding-top: calc(var(--space-xl) + env(safe-area-inset-top, 0px));
-  background: var(--color-bg-sidebar);
-}
-
-.sidebar-header {
+/* Top navigation bar */
+.top-nav {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-xl);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--color-bg-sidebar);
   gap: var(--space-lg);
-  margin-bottom: var(--space-lg);
+  flex-shrink: 0;
 }
 
-.sidebar h1 {
+.top-nav-brand {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.top-nav-title {
   font-size: 1.2rem;
-  margin: 0;
+  font-weight: 700;
+  color: var(--color-text-heading);
 }
 
-.logout-button {
-  font-size: 0.85rem;
-  padding: 0.35rem 0.75rem;
-}
-
-.agent-select-mobile {
-  display: none;
-}
-
-.agent-select {
-  width: 100%;
-  padding: 0.6rem 0.75rem;
-  font-size: 0.95rem;
-  margin-bottom: var(--space-lg);
-}
-
-.agent-list {
+.top-nav-center {
+  flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
+  justify-content: center;
 }
 
-.agent-card {
-  border: 1px solid var(--border-color);
-  padding: 0.75rem 1rem;
+.top-nav-links {
+  display: flex;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  background: rgba(15, 23, 42, 0.5);
   border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.2s ease;
+  border: 1px solid var(--border-color-subtle);
 }
 
-.agent-card.selected {
-  border-color: var(--color-primary);
-  transform: translateX(4px);
-}
-
-.agent-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.agent-card-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: 0.75rem;
+.top-nav-link {
+  padding: 0.4rem var(--space-xl);
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
   color: var(--color-text-muted);
-  margin: var(--space-xs) 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.agent-last-seen {
-  font-style: italic;
+.top-nav-link:hover {
+  color: var(--color-text);
+  background: rgba(56, 189, 248, 0.08);
+  border-color: transparent;
 }
 
+.top-nav-link.active {
+  color: var(--color-text);
+  background: var(--color-primary-bg);
+  border-color: transparent;
+}
+
+.top-nav-link.active:hover {
+  background: var(--color-primary-bg);
+  border-color: transparent;
+}
+
+.top-nav-device {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.top-nav-back {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.top-nav-back:hover {
+  color: var(--color-text);
+  border-color: var(--color-primary);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.top-nav-device-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.top-nav-logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.top-nav-logout:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+}
+
+/* Content area */
 .content {
+  flex: 1;
   padding: var(--space-2xl) 3rem;
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
   overflow-x: hidden;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
+/* Agent header (device view) */
 .agent-header {
   display: flex;
   justify-content: space-between;
@@ -116,7 +167,7 @@
   line-height: 1.5;
 }
 
-/* Tab bar (desktop) */
+/* Tab bar (device sub-tabs, desktop) */
 .tab-bar {
   display: flex;
   gap: var(--space-xs);
@@ -179,6 +230,85 @@
 /* Bottom nav (mobile) — hidden on desktop */
 .bottom-nav {
   display: none;
+}
+
+/* Overview page */
+.overview-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.overview-agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-lg);
+}
+
+.overview-agent-card {
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.2s ease;
+}
+
+.overview-agent-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+}
+
+.overview-agent-card .agent-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.overview-agent-card .agent-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin: var(--space-xs) 0;
+}
+
+.agent-last-seen {
+  font-style: italic;
+}
+
+.overview-batteries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.overview-battery-mini {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0.2rem 0.5rem;
+  background: rgba(148, 163, 184, 0.08);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.overview-battery-soc {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.overview-agent-id {
+  color: var(--color-text-dim);
+}
+
+.overview-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-color);
 }
 
 /* Connection dot */
@@ -272,27 +402,62 @@
   box-sizing: border-box;
 }
 
+/* DB stats (overview page) */
+.db-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.db-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+
+.db-stats-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(148, 163, 184, 0.06);
+  border-radius: var(--radius-sm);
+}
+
+.db-stats-label {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.db-stats-value {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.db-stats-agents table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.db-stats-agents th {
+  text-align: left;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.db-stats-agents td {
+  padding: 0.35rem 0.5rem;
+  color: var(--color-text);
+}
+
 /* Tablet breakpoint */
 @media (max-width: 960px) {
-  .app {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-  }
-
-  .sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--border-color);
-    padding: 1.25rem var(--space-xl);
-  }
-
-  .agent-select-mobile {
-    display: block;
-  }
-
-  .agent-list {
-    display: none;
-  }
-
   .content {
     padding: var(--space-xl);
   }
@@ -318,17 +483,22 @@
     gap: var(--space-lg);
   }
 
-  .sidebar {
-    padding: var(--space-lg) 1.25rem;
-    padding-top: calc(var(--space-lg) + env(safe-area-inset-top, 0px));
+  .top-nav {
+    padding: var(--space-sm) var(--space-lg);
+    padding-top: calc(var(--space-sm) + env(safe-area-inset-top, 0px));
   }
 
-  .sidebar-header {
-    margin-bottom: var(--space-md);
+  .top-nav-title {
+    font-size: 1rem;
   }
 
-  .sidebar h1 {
-    font-size: 1.1rem;
+  /* Hide desktop nav links on mobile, use bottom nav instead */
+  .top-nav-links {
+    display: none;
+  }
+
+  .top-nav-device {
+    display: none;
   }
 
   .agent-header {
@@ -407,5 +577,9 @@
     align-items: center;
     gap: 3px;
     font-weight: 500;
+  }
+
+  .overview-agents-grid {
+    grid-template-columns: 1fr;
   }
 }

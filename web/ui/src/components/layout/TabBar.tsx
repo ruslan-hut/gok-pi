@@ -1,16 +1,15 @@
 import type { KeyboardEvent } from "react";
-import type { TabId } from "../../types";
+import type { DeviceTab } from "../../types";
 
-const tabs: { id: TabId; label: string }[] = [
+const tabs: { id: DeviceTab; label: string }[] = [
   { id: "monitor", label: "Monitor" },
-  { id: "prices", label: "Prices" },
   { id: "configure", label: "Configure" },
   { id: "tools", label: "Tools" },
 ];
 
 interface TabBarProps {
-  activeTab: TabId;
-  onTabChange: (tab: TabId) => void;
+  activeTab: DeviceTab;
+  onTabChange: (tab: DeviceTab) => void;
   configDirty?: boolean;
 }
 
@@ -29,14 +28,12 @@ export function TabBar({ activeTab, onTabChange, configDirty }: TabBarProps) {
     if (nextIndex !== null) {
       e.preventDefault();
       onTabChange(tabs[nextIndex].id);
-      // Focus the new tab button
-      const el = document.getElementById(`tab-${tabs[nextIndex].id}`);
-      el?.focus();
+      document.getElementById(`tab-${tabs[nextIndex].id}`)?.focus();
     }
   };
 
   return (
-    <div className="tab-bar" role="tablist" aria-label="Dashboard sections">
+    <div className="tab-bar" role="tablist" aria-label="Device sections">
       {tabs.map((tab, index) => (
         <button
           key={tab.id}

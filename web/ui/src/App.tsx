@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getAuthToken,
   setAuthToken,
@@ -9,15 +9,17 @@ import Login from "./Login";
 import { useAgents } from "./hooks/useAgents";
 import { useConfig } from "./hooks/useConfig";
 import { useLogs } from "./hooks/useLogs";
-import { usePersistedTab } from "./hooks/usePersistedTab";
+import { useNavigation } from "./hooks/useNavigation";
+import type { AppPage } from "./types";
+import { TopNav } from "./components/layout/TopNav";
 import { TabBar } from "./components/layout/TabBar";
 import { BottomNav } from "./components/layout/BottomNav";
+import { OverviewPage } from "./components/pages/OverviewPage";
 import { MonitorTab } from "./components/monitor/MonitorTab";
 import { ConfigTab } from "./components/config/ConfigTab";
 import { ToolsTab } from "./components/tools/ToolsTab";
 import PricesDashboard from "./components/prices/PricesDashboard";
 import { MessageBanner } from "./components/shared/MessageBanner";
-import type { TabId } from "./types";
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
@@ -57,15 +59,12 @@ interface DashboardProps {
 }
 
 function Dashboard({ onLogout }: DashboardProps) {
-  const [tab, setTab] = usePersistedTab("monitor");
+  const [nav, setNav] = useNavigation();
   const [showStatusMessage, setShowStatusMessage] = useState(false);
 
-  // Wire up hooks
   const handleAuthError = useCallback(() => {
     onLogout();
   }, [onLogout]);
-
-  const configMessageRef = useRef<(msg: string) => void>();
 
   const agents = useAgents({
     authenticated: true,
@@ -75,8 +74,18 @@ function Dashboard({ onLogout }: DashboardProps) {
     },
   });
 
+  // Current agent from navigation
+  const currentAgentId = nav.page === "device" ? nav.agentId : undefined;
+
+  // Sync agent selection with navigation
+  useEffect(() => {
+    if (currentAgentId) {
+      agents.setSelectedAgentId(currentAgentId);
+    }
+  }, [currentAgentId]);
+
   const configHook = useConfig({
-    agentId: agents.selectedAgentId,
+    agentId: currentAgentId,
     authenticated: true,
     onDeviceNameUpdate: agents.updateDeviceName,
     onAuthError: handleAuthError,
@@ -86,137 +95,75 @@ function Dashboard({ onLogout }: DashboardProps) {
   });
 
   const logs = useLogs({
-    agentId: agents.selectedAgentId,
+    agentId: currentAgentId,
     disabled: !agents.selectedAgentOnline,
   });
-
-  // Stabilize onConfigUpdate ref after configHook is created
-  useEffect(() => {
-    configMessageRef.current = configHook.handleRemoteConfigUpdate as never;
-  }, [configHook.handleRemoteConfigUpdate]);
 
   const handleCommand = useCallback(
     async (command: string, target: string, payload?: unknown) => {
       if (!agents.selectedAgent) return;
       try {
-        await sendCommand(agents.selectedAgent.agent.id, command, target, payload);
+        await sendCommand(
+          agents.selectedAgent.agent.id,
+          command,
+          target,
+          payload,
+        );
         agents.setMessage(`Command ${command} sent to ${target}`);
       } catch (err) {
-        if (err instanceof Error) {
-          agents.setMessage(err.message);
-        } else {
-          agents.setMessage("Failed to send command");
-        }
+        agents.setMessage(
+          err instanceof Error ? err.message : "Failed to send command",
+        );
       }
     },
     [agents.selectedAgent],
   );
 
-  const handleTabChange = useCallback(
-    (newTab: TabId) => {
+  const handleNavigate = useCallback(
+    (newPage: AppPage) => {
+      // Warn about unsaved config changes when leaving configure tab
       if (
-        tab === "configure" &&
-        newTab !== "configure" &&
+        nav.page === "device" &&
+        nav.tab === "configure" &&
         configHook.configDirty
       ) {
-        const confirmed = window.confirm(
-          "You have unsaved configuration changes. Switch tab anyway?",
-        );
-        if (!confirmed) return;
+        const leavingConfigure =
+          newPage.page !== "device" ||
+          (newPage.page === "device" && newPage.tab !== "configure");
+        if (leavingConfigure) {
+          const confirmed = window.confirm(
+            "You have unsaved configuration changes. Navigate away?",
+          );
+          if (!confirmed) return;
+        }
       }
-      setTab(newTab);
+      setNav(newPage);
     },
-    [tab, configHook.configDirty, setTab],
+    [nav, configHook.configDirty, setNav],
   );
+
+  const selectedAgent = currentAgentId
+    ? agents.agents[currentAgentId]
+    : undefined;
+  const selectedAgentOnline = selectedAgent
+    ? selectedAgent.connected !== false
+    : false;
+
+  const deviceName =
+    configHook.agentConfig?.device_name ||
+    selectedAgent?.device_name ||
+    selectedAgent?.agent.hostname ||
+    currentAgentId;
 
   return (
     <div className="app">
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <h1>
-            GOK-Pi Dashboard
-            <span
-              className={`connection-dot ${agents.connectionActive ? "online" : ""}`}
-              role="status"
-              aria-label={
-                agents.connectionActive
-                  ? "Live updates active"
-                  : "Reconnecting"
-              }
-              title={
-                agents.connectionActive
-                  ? "Live updates active"
-                  : "Reconnecting"
-              }
-            />
-          </h1>
-          <button
-            className="logout-button"
-            onClick={onLogout}
-            title="Logout"
-          >
-            Logout
-          </button>
-        </div>
-        <div className="agent-select-mobile">
-          <select
-            value={agents.selectedAgentId || ""}
-            onChange={(e) =>
-              agents.setSelectedAgentId(e.target.value || undefined)
-            }
-            className="agent-select"
-          >
-            <option value="">Select agent...</option>
-            {Object.values(agents.agents).map((agent) => (
-              <option key={agent.agent.id} value={agent.agent.id}>
-                {agent.device_name ||
-                  agent.agent.hostname ||
-                  agent.agent.id}{" "}
-                ({agent.connected === false ? "Offline" : "Online"})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="agent-list">
-          {Object.values(agents.agents).map((agent) => (
-            <button
-              key={agent.agent.id}
-              className={`agent-card ${
-                agent.agent.id === agents.selectedAgentId ? "selected" : ""
-              }`}
-              onClick={() => agents.setSelectedAgentId(agent.agent.id)}
-            >
-              <div className="agent-card-header">
-                <strong>
-                  {agent.device_name ||
-                    agent.agent.hostname ||
-                    agent.agent.id}
-                </strong>
-                <span
-                  className={`badge ${
-                    agent.connected === false ? "offline" : "online"
-                  }`}
-                >
-                  {agent.connected === false ? "Offline" : "Online"}
-                </span>
-              </div>
-              <div className="agent-card-meta">
-                <span>{agent.agent.env}</span>
-                {agent.connected === false ? (
-                  <span className="agent-last-seen">
-                    Last seen{" "}
-                    {new Date(agent.last_seen).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                ) : null}
-              </div>
-              <small>ID: {agent.agent.id}</small>
-            </button>
-          ))}
-        </div>
-      </aside>
+      <TopNav
+        currentPage={nav}
+        onNavigate={handleNavigate}
+        connectionActive={agents.connectionActive}
+        deviceName={deviceName}
+        onLogout={onLogout}
+      />
 
       <main className="content">
         <MessageBanner
@@ -224,136 +171,141 @@ function Dashboard({ onLogout }: DashboardProps) {
           onDismiss={() => agents.setMessage(undefined)}
         />
 
-        {agents.selectedAgent && (
-          <header>
-            <div className="agent-header">
-              <h2>
-                {configHook.agentConfig?.device_name ||
-                  agents.selectedAgent.agent.hostname}
-              </h2>
-              <span
-                className={`badge ${
-                  agents.selectedAgentOnline ? "online" : "offline"
-                }`}
-              >
-                {agents.selectedAgentOnline ? "Connected" : "Offline"}
-              </span>
-            </div>
-            <div className="status-bar">
-              <span>
-                Last contact:{" "}
-                {new Date(
-                  agents.selectedAgent.last_seen,
-                ).toLocaleTimeString()}
-              </span>
-            </div>
-          </header>
+        {nav.page === "overview" && (
+          <OverviewPage
+            agents={agents.agents}
+            onNavigate={handleNavigate}
+          />
         )}
 
-        <TabBar
-          activeTab={tab}
-          onTabChange={handleTabChange}
-          configDirty={configHook.configDirty}
-        />
+        {nav.page === "electricity" && <PricesDashboard />}
 
-        <div
-          id={`tabpanel-${tab}`}
-          role="tabpanel"
-          aria-labelledby={`tab-${tab}`}
-          className="tab-panel"
-        >
-          {tab === "prices" && <PricesDashboard />}
+        {nav.page === "device" && (
+          <>
+            {selectedAgent && (
+              <header>
+                <div className="agent-header">
+                  <h2>{deviceName}</h2>
+                  <span
+                    className={`badge ${selectedAgentOnline ? "online" : "offline"}`}
+                  >
+                    {selectedAgentOnline ? "Connected" : "Offline"}
+                  </span>
+                </div>
+                <div className="status-bar">
+                  <span>
+                    Last contact:{" "}
+                    {new Date(
+                      selectedAgent.last_seen,
+                    ).toLocaleTimeString()}
+                  </span>
+                </div>
+              </header>
+            )}
 
-          {agents.selectedAgent ? (
-            <>
-              {tab === "monitor" && (
-                <MonitorTab
-                  selectedAgent={agents.selectedAgent}
-                  selectedAgentOnline={agents.selectedAgentOnline}
-                  agentConfig={configHook.agentConfig}
-                  onCommand={handleCommand}
-                />
+            <TabBar
+              activeTab={nav.tab}
+              onTabChange={(tab) => handleNavigate({ ...nav, tab })}
+              configDirty={configHook.configDirty}
+            />
+
+            <div className="tab-panel">
+              {selectedAgent ? (
+                <>
+                  {nav.tab === "monitor" && (
+                    <MonitorTab
+                      selectedAgent={selectedAgent}
+                      selectedAgentOnline={selectedAgentOnline}
+                      agentConfig={configHook.agentConfig}
+                      onCommand={handleCommand}
+                    />
+                  )}
+
+                  {nav.tab === "configure" && (
+                    <ConfigTab
+                      config={configHook.agentConfig}
+                      agentEnv={selectedAgent?.agent.env}
+                      agentId={selectedAgent?.agent.id}
+                      agentVersion={selectedAgent?.agent.version}
+                      draft={configHook.configDraft}
+                      loading={configHook.configLoading}
+                      saving={configHook.configSaving}
+                      dirty={configHook.configDirty}
+                      error={configHook.configError}
+                      onDraftChange={configHook.handleDraftChange}
+                      onSave={configHook.handleConfigSave}
+                      onReset={configHook.handleConfigReset}
+                      scheduleGoalReached={
+                        selectedAgent?.schedule_goal_reached
+                      }
+                      onResetGoal={(scheduleName) => {
+                        const schedule =
+                          configHook.agentConfig?.schedules.find(
+                            (s) => s.name === scheduleName,
+                          );
+                        const batteryName =
+                          schedule?.battery_name ||
+                          (selectedAgent?.telemetry
+                            ? Object.keys(selectedAgent.telemetry)[0]
+                            : "");
+                        handleCommand("reset_goal", batteryName, {
+                          schedule_name: scheduleName,
+                        });
+                      }}
+                      isOnline={selectedAgentOnline}
+                    />
+                  )}
+
+                  {nav.tab === "tools" && (
+                    <ToolsTab
+                      lastStatusMessage={agents.lastStatusMessage}
+                      showStatusMessage={showStatusMessage}
+                      onToggleStatusMessage={() =>
+                        setShowStatusMessage(!showStatusMessage)
+                      }
+                      statusMessageFrozen={agents.statusMessageFrozen}
+                      onToggleStatusMessageFrozen={() =>
+                        agents.setStatusMessageFrozen(
+                          !agents.statusMessageFrozen,
+                        )
+                      }
+                      agentId={currentAgentId}
+                      logsOpen={logs.logsOpen}
+                      logs={logs.logs}
+                      logsLoading={logs.logsLoading}
+                      logsError={logs.logsError}
+                      logStream={logs.logStream}
+                      logLines={logs.logLines}
+                      onToggleLogs={() => logs.setLogsOpen(!logs.logsOpen)}
+                      onRefreshLogs={logs.handleLogRefresh}
+                      onStreamChange={logs.setLogStream}
+                      onLinesChange={logs.setLogLines}
+                      logsDisabled={!selectedAgentOnline}
+                    />
+                  )}
+                </>
+              ) : (
+                <div className="empty-state">
+                  <h2>Agent not found</h2>
+                  <p>
+                    The selected agent is no longer available.{" "}
+                    <button
+                      className="button-link"
+                      onClick={() => handleNavigate({ page: "overview" })}
+                    >
+                      Go to overview
+                    </button>
+                  </p>
+                </div>
               )}
-
-              {tab === "configure" && (
-                <ConfigTab
-                  config={configHook.agentConfig}
-                  agentEnv={agents.selectedAgent?.agent.env}
-                  agentId={agents.selectedAgent?.agent.id}
-                  agentVersion={agents.selectedAgent?.agent.version}
-                  draft={configHook.configDraft}
-                  loading={configHook.configLoading}
-                  saving={configHook.configSaving}
-                  dirty={configHook.configDirty}
-                  error={configHook.configError}
-                  onDraftChange={configHook.handleDraftChange}
-                  onSave={configHook.handleConfigSave}
-                  onReset={configHook.handleConfigReset}
-                  scheduleGoalReached={
-                    agents.selectedAgent?.schedule_goal_reached
-                  }
-                  onResetGoal={(scheduleName) => {
-                    const schedule =
-                      configHook.agentConfig?.schedules.find(
-                        (s) => s.name === scheduleName,
-                      );
-                    const batteryName =
-                      schedule?.battery_name ||
-                      (agents.selectedAgent?.telemetry
-                        ? Object.keys(agents.selectedAgent.telemetry)[0]
-                        : "");
-                    handleCommand("reset_goal", batteryName, {
-                      schedule_name: scheduleName,
-                    });
-                  }}
-                  isOnline={agents.selectedAgentOnline}
-                />
-              )}
-
-              {tab === "tools" && (
-                <ToolsTab
-                  lastStatusMessage={agents.lastStatusMessage}
-                  showStatusMessage={showStatusMessage}
-                  onToggleStatusMessage={() =>
-                    setShowStatusMessage(!showStatusMessage)
-                  }
-                  statusMessageFrozen={agents.statusMessageFrozen}
-                  onToggleStatusMessageFrozen={() =>
-                    agents.setStatusMessageFrozen(!agents.statusMessageFrozen)
-                  }
-                  agentId={agents.selectedAgentId}
-                  logsOpen={logs.logsOpen}
-                  logs={logs.logs}
-                  logsLoading={logs.logsLoading}
-                  logsError={logs.logsError}
-                  logStream={logs.logStream}
-                  logLines={logs.logLines}
-                  onToggleLogs={() => logs.setLogsOpen(!logs.logsOpen)}
-                  onRefreshLogs={logs.handleLogRefresh}
-                  onStreamChange={logs.setLogStream}
-                  onLinesChange={logs.setLogLines}
-                  logsDisabled={!agents.selectedAgentOnline}
-                />
-              )}
-            </>
-          ) : (
-            tab !== "prices" && (
-              <div className="empty-state">
-                <h2>No agents connected</h2>
-                <p>
-                  Once a gok-pi agent connects to the control server you will
-                  see it listed here. Ensure the server URL and shared secret
-                  are set in the agent configuration.
-                </p>
-              </div>
-            )
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </main>
 
       <BottomNav
-        activeTab={tab}
-        onTabChange={handleTabChange}
+        currentPage={nav}
+        onNavigate={handleNavigate}
         configDirty={configHook.configDirty}
       />
     </div>
