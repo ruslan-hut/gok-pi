@@ -9,6 +9,8 @@ interface TopNavProps {
   readonly?: boolean;
   onLoginRequest?: () => void;
   onLogout: () => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 }
 
 export function TopNav({
@@ -19,6 +21,8 @@ export function TopNav({
   readonly,
   onLoginRequest,
   onLogout,
+  theme,
+  onToggleTheme,
 }: TopNavProps) {
   const isDevice = currentPage.page === "device";
 
@@ -66,15 +70,24 @@ export function TopNav({
         )}
       </div>
 
-      {readonly ? (
-        <button className="top-nav-logout" onClick={onLoginRequest} title="Login">
-          <Icon name="login" size={20} />
+      <div className="top-nav-actions">
+        <button
+          className="top-nav-theme-toggle"
+          onClick={onToggleTheme}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          <Icon name={theme === "dark" ? "light_mode" : "dark_mode"} size={20} />
         </button>
-      ) : (
-        <button className="top-nav-logout" onClick={onLogout} title="Logout">
-          <Icon name="logout" size={20} />
-        </button>
-      )}
+        {readonly ? (
+          <button className="top-nav-logout" onClick={onLoginRequest} title="Login">
+            <Icon name="login" size={20} />
+          </button>
+        ) : (
+          <button className="top-nav-logout" onClick={onLogout} title="Logout">
+            <Icon name="logout" size={20} />
+          </button>
+        )}
+      </div>
     </nav>
   );
 }

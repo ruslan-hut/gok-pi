@@ -98,7 +98,7 @@ export function BatteryCard({
               className="goal-reached-icon"
               title="Schedule goal reached today"
               style={{
-                color: "#22c55e",
+                color: "var(--color-success)",
                 marginLeft: "0.25rem",
               }}
             >

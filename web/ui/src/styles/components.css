@@ -39,7 +39,7 @@
 
 .badge.disabled {
   color: var(--color-text-muted);
-  border-color: rgba(148, 163, 184, 0.4);
+  border-color: var(--border-color-strong);
 }
 
 .message-banner {
@@ -48,10 +48,10 @@
   justify-content: space-between;
   gap: var(--space-lg);
   padding: 0.75rem var(--space-lg);
-  background: rgba(56, 189, 248, 0.15);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: var(--color-primary-glow);
+  border: 1px solid var(--color-primary);
   border-radius: var(--radius-lg);
-  color: #7dd3fc;
+  color: var(--color-message-text);
   font-size: 0.9rem;
   animation: slideIn 0.3s ease;
 }
@@ -82,8 +82,8 @@
 
 .offline-warning {
   border: 1px dashed var(--color-danger-border);
-  background: rgba(248, 113, 113, 0.08);
-  color: #fecaca;
+  background: var(--color-danger-bg);
+  color: var(--color-offline-warning-text);
   padding: 0.75rem var(--space-lg);
   border-radius: var(--radius-lg);
 }
@@ -100,7 +100,7 @@
 }
 
 .button-link:hover {
-  color: #7dd3fc;
+  color: var(--color-message-text);
   background: transparent;
   border: none;
 }

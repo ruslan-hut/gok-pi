@@ -10,6 +10,7 @@ import { useAgents } from "./hooks/useAgents";
 import { useConfig } from "./hooks/useConfig";
 import { useLogs } from "./hooks/useLogs";
 import { useNavigation } from "./hooks/useNavigation";
+import { useTheme } from "./hooks/useTheme";
 import type { AppPage } from "./types";
 import { TopNav } from "./components/layout/TopNav";
 import { TabBar } from "./components/layout/TabBar";
@@ -24,6 +25,7 @@ import { MessageBanner } from "./components/shared/MessageBanner";
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(() => !!getAuthToken());
   const [showLogin, setShowLogin] = useState(false);
+  const [theme, toggleTheme] = useTheme();
 
   const handleLogin = useCallback((token: string) => {
     if (token) setAuthToken(token);
@@ -45,6 +47,8 @@ export default function App() {
       readonly={!loggedIn}
       onLoginRequest={() => setShowLogin(true)}
       onLogout={handleLogout}
+      theme={theme}
+      onToggleTheme={toggleTheme}
     />
   );
 }
@@ -53,9 +57,11 @@ interface DashboardProps {
   readonly: boolean;
   onLoginRequest: () => void;
   onLogout: () => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 }
 
-function Dashboard({ readonly, onLoginRequest, onLogout }: DashboardProps) {
+function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme }: DashboardProps) {
   const [nav, setNav] = useNavigation();
   const [showStatusMessage, setShowStatusMessage] = useState(false);
 
@@ -158,6 +164,8 @@ function Dashboard({ readonly, onLoginRequest, onLogout }: DashboardProps) {
         readonly={readonly}
         onLoginRequest={onLoginRequest}
         onLogout={onLogout}
+        theme={theme}
+        onToggleTheme={onToggleTheme}
       />
 
       <main className="content">

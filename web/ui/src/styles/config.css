@@ -44,8 +44,7 @@
 
 .config-editor {
   min-height: 220px;
-  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular,
-    Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: var(--font-mono);
   line-height: 1.4;
   resize: vertical;
 }
@@ -61,7 +60,7 @@
   font-size: 0.9rem;
   padding: 0.75rem var(--space-lg);
   background: var(--color-danger-bg);
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  border: 1px solid var(--color-danger-border);
   border-radius: var(--radius-md);
 }
 
@@ -115,24 +114,24 @@
 }
 
 .config-item-battery {
-  background: rgba(45, 60, 80, 1);
-  border-color: rgba(56, 189, 248, 0.25);
+  background: var(--color-config-battery-bg);
+  border-color: var(--color-config-battery-border);
 }
 
 .config-item-battery:hover {
-  border-color: rgba(56, 189, 248, 0.4);
-  background: rgba(50, 65, 85, 1);
+  border-color: var(--color-config-battery-border-hover);
+  background: var(--color-config-battery-bg-hover);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
 }
 
 .config-item-schedule {
-  background: rgba(48, 62, 70, 1);
-  border-color: rgba(74, 222, 128, 0.25);
+  background: var(--color-config-schedule-bg);
+  border-color: var(--color-config-schedule-border);
 }
 
 .config-item-schedule:hover {
-  border-color: rgba(74, 222, 128, 0.4);
-  background: rgba(53, 67, 75, 1);
+  border-color: var(--color-config-schedule-border-hover);
+  background: var(--color-config-schedule-bg-hover);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
 }
 
@@ -202,9 +201,9 @@
   align-items: center;
   gap: var(--space-md);
   padding: 0.4rem 0.65rem;
-  border: 1px solid rgba(74, 222, 128, 0.3);
+  border: 1px solid var(--color-success-border);
   border-radius: var(--radius-md);
-  background: rgba(74, 222, 128, 0.08);
+  background: var(--color-success-bg);
   font-size: 0.8rem;
   color: var(--color-success);
   margin-top: var(--space-xs);
@@ -248,7 +247,7 @@
   padding: 0.5rem var(--space-lg);
   margin-top: var(--space-xs);
   background: transparent;
-  border: 1px dashed rgba(248, 113, 113, 0.35);
+  border: 1px dashed var(--color-danger-border);
   border-radius: var(--radius-md);
   color: var(--color-danger);
   font-size: 0.85rem;
@@ -257,8 +256,8 @@
 }
 
 .config-item-remove:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.08);
-  border-color: rgba(248, 113, 113, 0.5);
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger);
 }
 
 .config-item-remove:disabled {

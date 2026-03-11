@@ -26,6 +26,7 @@
 }
 
 .top-nav-title {
+  font-family: var(--font-heading);
   font-size: 1.2rem;
   font-weight: 700;
   color: var(--color-text-heading);
@@ -41,7 +42,7 @@
   display: flex;
   gap: var(--space-xs);
   padding: var(--space-xs);
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--color-bg-overlay);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color-subtle);
 }
@@ -60,7 +61,7 @@
 
 .top-nav-link:hover {
   color: var(--color-text);
-  background: rgba(56, 189, 248, 0.08);
+  background: var(--color-bg-hover);
   border-color: transparent;
 }
 
@@ -99,13 +100,42 @@
 .top-nav-back:hover {
   color: var(--color-text);
   border-color: var(--color-primary);
-  background: rgba(56, 189, 248, 0.08);
+  background: var(--color-bg-hover);
 }
 
 .top-nav-device-name {
+  font-family: var(--font-heading);
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text-heading);
+}
+
+.top-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+.top-nav-theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.top-nav-theme-toggle:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--color-primary-hover);
 }
 
 .top-nav-logout {
@@ -172,7 +202,7 @@
   display: flex;
   gap: var(--space-xs);
   padding: var(--space-xs);
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--color-bg-overlay);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color-subtle);
 }
@@ -197,7 +227,7 @@
 
 .tab-button:hover {
   color: var(--color-text);
-  background: rgba(56, 189, 248, 0.08);
+  background: var(--color-bg-hover);
   border-color: transparent;
 }
 
@@ -289,12 +319,14 @@
   align-items: center;
   gap: var(--space-xs);
   padding: 0.2rem 0.5rem;
-  background: rgba(148, 163, 184, 0.08);
+  background: var(--color-bg-muted);
   border-radius: var(--radius-sm);
   font-size: 0.8rem;
 }
 
 .overview-battery-soc {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--color-primary);
 }
@@ -392,7 +424,7 @@
   padding: var(--space-sm);
   background: var(--color-danger-bg);
   border-radius: var(--radius-md);
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  border: 1px solid var(--color-danger-border);
 }
 
 .login-card button {
@@ -426,7 +458,7 @@
   flex-direction: column;
   gap: 0.15rem;
   padding: 0.5rem 0.75rem;
-  background: rgba(148, 163, 184, 0.06);
+  background: var(--color-bg-muted);
   border-radius: var(--radius-sm);
 }
 
@@ -438,6 +470,8 @@
 }
 
 .db-stats-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text);
@@ -454,7 +488,7 @@
   color: var(--color-text-muted);
   font-weight: 500;
   padding: 0.35rem 0.5rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  border-bottom: 1px solid var(--border-color-subtle);
 }
 
 .db-stats-agents td {
@@ -536,7 +570,7 @@
     right: 0;
     height: 64px;
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    background: rgba(15, 23, 42, 0.97);
+    background: var(--color-bg-bottom-nav);
     border-top: 1px solid var(--border-color);
     backdrop-filter: blur(14px);
     z-index: 100;

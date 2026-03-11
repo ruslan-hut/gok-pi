@@ -1,13 +1,13 @@
 /* tools.css — log viewer, status message */
 
 .status-message-content {
-  background-color: #0a0e1a;
+  background-color: var(--color-bg-code);
   border: 1px solid var(--border-color-subtle);
   border-radius: var(--radius-md);
   padding: var(--space-lg);
   max-height: 400px;
   overflow: auto;
-  font-family: Monaco, "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
   line-height: 1.5;
   color: var(--color-text);
@@ -17,13 +17,13 @@
 }
 
 .log-viewer-content {
-  background-color: #0a0e1a;
+  background-color: var(--color-bg-code);
   border: 1px solid var(--border-color-subtle);
   border-radius: var(--radius-md);
   padding: var(--space-lg);
   max-height: 600px;
   overflow: auto;
-  font-family: Monaco, "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
   line-height: 1.5;
   color: var(--color-text);

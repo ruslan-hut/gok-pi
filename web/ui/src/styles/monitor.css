@@ -7,13 +7,13 @@
 }
 
 .battery-card.manual-mode {
-  background: rgba(45, 55, 50, 0.95);
-  border-color: rgba(74, 222, 128, 0.2);
+  background: var(--color-manual-mode-bg);
+  border-color: var(--color-manual-mode-border);
 }
 
 .battery-card.service-mode {
-  background: rgba(55, 45, 45, 0.95);
-  border-color: rgba(248, 113, 113, 0.2);
+  background: var(--color-service-mode-bg);
+  border-color: var(--color-service-mode-border);
 }
 
 .battery-card-header {
@@ -70,6 +70,8 @@
 }
 
 .metric span:last-child {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text);
@@ -205,7 +207,7 @@
 }
 
 .control-button.control-button-primary:hover:not(:disabled) {
-  background: rgba(14, 116, 144, 0.5);
+  background: var(--color-primary-bg-hover);
 }
 
 .control-button.control-button-secondary {
@@ -223,7 +225,7 @@
   gap: var(--space-xl);
   flex-wrap: wrap;
   padding: var(--space-md) var(--space-lg);
-  background: rgba(30, 41, 59, 0.6);
+  background: var(--color-bg-card);
   border: 1px solid var(--border-color-subtle);
   border-radius: var(--radius-lg);
 }
@@ -243,6 +245,8 @@
 }
 
 .system-summary-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text);

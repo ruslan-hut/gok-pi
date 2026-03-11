@@ -40,8 +40,8 @@ export function StatusMessagePreview({
             <span
               className="badge"
               style={{
-                borderColor: "#fbbf24",
-                color: "#fbbf24",
+                borderColor: "var(--color-warning)",
+                color: "var(--color-warning)",
                 fontSize: "0.75rem",
               }}
             >

@@ -176,14 +176,14 @@ function PriceChart({
             x2={width - padding.right}
             y1={yScale(v)}
             y2={yScale(v)}
-            stroke="rgba(148,163,184,0.15)"
+            style={{ stroke: "var(--border-color-subtle)" }}
             strokeDasharray="2,3"
           />
           <text
             x={padding.left - 6}
             y={yScale(v) + 3}
             textAnchor="end"
-            fill="#94a3b8"
+            style={{ fill: "var(--color-text-muted)" }}
             fontSize="10"
           >
             {v.toFixed(0)}
@@ -197,7 +197,7 @@ function PriceChart({
         x2={width - padding.right}
         y1={yScale(stats.avg_price_eur_mwh)}
         y2={yScale(stats.avg_price_eur_mwh)}
-        stroke="#fbbf24"
+        style={{ stroke: "var(--color-warning)" }}
         strokeDasharray="4,3"
         strokeWidth="1"
         opacity="0.6"
@@ -212,9 +212,9 @@ function PriceChart({
         const barHeight = Math.abs(barBottom - barTop);
         const y = Math.min(barTop, barBottom);
 
-        let fill = "rgba(148,163,184,0.5)";
-        if (chargeHours.has(p.hour)) fill = "#4ade80";
-        if (dischargeHours.has(p.hour)) fill = "#f87171";
+        let fill = "var(--color-text-dim)";
+        if (chargeHours.has(p.hour)) fill = "var(--color-success)";
+        if (dischargeHours.has(p.hour)) fill = "var(--color-danger)";
 
         return (
           <g key={p.hour}>
@@ -223,7 +223,7 @@ function PriceChart({
               y={y}
               width={barW}
               height={Math.max(barHeight, 1)}
-              fill={fill}
+              style={{ fill }}
               rx="2"
             />
             <title>
@@ -240,7 +240,7 @@ function PriceChart({
           x={padding.left + (h / 24) * chartW + barW / 2}
           y={height - 6}
           textAnchor="middle"
-          fill="#94a3b8"
+          style={{ fill: "var(--color-text-muted)" }}
           fontSize="10"
         >
           {String(h).padStart(2, "0")}
@@ -253,10 +253,10 @@ function PriceChart({
         y={4}
         width={10}
         height={10}
-        fill="#4ade80"
+        style={{ fill: "var(--color-success)" }}
         rx="2"
       />
-      <text x={width - 166} y={13} fill="#94a3b8" fontSize="10">
+      <text x={width - 166} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
         Cheapest 3
       </text>
       <rect
@@ -264,10 +264,10 @@ function PriceChart({
         y={4}
         width={10}
         height={10}
-        fill="#f87171"
+        style={{ fill: "var(--color-danger)" }}
         rx="2"
       />
-      <text x={width - 101} y={13} fill="#94a3b8" fontSize="10">
+      <text x={width - 101} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
         Priciest 3
       </text>
       <line
@@ -275,11 +275,11 @@ function PriceChart({
         x2={width - 32}
         y1={9}
         y2={9}
-        stroke="#fbbf24"
+        style={{ stroke: "var(--color-warning)" }}
         strokeDasharray="4,3"
         opacity="0.6"
       />
-      <text x={width - 28} y={13} fill="#94a3b8" fontSize="10">
+      <text x={width - 28} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
         Avg
       </text>
     </svg>
