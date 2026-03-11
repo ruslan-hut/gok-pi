@@ -55,7 +55,9 @@ func New(cfg Config, log *slog.Logger) *Server {
 	}
 	sessDB, err := sessiondb.Open(sessionDBPath, log)
 	if err != nil {
-		log.With(slog.Any("error", err)).Error("opening session database")
+		log.With(slog.Any("error", err), slog.String("path", sessionDBPath)).Error("opening session database; sessions will be disabled")
+	} else {
+		log.With(slog.String("path", sessionDBPath)).Info("session database opened")
 	}
 
 	prices := pricefetcher.New(log)
@@ -63,6 +65,9 @@ func New(cfg Config, log *slog.Logger) *Server {
 	var sessions *SessionTracker
 	if sessDB != nil {
 		sessions = NewSessionTracker(log, sessDB, prices)
+		log.Info("session tracker started")
+	} else {
+		log.Warn("session tracker disabled: no database available")
 	}
 
 	return &Server{
