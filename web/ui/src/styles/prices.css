@@ -16,7 +16,7 @@
 }
 
 .prices-stats strong {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   color: var(--color-text);
   font-size: 1rem;
@@ -65,7 +65,7 @@
 }
 
 .schedule-table td {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   padding: var(--space-sm) var(--space-md);
   border-bottom: 1px solid var(--border-color-subtle);
@@ -78,21 +78,21 @@
   border-radius: var(--radius-full);
   font-size: 0.7rem;
   font-weight: 600;
-  font-family: var(--font-body);
+  font-family: var(--font-body), sans-serif;
   letter-spacing: 0.05em;
 }
 
 .schedule-badge-charge {
   color: var(--badge-charge-text);
   border: none;
-  background: var(--gradient-success);
+  background: var(--badge-online-bg);
   box-shadow: 0 1px 4px rgba(74, 222, 128, 0.3);
 }
 
 .schedule-badge-discharge {
   color: var(--badge-discharge-text);
   border: none;
-  background: var(--gradient-danger);
+  background: var(--badge-offline-bg);
   box-shadow: 0 1px 4px rgba(248, 113, 113, 0.3);
 }
 
@@ -180,7 +180,7 @@
 }
 
 .data-card-value {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   font-size: 0.85rem;
   color: var(--color-text);

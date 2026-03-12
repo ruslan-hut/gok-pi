@@ -33,14 +33,14 @@
 
 .badge.online {
   color: var(--badge-online-text);
-  background: var(--gradient-success);
+  background: var(--badge-online-bg);
   border-color: transparent;
   box-shadow: 0 1px 4px rgba(74, 222, 128, 0.3);
 }
 
 .badge.offline {
   color: var(--badge-offline-text);
-  background: var(--gradient-danger);
+  background: var(--badge-offline-bg);
   border-color: transparent;
   box-shadow: 0 1px 4px rgba(248, 113, 113, 0.3);
 }

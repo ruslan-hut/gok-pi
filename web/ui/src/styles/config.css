@@ -45,7 +45,7 @@
 
 .config-editor {
   min-height: 220px;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono), monospace;
   line-height: 1.4;
   resize: vertical;
 }

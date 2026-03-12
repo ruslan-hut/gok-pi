@@ -40,7 +40,7 @@
 }
 
 .top-nav-title {
-  font-family: var(--font-heading);
+  font-family: var(--font-heading), sans-serif;
   font-size: 1.2rem;
   font-weight: 700;
   color: var(--color-primary);
@@ -125,7 +125,7 @@
 }
 
 .top-nav-device-name {
-  font-family: var(--font-heading);
+  font-family: var(--font-heading), sans-serif;
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text-heading);
@@ -355,7 +355,7 @@
 }
 
 .overview-battery-soc {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--color-primary);
@@ -536,7 +536,7 @@
 }
 
 .db-stats-value {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   font-size: 0.9rem;
   font-weight: 500;

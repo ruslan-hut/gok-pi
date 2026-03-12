@@ -78,7 +78,7 @@
 }
 
 .metric span:last-child {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   font-size: 1rem;
   font-weight: 600;
@@ -266,7 +266,7 @@
 }
 
 .system-summary-value {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   font-size: 1rem;
   font-weight: 600;

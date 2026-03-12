@@ -29,7 +29,7 @@
   --transition-smooth: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Typography */
-  font-family: var(--font-body);
+  font-family: var(--font-body), sans-serif;
   background-color: var(--color-bg);
   color: var(--color-text);
   font-size: 16px;
@@ -96,6 +96,10 @@
   --badge-offline-text: #fff;
   --badge-charge-text: #fff;
   --badge-discharge-text: #fff;
+
+  /* Badge backgrounds — darker for dark mode */
+  --badge-online-bg: linear-gradient(135deg, #166534, #14532d);
+  --badge-offline-bg: linear-gradient(135deg, #991b1b, #7f1d1d);
 
   /* Primary button shadows */
   --shadow-primary-button: 0 2px 8px rgba(56, 189, 248, 0.25);
@@ -193,12 +197,13 @@
   --badge-charge-text: #14532d;
   --badge-discharge-text: #7f1d1d;
 
+  /* Badge backgrounds — lighter for light mode */
+  --badge-online-bg: linear-gradient(135deg, #bbf7d0, #a7f3d0);
+  --badge-offline-bg: linear-gradient(135deg, #fecaca, #fed7aa);
+
   /* Primary button shadows */
   --shadow-primary-button: 0 2px 8px rgba(14, 165, 233, 0.25);
   --shadow-primary-button-hover: 0 4px 16px rgba(14, 165, 233, 0.35);
-
-  /* Glow (stronger for light theme) */
-  --shadow-glow-primary: 0 0 32px rgba(14, 165, 233, 0.18);
 
   /* Borders */
   --border-color: rgba(148, 163, 184, 0.25);
@@ -252,7 +257,7 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--font-heading);
+  font-family: var(--font-heading), sans-serif;
   font-weight: 600;
   line-height: 1.2;
   margin: 0;
@@ -276,7 +281,7 @@ h5 {
 
 /* Monospace utility for numeric values */
 .font-mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
 }
 
