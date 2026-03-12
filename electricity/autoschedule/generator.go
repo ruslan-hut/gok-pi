@@ -1,11 +1,16 @@
 // Package autoschedule converts electricity price analysis into concrete
 // battery charge/discharge schedules.
 //
-// It takes the output of the scheduler package (cheapest/most expensive hour windows)
-// and generates entity.Schedule objects named "auto-{type}-{battery}-{start}-{end}".
-// These auto-schedules are pushed to agents via the control server and are automatically
-// removed by the discharger/charger when their time window expires.
+// Two modes of operation:
 //
+//  1. DB-backed (preferred): BuildComputedSchedules() creates records for the DB,
+//     ToLegacySchedules() converts DB records to entity.Schedule with stable ID-based names
+//     (e.g., "auto-42-charge-battery1"). Only today's schedules are pushed to agents.
+//
+//  2. In-memory fallback: GenerateSchedules() works without DB, using time-based names
+//     (e.g., "auto-charge-battery1-09-12"). Used when DB is unavailable.
+//
+// Auto-schedules are valid for exactly one day (00:00–23:59, no cross-midnight windows).
 // Only batteries with AutoSchedule enabled in their config will get auto-schedules.
 package autoschedule
 
@@ -17,15 +22,117 @@ import (
 	"gok-pi/battery/entity"
 	"gok-pi/electricity/pricefetcher"
 	"gok-pi/electricity/scheduler"
+	"gok-pi/remote/server/sessiondb"
 )
 
 const schedulePrefix = "auto-" // Prefix for auto-generated schedule names
 
-// GenerateSchedules creates charge/discharge schedules from price data
-// for batteries that have AutoSchedule enabled.
-// It deduplicates by schedule name (today and tomorrow may produce identical windows)
-// and filters out today's windows whose end time has already passed.
-// Tomorrow's windows are never filtered — only deduplicated.
+// BuildComputedSchedules converts a day's price schedule into ComputedSchedule records
+// for storage in the database. Each record represents a single charge or discharge window
+// for one battery on the given day.
+//
+// Only batteries with AutoSchedule && Enabled are processed.
+// Power/SoC limits are taken from battery config with defaults (2000W, 100% charge / 10% discharge).
+func BuildComputedSchedules(batteries []entity.BatteryConfig, dayData *pricefetcher.DayData) []sessiondb.ComputedSchedule {
+	if dayData == nil {
+		return nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	var out []sessiondb.ComputedSchedule
+
+	for _, bat := range batteries {
+		if !bat.AutoSchedule || !bat.Enabled {
+			continue
+		}
+
+		// Charge windows: buy at prices ≤ P25
+		for _, w := range dayData.Schedule.ChargeWindows {
+			powerLimit := bat.PowerLimit
+			if powerLimit <= 0 {
+				powerLimit = 2000
+			}
+			out = append(out, sessiondb.ComputedSchedule{
+				Date:        dayData.Date,
+				BatteryName: bat.Name,
+				Type:        "charge",
+				StartHour:   w.StartHour,
+				EndHour:     w.EndHour,
+				AvgPrice:    w.AvgPrice,
+				PowerLimit:  powerLimit,
+				SocLimit:    100,
+				P25:         dayData.Stats.P25,
+				P75:         dayData.Stats.P75,
+				ComputedAt:  now,
+			})
+		}
+
+		// Discharge windows: sell at prices ≥ P75
+		for _, w := range dayData.Schedule.DischargeWindows {
+			socLimit := bat.SocLimit
+			if socLimit <= 0 {
+				socLimit = 10
+			}
+			powerLimit := bat.PowerLimit
+			if powerLimit <= 0 {
+				powerLimit = 2000
+			}
+			out = append(out, sessiondb.ComputedSchedule{
+				Date:        dayData.Date,
+				BatteryName: bat.Name,
+				Type:        "discharge",
+				StartHour:   w.StartHour,
+				EndHour:     w.EndHour,
+				AvgPrice:    w.AvgPrice,
+				PowerLimit:  powerLimit,
+				SocLimit:    socLimit,
+				P25:         dayData.Stats.P25,
+				P75:         dayData.Stats.P75,
+				ComputedAt:  now,
+			})
+		}
+	}
+
+	return out
+}
+
+// ToLegacySchedules converts DB-backed computed schedules to entity.Schedule objects
+// that agents understand. The name format is "auto-{id}-{type}-{battery}" where {id}
+// is the stable database row ID, ensuring no name collisions across days.
+//
+// Expired windows (EndHour already passed for today) are skipped.
+// The "auto-" prefix is preserved so the agent's auto-schedule detection
+// (strings.HasPrefix(name, "auto-")) continues to work unchanged.
+func ToLegacySchedules(records []sessiondb.ComputedSchedule, now time.Time) []entity.Schedule {
+	var out []entity.Schedule
+
+	for _, r := range records {
+		// Skip windows whose end hour has already passed today
+		stopTime := time.Date(now.Year(), now.Month(), now.Day(), r.EndHour, 0, 0, 0, now.Location())
+		if now.After(stopTime) {
+			continue
+		}
+
+		out = append(out, entity.Schedule{
+			// Name includes DB ID for guaranteed uniqueness across days.
+			// Format: auto-{id}-{type}-{battery}
+			// Example: auto-42-charge-battery1
+			Name:        fmt.Sprintf("%s%d-%s-%s", schedulePrefix, r.ID, r.Type, r.BatteryName),
+			Type:        r.Type,
+			StartTime:   fmt.Sprintf("%02d:00", r.StartHour),
+			StopTime:    fmt.Sprintf("%02d:00", r.EndHour),
+			BatteryName: r.BatteryName,
+			Enabled:     true,
+			PowerLimit:  r.PowerLimit,
+			SocLimit:    r.SocLimit,
+		})
+	}
+	return out
+}
+
+// GenerateSchedules creates charge/discharge schedules from price data (in-memory fallback).
+// Used when the database is unavailable. Names use the old format: "auto-{type}-{battery}-{HH}-{HH}".
+// It deduplicates by schedule name and filters out today's expired windows.
 func GenerateSchedules(batteries []entity.BatteryConfig, today, tomorrow *pricefetcher.DayData) []entity.Schedule {
 	var schedules []entity.Schedule
 	seen := make(map[string]bool)

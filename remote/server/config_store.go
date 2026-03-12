@@ -176,9 +176,16 @@ func (cs *ConfigStore) Seed(agentID string, batteries []entity.BatteryConfig, sc
 	return cloneAgentConfig(cfg), true, nil
 }
 
-// UpdateAutoSchedules replaces all auto-prefixed schedules for the given agent
-// while preserving manual schedules. It bumps the revision atomically.
-func (cs *ConfigStore) UpdateAutoSchedules(agentID string, autoSchedules []entity.Schedule) (AgentConfig, bool, error) {
+// UpdateAutoSchedules updates auto-prefixed schedules for the given agent using
+// add/remove-by-name semantics:
+//   - Manual schedules (not "auto-" prefixed) are always preserved
+//   - Auto-schedules whose name exists in newAutoSchedules are kept (or updated)
+//   - Auto-schedules whose name is NOT in newAutoSchedules are removed (stale)
+//   - New auto-schedules not already present are added
+//
+// This avoids blanket replacement and only changes what actually differs,
+// reducing unnecessary config pushes to agents.
+func (cs *ConfigStore) UpdateAutoSchedules(agentID string, newAutoSchedules []entity.Schedule) (AgentConfig, bool, error) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
@@ -187,15 +194,36 @@ func (cs *ConfigStore) UpdateAutoSchedules(agentID string, autoSchedules []entit
 		return AgentConfig{}, false, nil
 	}
 
-	// Keep only manual schedules
-	var manual []entity.Schedule
-	for _, s := range current.Schedules {
-		if !isAutoScheduleName(s.Name) {
-			manual = append(manual, s)
-		}
+	// Build lookup of new auto-schedule names for O(1) membership checks
+	newNames := make(map[string]entity.Schedule, len(newAutoSchedules))
+	for _, s := range newAutoSchedules {
+		newNames[s.Name] = s
 	}
 
-	merged := append(manual, autoSchedules...)
+	// Partition current schedules: keep manual, filter auto by membership in new set
+	var merged []entity.Schedule
+	seen := make(map[string]bool)
+
+	for _, s := range current.Schedules {
+		if !isAutoScheduleName(s.Name) {
+			// Manual schedule — always keep
+			merged = append(merged, s)
+			continue
+		}
+		if _, ok := newNames[s.Name]; ok {
+			// Auto-schedule still valid — keep existing (preserves GoalReachedTime etc.)
+			merged = append(merged, s)
+			seen[s.Name] = true
+		}
+		// else: stale auto-schedule — drop it
+	}
+
+	// Add new auto-schedules not already present
+	for _, s := range newAutoSchedules {
+		if !seen[s.Name] {
+			merged = append(merged, s)
+		}
+	}
 
 	// Check if schedules actually changed
 	if schedulesEqual(current.Schedules, merged) {

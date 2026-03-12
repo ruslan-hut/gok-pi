@@ -39,6 +39,7 @@ import (
 	"sync"
 	"time"
 
+	"gok-pi/battery/entity"
 	"gok-pi/electricity/autoschedule"
 	"gok-pi/electricity/pricefetcher"
 	"gok-pi/remote/server/sessiondb"
@@ -795,7 +796,8 @@ func (s *Server) updateAutoSchedules() {
 
 	configs := s.configs.snapshot()
 	for agentID, cfg := range configs {
-		autoScheds := autoschedule.GenerateSchedules(cfg.Batteries, state.Today, state.Tomorrow)
+		autoScheds := s.computeAutoSchedules(cfg, state)
+
 		updated, changed, err := s.configs.UpdateAutoSchedules(agentID, autoScheds)
 		if err != nil {
 			s.log.With(slog.String("agent", agentID), slog.Any("error", err)).Warn("auto-schedule update failed")
@@ -813,6 +815,78 @@ func (s *Server) updateAutoSchedules() {
 	}
 }
 
+// computeAutoSchedules generates auto-schedules for an agent using DB-backed persistence
+// when available, falling back to in-memory generation when the DB is unavailable.
+//
+// DB-backed flow:
+//  1. Build ComputedSchedule records from today's/tomorrow's price data
+//  2. Upsert to DB (stable IDs via unique constraint on date+battery+type+hours)
+//  3. Read back today's schedules from DB (with stable IDs)
+//  4. Filter to this agent's enabled AutoSchedule batteries
+//  5. Convert to legacy entity.Schedule with names "auto-{id}-{type}-{battery}"
+func (s *Server) computeAutoSchedules(cfg AgentConfig, state pricefetcher.State) []entity.Schedule {
+	// Fallback: if DB is not available, use in-memory generation
+	if s.sessions == nil {
+		return autoschedule.GenerateSchedules(cfg.Batteries, state.Today, state.Tomorrow)
+	}
+
+	store := s.sessions.Store()
+
+	// Persist computed schedules for today and tomorrow
+	if state.Today != nil {
+		records := autoschedule.BuildComputedSchedules(cfg.Batteries, state.Today)
+		if len(records) > 0 {
+			if err := store.UpsertSchedules(records); err != nil {
+				s.log.Warn("failed to upsert today's computed schedules", slog.Any("error", err))
+			}
+		}
+	}
+	if state.Tomorrow != nil {
+		records := autoschedule.BuildComputedSchedules(cfg.Batteries, state.Tomorrow)
+		if len(records) > 0 {
+			if err := store.UpsertSchedules(records); err != nil {
+				s.log.Warn("failed to upsert tomorrow's computed schedules", slog.Any("error", err))
+			}
+		}
+	}
+
+	// Read back today's schedules from DB (only today's date is pushed to agents)
+	now := madridNow()
+	todayDate := now.Format("2006-01-02")
+	todayRecords, err := store.GetSchedulesByDate(todayDate)
+	if err != nil {
+		s.log.Warn("failed to read today's schedules from DB, falling back to in-memory",
+			slog.Any("error", err))
+		return autoschedule.GenerateSchedules(cfg.Batteries, state.Today, state.Tomorrow)
+	}
+
+	// Filter to only this agent's enabled AutoSchedule batteries
+	agentBatteries := make(map[string]bool)
+	for _, b := range cfg.Batteries {
+		if b.Enabled && b.AutoSchedule {
+			agentBatteries[b.Name] = true
+		}
+	}
+	var agentRecords []sessiondb.ComputedSchedule
+	for _, r := range todayRecords {
+		if agentBatteries[r.BatteryName] {
+			agentRecords = append(agentRecords, r)
+		}
+	}
+
+	// Convert to legacy entity.Schedule format for agent consumption
+	return autoschedule.ToLegacySchedules(agentRecords, now)
+}
+
+// madridNow returns the current time in Europe/Madrid timezone.
+func madridNow() time.Time {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	if err != nil {
+		loc = time.FixedZone("CET", 3600)
+	}
+	return time.Now().In(loc)
+}
+
 func (s *Server) runSessionCleanup(ctx context.Context) {
 	if s.sessions == nil {
 		return
@@ -826,6 +900,13 @@ func (s *Server) runSessionCleanup(ctx context.Context) {
 			return
 		case <-ticker.C:
 			s.sessions.Cleanup(365 * 24 * time.Hour) // 1 year retention
+			if store := s.sessions.Store(); store != nil {
+				if n, err := store.CleanupSchedules(30 * 24 * time.Hour); err != nil {
+					s.log.Warn("computed schedule cleanup failed", slog.Any("error", err))
+				} else if n > 0 {
+					s.log.Info("cleaned up old computed schedules", slog.Int64("deleted", n))
+				}
+			}
 		}
 	}
 }
