@@ -136,7 +136,7 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                       <th>Charge</th>
                       <th>Discharge</th>
                       <th>Energy</th>
-                      <th>Cost</th>
+                      <th>Net Result</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -148,9 +148,11 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                         <td>{a.discharge_sessions}</td>
                         <td>{fmtEnergyWh(a.total_energy_wh)}</td>
                         <td>
-                          {a.total_cost_eur > 0
-                            ? `${a.total_cost_eur.toFixed(2)} EUR`
-                            : "—"}
+                          {a.net_cost_eur !== 0 ? (
+                            <span style={{ color: a.net_cost_eur > 0 ? "var(--color-success)" : "var(--color-danger)" }}>
+                              {a.net_cost_eur > 0 ? "+" : "-"}{Math.abs(a.net_cost_eur).toFixed(2)} EUR
+                            </span>
+                          ) : "—"}
                         </td>
                       </tr>
                     ))}

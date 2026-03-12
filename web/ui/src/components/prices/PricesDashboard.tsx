@@ -395,6 +395,7 @@ function SessionsPanel({
               <th>Charge Cost</th>
               <th>Discharged</th>
               <th>Discharge Value</th>
+              <th>Net</th>
             </tr>
           </thead>
           <tbody>
@@ -409,6 +410,7 @@ function SessionsPanel({
                 <td>{fmtCost(s.charge_cost_eur)}</td>
                 <td>{fmtEnergy(s.discharge_energy_wh)}</td>
                 <td>{fmtCost(s.discharge_cost_eur)}</td>
+                <td><SignedCost eur={s.net_cost_eur} /></td>
               </tr>
             ))}
           </tbody>
@@ -441,6 +443,10 @@ function SessionsPanel({
               <span className="data-card-label">Discharge Value</span>
               <span className="data-card-value">{fmtCost(s.discharge_cost_eur)}</span>
             </div>
+            <div className="data-card-row">
+              <span className="data-card-label">Net</span>
+              <span className="data-card-value"><SignedCost eur={s.net_cost_eur} /></span>
+            </div>
           </div>
         ))}
       </div>
@@ -455,8 +461,15 @@ function fmtEnergy(wh: number): string {
 }
 
 function fmtCost(eur: number): string {
-  if (eur <= 0) return "—";
-  return `${eur.toFixed(4)} EUR`;
+  if (eur === 0) return "—";
+  return `${Math.abs(eur).toFixed(4)} EUR`;
+}
+
+function SignedCost({ eur }: { eur: number }) {
+  if (eur === 0) return <>{"—"}</>;
+  const sign = eur > 0 ? "+" : "-";
+  const color = eur > 0 ? "var(--color-success)" : "var(--color-danger)";
+  return <span style={{ color }}>{sign}{Math.abs(eur).toFixed(4)} EUR</span>;
 }
 
 function fmt2(n: number): string {

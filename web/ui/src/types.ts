@@ -180,7 +180,7 @@ export interface AgentDBStats {
   charge_sessions: number;
   discharge_sessions: number;
   total_energy_wh: number;
-  total_cost_eur: number;
+  net_cost_eur: number;
 }
 
 export interface DBStatsResponse {
@@ -206,7 +206,6 @@ export interface SessionRecord {
   avg_price_eur_mwh: number;
   cost_eur: number;
   samples: number;
-  operating_mode?: string;
 }
 
 export interface BatterySummary {
@@ -215,6 +214,7 @@ export interface BatterySummary {
   charge_cost_eur: number;
   discharge_energy_wh: number;
   discharge_cost_eur: number;
+  net_cost_eur: number;
   active_charge: boolean;
   active_discharge: boolean;
 }

@@ -276,14 +276,13 @@ function RecordDetail({ record }: { record?: DBRecordsResponse["records"][0] }) 
   return (
     <div className="db-inspector-detail" onClick={(e) => e.stopPropagation()}>
       <div className="db-inspector-detail-grid">
-        <DetailItem label="Operating Mode" value={record.operating_mode || "—"} />
         <DetailItem label="Ended" value={record.ended_at ? new Date(record.ended_at).toLocaleString() : "—"} />
         <DetailItem label="Avg Power" value={record.avg_power_w ? `${record.avg_power_w.toFixed(0)} W` : "—"} />
         <DetailItem label="Peak Power" value={record.peak_power_w ? `${record.peak_power_w.toFixed(0)} W` : "—"} />
         <DetailItem label="SoC Start" value={record.soc_start ? `${record.soc_start.toFixed(1)}%` : "—"} />
         <DetailItem label="SoC End" value={record.soc_end ? `${record.soc_end.toFixed(1)}%` : "—"} />
         <DetailItem label="Avg Price" value={record.avg_price_eur_mwh ? `${record.avg_price_eur_mwh.toFixed(2)} EUR/MWh` : "—"} />
-        <DetailItem label="Cost" value={fmtCost(record.cost_eur)} />
+        <DetailItem label="Cost" value={fmtSignedCost(record.cost_eur)} />
         <DetailItem label="Samples" value={String(record.samples)} />
       </div>
     </div>
@@ -311,9 +310,10 @@ function fmtEnergy(wh: number): string {
   return `${wh.toFixed(0)} Wh`;
 }
 
-function fmtCost(eur: number): string {
-  if (eur <= 0) return "—";
-  return `${eur.toFixed(4)} EUR`;
+function fmtSignedCost(eur: number): string {
+  if (eur === 0) return "—";
+  const sign = eur > 0 ? "+" : "-";
+  return `${sign}${Math.abs(eur).toFixed(4)} EUR`;
 }
 
 function fmtDateTime(iso: string): string {

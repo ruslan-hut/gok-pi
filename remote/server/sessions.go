@@ -9,6 +9,7 @@ package server
 import (
 	"log/slog"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,17 +19,17 @@ import (
 
 // batteryState tracks the last known charge/discharge state for edge detection.
 type batteryState struct {
-	charging    bool
-	discharging bool
-	initialized bool
+	charging      bool
+	discharging   bool
+	initialized   bool
+	operatingMode string // normalized: "manual" or "auto"
 }
 
 // activeSession tracks in-flight telemetry accumulation for an open session.
 type activeSession struct {
-	dbID          int64
-	startedAt     time.Time
-	lastSample    time.Time
-	operatingMode string // normalized: "manual" or "auto"
+	dbID       int64
+	startedAt  time.Time
+	lastSample time.Time
 	energyWh   float64 // accumulated energy (Wh)
 	powerSum   float64 // sum of power samples (W) for averaging
 	peakPowerW float64
@@ -72,15 +73,14 @@ func (st *SessionTracker) recoverOpenSessions() {
 	for _, rec := range open {
 		key := rec.AgentID + ":" + rec.BatteryName + ":" + rec.Type
 		st.active[key] = &activeSession{
-			dbID:          rec.ID,
-			startedAt:     rec.StartedAt,
-			lastSample:    rec.StartedAt,
-			energyWh:      rec.EnergyWh,
-			powerSum:      rec.AvgPowerW * float64(rec.Samples),
-			peakPowerW:    rec.PeakPowerW,
-			socEnd:        rec.SocEnd,
-			samples:       rec.Samples,
-			operatingMode: rec.OperatingMode,
+			dbID:       rec.ID,
+			startedAt:  rec.StartedAt,
+			lastSample: rec.StartedAt,
+			energyWh:   rec.EnergyWh,
+			powerSum:   rec.AvgPowerW * float64(rec.Samples),
+			peakPowerW: rec.PeakPowerW,
+			socEnd:     rec.SocEnd,
+			samples:    rec.Samples,
 		}
 		// Initialize state so we don't re-create the session
 		stateKey := rec.AgentID + ":" + rec.BatteryName
@@ -100,6 +100,7 @@ func (st *SessionTracker) recoverOpenSessions() {
 }
 
 // OnTelemetry processes a telemetry update: detects session transitions and accumulates energy.
+// Only manual-mode sessions are tracked; auto-mode activity is ignored.
 func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot) {
 	if snapshot.Name == "" {
 		return
@@ -117,18 +118,43 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 
 	now := time.Now().UTC()
 
+	// Update operating mode tracking
+	if snapshot.OperatingModeSet {
+		newMode := normalizeOperatingMode(snapshot.OperatingMode)
+		oldMode := prev.operatingMode
+		prev.operatingMode = newMode
+
+		// If mode changed away from manual, close any active sessions
+		if oldMode == "manual" && newMode != "manual" {
+			for _, suffix := range []string{":charge", ":discharge"} {
+				activeKey := stateKey + suffix
+				if _, ok := st.active[activeKey]; ok {
+					st.log.Info("mode changed from manual, closing session",
+						slog.String("battery", snapshot.Name),
+						slog.String("type", suffix[1:]),
+						slog.String("new_mode", newMode),
+					)
+					st.endSession(activeKey, now, snapshot.USOC)
+				}
+			}
+		}
+	}
+
+	isManual := prev.operatingMode == "manual"
+
 	// Process charging transitions
 	if snapshot.BatteryChargingSet {
 		activeKey := stateKey + ":charge"
 		if !prev.initialized {
 			prev.charging = snapshot.BatteryCharging
-			// If already charging on first telemetry, start tracking
-			if snapshot.BatteryCharging {
-				st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC, snapshot.OperatingMode)
+			if snapshot.BatteryCharging && isManual {
+				st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC)
 			}
 		} else {
 			if !prev.charging && snapshot.BatteryCharging {
-				st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC, snapshot.OperatingMode)
+				if isManual {
+					st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC)
+				}
 			} else if prev.charging && !snapshot.BatteryCharging {
 				st.endSession(activeKey, now, snapshot.USOC)
 			}
@@ -141,12 +167,14 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 		activeKey := stateKey + ":discharge"
 		if !prev.initialized {
 			prev.discharging = snapshot.BatteryDischarging
-			if snapshot.BatteryDischarging {
-				st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC, snapshot.OperatingMode)
+			if snapshot.BatteryDischarging && isManual {
+				st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC)
 			}
 		} else {
 			if !prev.discharging && snapshot.BatteryDischarging {
-				st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC, snapshot.OperatingMode)
+				if isManual {
+					st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC)
+				}
 			} else if prev.discharging && !snapshot.BatteryDischarging {
 				st.endSession(activeKey, now, snapshot.USOC)
 			}
@@ -158,42 +186,18 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 		prev.initialized = true
 	}
 
-	// Detect operating mode changes on active sessions.
-	// If the battery switches between manual/auto while still charging/discharging,
-	// close the current session and start a new one with the correct mode.
-	if snapshot.OperatingModeSet {
-		newMode := normalizeOperatingMode(snapshot.OperatingMode)
-		for _, suffix := range []string{":charge", ":discharge"} {
-			activeKey := stateKey + suffix
-			sess, ok := st.active[activeKey]
-			if !ok || sess.operatingMode == newMode || newMode == "" {
-				continue
-			}
-			st.log.Info("operating mode changed during active session, splitting",
-				slog.String("battery", snapshot.Name),
-				slog.String("type", suffix[1:]),
-				slog.String("old_mode", sess.operatingMode),
-				slog.String("new_mode", newMode),
-				slog.Int64("old_session_id", sess.dbID),
-			)
-			st.endSession(activeKey, now, snapshot.USOC)
-			st.startSession(activeKey, agentID, snapshot.Name, suffix[1:], now, snapshot.USOC, snapshot.OperatingMode)
-		}
-	}
-
 	// Accumulate energy for active sessions of this battery
 	st.accumulateEnergy(stateKey+":charge", snapshot.PacTotalW, snapshot.USOC, now)
 	st.accumulateEnergy(stateKey+":discharge", snapshot.PacTotalW, snapshot.USOC, now)
 }
 
-func (st *SessionTracker) startSession(key, agentID, batteryName, sessionType string, now time.Time, soc float64, operatingMode string) {
+func (st *SessionTracker) startSession(key, agentID, batteryName, sessionType string, now time.Time, soc float64) {
 	rec := &sessiondb.SessionRecord{
-		AgentID:       agentID,
-		BatteryName:   batteryName,
-		Type:          sessionType,
-		StartedAt:     now,
-		SocStart:      soc,
-		OperatingMode: normalizeOperatingMode(operatingMode),
+		AgentID:     agentID,
+		BatteryName: batteryName,
+		Type:        sessionType,
+		StartedAt:   now,
+		SocStart:    soc,
 	}
 	id, err := st.store.InsertSession(rec)
 	if err != nil {
@@ -201,11 +205,10 @@ func (st *SessionTracker) startSession(key, agentID, batteryName, sessionType st
 		return
 	}
 	st.active[key] = &activeSession{
-		dbID:          id,
-		startedAt:     now,
-		lastSample:    now,
-		socEnd:        soc,
-		operatingMode: normalizeOperatingMode(operatingMode),
+		dbID:       id,
+		startedAt:  now,
+		lastSample: now,
+		socEnd:     soc,
 	}
 	st.log.Debug("session started", slog.String("type", sessionType), slog.String("battery", batteryName), slog.Int64("id", id))
 }
@@ -225,6 +228,10 @@ func (st *SessionTracker) endSession(key string, now time.Time, soc float64) {
 
 	avgPrice := st.getAvgPrice(sess.startedAt, now)
 	costEur := sess.energyWh / 1e6 * avgPrice // energy_Wh / 1e6 * EUR/MWh = EUR
+	// Signed cost: charge = negative (expense), discharge = positive (income)
+	if strings.HasSuffix(key, ":charge") {
+		costEur = -costEur
+	}
 
 	if err := st.store.CloseSession(
 		sess.dbID, now, duration,
