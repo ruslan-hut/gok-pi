@@ -89,64 +89,7 @@
   cursor: not-allowed;
 }
 
-/* Records table */
-.db-inspector-table {
-  overflow-x: auto;
-  animation: fadeInUp 0.3s ease both;
-}
-
-.db-inspector-table table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-
-.db-inspector-table th {
-  text-align: left;
-  padding: var(--space-sm) var(--space-md);
-  font-size: 0.7rem;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 500;
-  border-bottom: 1px solid var(--border-color-subtle);
-  white-space: nowrap;
-}
-
-.db-inspector-table td {
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--border-color-subtle);
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
-.db-inspector-row {
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.db-inspector-row:hover {
-  background: var(--color-bg-hover);
-}
-
-.db-inspector-row-expanded {
-  background: var(--color-bg-muted);
-}
-
-.db-inspector-cell-mono {
-  font-family: var(--font-mono), monospace;
-  font-variant-numeric: tabular-nums;
-}
-
-.db-inspector-cell-truncate {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--font-mono), monospace;
-  font-size: 0.8rem;
-}
-
-/* Mobile card tweaks */
+/* Card tweaks */
 .db-inspector-card {
   cursor: pointer;
 }

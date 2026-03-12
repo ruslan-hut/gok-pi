@@ -185,57 +185,8 @@ export function DatabaseInspector() {
       {/* Records table */}
       {data && data.records.length > 0 && (
         <>
-          {/* Desktop table */}
-          <div className="db-inspector-table hide-mobile">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Agent</th>
-                  <th>Battery</th>
-                  <th>Type</th>
-                  <th>Started</th>
-                  <th>Duration</th>
-                  <th>Energy</th>
-                  <th>Cost</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.records.map((r) => (
-                  <tr
-                    key={r.id}
-                    className={`db-inspector-row ${expandedId === r.id ? "db-inspector-row-expanded" : ""}`}
-                    onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
-                  >
-                    <td className="db-inspector-cell-mono">{r.id}</td>
-                    <td className="db-inspector-cell-truncate" title={r.agent_id}>
-                      {r.agent_id.length > 12 ? r.agent_id.slice(0, 12) + "..." : r.agent_id}
-                    </td>
-                    <td>{r.battery_name}</td>
-                    <td>
-                      <span className={`schedule-badge ${r.type === "charge" ? "schedule-badge-charge" : "schedule-badge-discharge"}`}>
-                        {r.type}
-                      </span>
-                    </td>
-                    <td>{fmtDateTime(r.started_at)}</td>
-                    <td>{r.duration_seconds ? fmtDuration(r.duration_seconds) : "—"}</td>
-                    <td>{fmtEnergy(r.energy_wh)}</td>
-                    <td>{fmtCost(r.cost_eur)}</td>
-                    <td>
-                      <span className={`badge ${r.ended_at ? "offline" : "online"}`}>
-                        {r.ended_at ? "Closed" : "Open"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {expandedId !== null && <RecordDetail record={data.records.find((r) => r.id === expandedId)} />}
-          </div>
-
-          {/* Mobile card list */}
-          <div className="card-list show-mobile">
+          {/* Card list */}
+          <div className="card-list">
             {data.records.map((r) => (
               <div
                 key={r.id}
@@ -325,15 +276,8 @@ function RecordDetail({ record }: { record?: DBRecordsResponse["records"][0] }) 
   return (
     <div className="db-inspector-detail" onClick={(e) => e.stopPropagation()}>
       <div className="db-inspector-detail-grid">
-        <DetailItem label="ID" value={String(record.id)} />
-        <DetailItem label="Agent ID" value={record.agent_id} mono />
-        <DetailItem label="Battery" value={record.battery_name} />
-        <DetailItem label="Type" value={record.type} />
         <DetailItem label="Operating Mode" value={record.operating_mode || "—"} />
-        <DetailItem label="Started" value={new Date(record.started_at).toLocaleString()} />
         <DetailItem label="Ended" value={record.ended_at ? new Date(record.ended_at).toLocaleString() : "—"} />
-        <DetailItem label="Duration" value={record.duration_seconds ? fmtDuration(record.duration_seconds) : "—"} />
-        <DetailItem label="Energy" value={fmtEnergy(record.energy_wh)} />
         <DetailItem label="Avg Power" value={record.avg_power_w ? `${record.avg_power_w.toFixed(0)} W` : "—"} />
         <DetailItem label="Peak Power" value={record.peak_power_w ? `${record.peak_power_w.toFixed(0)} W` : "—"} />
         <DetailItem label="SoC Start" value={record.soc_start ? `${record.soc_start.toFixed(1)}%` : "—"} />
