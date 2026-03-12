@@ -1,18 +1,28 @@
 // Package scheduler analyzes hourly electricity prices to determine optimal
 // charge and discharge time windows for battery systems.
 //
-// Algorithm:
-//  1. Sort all hours by price (ascending)
-//  2. Pick the N cheapest hours for charging (buy low)
-//  3. Pick the N most expensive hours for discharging (sell high)
-//  4. Ensure charge and discharge sets don't overlap
-//  5. Merge adjacent hours into contiguous windows (e.g., hours 2,3,4 → window 02:00-05:00)
+// Algorithm — P25/P75 Percentile Strategy:
+//
+//  1. Sort all 24 hourly prices ascending
+//  2. Compute P25 (25th percentile) — the price threshold below which to charge (buy)
+//  3. Compute P75 (75th percentile) — the price threshold above which to discharge (sell)
+//  4. Select all hours with price ≤ P25 as charge hours
+//  5. Select all hours with price ≥ P75 as discharge hours
+//  6. Merge adjacent hours into contiguous windows (e.g., hours 2,3,4 → window 02:00-05:00)
+//
+// This strategy is self-adaptive: thresholds recalculate daily based on actual
+// price distribution from REE forecast. On flat-price days fewer hours qualify
+// (avoiding unprofitable cycling), on volatile days more hours qualify at extremes
+// (capturing more opportunity). The logic buys at the lower quartile and sells at
+// the upper quartile, guaranteeing operations always occur at the extremes of the
+// real price range for each day, regardless of absolute market level.
 //
 // The output DaySchedule is consumed by the autoschedule package to generate
 // entity.Schedule objects that are pushed to agents via the control server.
 package scheduler
 
 import (
+	"math"
 	"sort"
 
 	"gok-pi/electricity/redata"
@@ -36,60 +46,65 @@ type Stats struct {
 	MinPrice float64 `json:"min_price_eur_mwh"`
 	MaxPrice float64 `json:"max_price_eur_mwh"`
 	AvgPrice float64 `json:"avg_price_eur_mwh"`
+	P25      float64 `json:"p25_eur_mwh"` // 25th percentile — charge threshold
+	P75      float64 `json:"p75_eur_mwh"` // 75th percentile — discharge threshold
 }
 
-// ComputeSchedule analyzes hourly prices and determines optimal charge/discharge windows.
-// chargeHours: how many cheapest hours to pick for charging.
-// dischargeHours: how many most expensive hours to pick for discharging.
-func ComputeSchedule(prices []redata.HourlyPrice, chargeHours, dischargeHours int) DaySchedule {
+// ComputeSchedule analyzes hourly prices using a P25/P75 percentile strategy.
+//
+// How it works:
+//   - P25 (25th percentile): 25% of hours have a price ≤ this value — these are
+//     the cheap hours suitable for charging.
+//   - P75 (75th percentile): only 25% of hours have a price ≥ this value — these
+//     are the expensive hours suitable for discharging/selling.
+//   - Hours with price ≤ P25 → charge windows (buy at the lower quartile)
+//   - Hours with price ≥ P75 → discharge windows (sell at the upper quartile)
+//
+// This replaces the previous Top-N approach (fixed 3 cheapest / 3 most expensive)
+// with a fully adaptive strategy where the number of active hours depends on the
+// day's price distribution rather than being hardcoded.
+func ComputeSchedule(prices []redata.HourlyPrice) DaySchedule {
 	if len(prices) == 0 {
 		return DaySchedule{}
 	}
 
-	type ranked struct {
-		hour  int
-		price float64
-	}
-
-	sorted := make([]ranked, len(prices))
+	// Sort prices ascending to compute percentiles
+	sorted := make([]float64, len(prices))
 	for i, p := range prices {
-		sorted[i] = ranked{hour: p.Hour, price: p.Price}
+		sorted[i] = p.Price
 	}
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].price < sorted[j].price
-	})
+	sort.Float64s(sorted)
 
-	if chargeHours > len(sorted) {
-		chargeHours = len(sorted)
-	}
-	if dischargeHours > len(sorted) {
-		dischargeHours = len(sorted)
-	}
-
-	// Ensure charge and discharge windows don't overlap
-	// by only picking from the cheapest and most expensive non-overlapping hours
-	totalNeeded := chargeHours + dischargeHours
-	if totalNeeded > len(sorted) {
-		// Reduce equally
-		chargeHours = len(sorted) / 2
-		dischargeHours = len(sorted) - chargeHours
-	}
-
-	// Pick cheapest hours for charging (from the low end of sorted prices)
-	chargeSet := make(map[int]bool, chargeHours)
-	for i := 0; i < chargeHours; i++ {
-		chargeSet[sorted[i].hour] = true
-	}
-
-	// Pick most expensive hours for discharging (from the high end of sorted prices)
-	dischargeSet := make(map[int]bool, dischargeHours)
-	for i := len(sorted) - 1; i >= len(sorted)-dischargeHours; i-- {
-		dischargeSet[sorted[i].hour] = true
-	}
+	// Compute P25 and P75 thresholds using linear interpolation
+	//
+	// Example with 24 values:
+	//   P25 position = 24 × 0.25 = 6.0 → value at index 6 (7th value)
+	//   P75 position = 24 × 0.75 = 18.0 → value at index 18 (19th value)
+	//
+	// Hours with price ≤ P25 are cheap → charge
+	// Hours with price ≥ P75 are expensive → discharge
+	p25 := percentile(sorted, 0.25)
+	p75 := percentile(sorted, 0.75)
 
 	priceByHour := make(map[int]float64, len(prices))
 	for _, p := range prices {
 		priceByHour[p.Hour] = p.Price
+	}
+
+	// Select hours at or below P25 for charging (the cheapest ~25% of hours)
+	chargeSet := make(map[int]bool)
+	for _, p := range prices {
+		if p.Price <= p25 {
+			chargeSet[p.Hour] = true
+		}
+	}
+
+	// Select hours at or above P75 for discharging (the most expensive ~25% of hours)
+	dischargeSet := make(map[int]bool)
+	for _, p := range prices {
+		if p.Price >= p75 {
+			dischargeSet[p.Hour] = true
+		}
 	}
 
 	chargeWindows := groupWindows(chargeSet, priceByHour)
@@ -101,30 +116,62 @@ func ComputeSchedule(prices []redata.HourlyPrice, chargeHours, dischargeHours in
 	}
 }
 
-// ComputeStats calculates basic price statistics for the day.
+// percentile computes the p-th percentile (0 ≤ p ≤ 1) from a sorted slice of values
+// using linear interpolation between adjacent ranks.
+//
+// For n values, the position is (n × p). If position is integer, use that index directly;
+// otherwise interpolate between floor and ceil indices.
+func percentile(sorted []float64, p float64) float64 {
+	n := float64(len(sorted))
+	pos := n * p
+
+	lower := int(math.Floor(pos))
+	upper := int(math.Ceil(pos))
+
+	if lower < 0 {
+		lower = 0
+	}
+	if upper >= len(sorted) {
+		upper = len(sorted) - 1
+	}
+	if lower == upper {
+		return sorted[lower]
+	}
+
+	// Linear interpolation between adjacent values
+	frac := pos - math.Floor(pos)
+	return sorted[lower] + frac*(sorted[upper]-sorted[lower])
+}
+
+// ComputeStats calculates price statistics for the day, including P25/P75 thresholds.
 func ComputeStats(prices []redata.HourlyPrice) Stats {
 	if len(prices) == 0 {
 		return Stats{}
 	}
 
-	min := prices[0].Price
-	max := prices[0].Price
+	minP := prices[0].Price
+	maxP := prices[0].Price
 	sum := 0.0
 
-	for _, p := range prices {
-		if p.Price < min {
-			min = p.Price
+	sorted := make([]float64, len(prices))
+	for i, p := range prices {
+		sorted[i] = p.Price
+		if p.Price < minP {
+			minP = p.Price
 		}
-		if p.Price > max {
-			max = p.Price
+		if p.Price > maxP {
+			maxP = p.Price
 		}
 		sum += p.Price
 	}
+	sort.Float64s(sorted)
 
 	return Stats{
-		MinPrice: min,
-		MaxPrice: max,
+		MinPrice: minP,
+		MaxPrice: maxP,
 		AvgPrice: sum / float64(len(prices)),
+		P25:      percentile(sorted, 0.25),
+		P75:      percentile(sorted, 0.75),
 	}
 }
 

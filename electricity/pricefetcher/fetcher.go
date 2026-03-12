@@ -36,10 +36,9 @@ type State struct {
 	NextUpdate  time.Time `json:"next_update"`
 }
 
-const (
-	chargePeriods    = 3
-	dischargePeriods = 3
-)
+// Previously used fixed Top-N constants (chargePeriods=3, dischargePeriods=3).
+// Now replaced by P25/P75 percentile strategy in the scheduler package —
+// the number of charge/discharge hours adapts automatically to the daily price distribution.
 
 type Fetcher struct {
 	client *redata.Client
@@ -65,7 +64,7 @@ func (f *Fetcher) GetState() State {
 
 // Run starts the background fetch loop. Blocks until ctx is cancelled.
 func (f *Fetcher) Run(ctx context.Context) {
-	f.log.Info("price fetcher started", slog.Int("charge_periods", chargePeriods), slog.Int("discharge_periods", dischargePeriods))
+	f.log.Info("price fetcher started (P25/P75 percentile strategy)")
 
 	// Initial fetch
 	f.fetchAll(ctx)
@@ -144,7 +143,7 @@ func (f *Fetcher) fetchDay(ctx context.Context, date time.Time) (*DayData, error
 		return nil, err
 	}
 
-	sched := scheduler.ComputeSchedule(prices, chargePeriods, dischargePeriods)
+	sched := scheduler.ComputeSchedule(prices)
 	stats := scheduler.ComputeStats(prices)
 
 	return &DayData{
