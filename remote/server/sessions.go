@@ -168,7 +168,7 @@ func (st *SessionTracker) startSession(key, agentID, batteryName, sessionType st
 		Type:          sessionType,
 		StartedAt:     now,
 		SocStart:      soc,
-		OperatingMode: operatingMode,
+		OperatingMode: normalizeOperatingMode(operatingMode),
 	}
 	id, err := st.store.InsertSession(rec)
 	if err != nil {
@@ -356,6 +356,19 @@ func (st *SessionTracker) Cleanup(retention time.Duration) {
 	}
 	if deleted > 0 {
 		st.log.Info("session cleanup", slog.Int64("deleted", deleted))
+	}
+}
+
+// normalizeOperatingMode converts the Sonnen API numeric operating mode
+// ("1" = manual, "2" = auto) to a human-readable string.
+func normalizeOperatingMode(raw string) string {
+	switch raw {
+	case "1", "manual":
+		return "manual"
+	case "2", "auto":
+		return "auto"
+	default:
+		return raw
 	}
 }
 
