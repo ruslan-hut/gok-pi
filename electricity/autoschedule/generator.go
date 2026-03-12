@@ -24,7 +24,8 @@ const schedulePrefix = "auto-" // Prefix for auto-generated schedule names
 // GenerateSchedules creates charge/discharge schedules from price data
 // for batteries that have AutoSchedule enabled.
 // It deduplicates by schedule name (today and tomorrow may produce identical windows)
-// and filters out windows whose end time has already passed today.
+// and filters out today's windows whose end time has already passed.
+// Tomorrow's windows are never filtered — only deduplicated.
 func GenerateSchedules(batteries []entity.BatteryConfig, today, tomorrow *pricefetcher.DayData) []entity.Schedule {
 	var schedules []entity.Schedule
 	seen := make(map[string]bool)
@@ -34,36 +35,36 @@ func GenerateSchedules(batteries []entity.BatteryConfig, today, tomorrow *pricef
 		if !bat.AutoSchedule || !bat.Enabled {
 			continue
 		}
+		// Today's schedules: skip expired windows, dedup by name.
 		if today != nil {
-			schedules = appendUnique(schedules, windowsToSchedules(bat, today.Schedule), seen, now)
+			for _, s := range windowsToSchedules(bat, today.Schedule) {
+				if seen[s.Name] {
+					continue
+				}
+				var stopHour int
+				if _, err := fmt.Sscanf(s.StopTime, "%d:", &stopHour); err == nil {
+					stopTime := time.Date(now.Year(), now.Month(), now.Day(), stopHour, 0, 0, 0, now.Location())
+					if now.After(stopTime) {
+						continue
+					}
+				}
+				seen[s.Name] = true
+				schedules = append(schedules, s)
+			}
 		}
+		// Tomorrow's schedules: dedup only (same name as a surviving today window is skipped).
 		if tomorrow != nil {
-			schedules = appendUnique(schedules, windowsToSchedules(bat, tomorrow.Schedule), seen, now)
+			for _, s := range windowsToSchedules(bat, tomorrow.Schedule) {
+				if seen[s.Name] {
+					continue
+				}
+				seen[s.Name] = true
+				schedules = append(schedules, s)
+			}
 		}
 	}
 
 	return schedules
-}
-
-// appendUnique adds schedules that haven't been seen yet and whose time window
-// hasn't expired. A window is expired when current time is past its stop hour today.
-func appendUnique(dst []entity.Schedule, src []entity.Schedule, seen map[string]bool, now time.Time) []entity.Schedule {
-	for _, s := range src {
-		if seen[s.Name] {
-			continue
-		}
-		// Parse stop hour and skip if the window has already ended today.
-		var stopHour int
-		if _, err := fmt.Sscanf(s.StopTime, "%d:", &stopHour); err == nil {
-			stopTime := time.Date(now.Year(), now.Month(), now.Day(), stopHour, 0, 0, 0, now.Location())
-			if now.After(stopTime) {
-				continue
-			}
-		}
-		seen[s.Name] = true
-		dst = append(dst, s)
-	}
-	return dst
 }
 
 // IsAutoSchedule returns true if the schedule name starts with the auto prefix.
