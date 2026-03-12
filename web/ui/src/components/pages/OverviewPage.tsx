@@ -16,7 +16,7 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
     fetchDBStats()
       .then((data) => {
         setDbStats(data.stats);
-        setAgentStats(data.agents);
+        setAgentStats(data.agents ?? []);
       })
       .catch(() => {});
   }, []);
