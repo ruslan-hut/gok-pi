@@ -34,6 +34,8 @@ type SessionRecord struct {
 	CostEur        float64 `db:"cost_eur" json:"cost_eur"`                   // energy_wh/1e6 * price_eur_mwh
 
 	Samples int `db:"samples" json:"samples"` // number of telemetry samples
+
+	OperatingMode string `db:"operating_mode" json:"operating_mode"` // "manual" or "auto"
 }
 
 // BatterySummary aggregates sessions per battery for display.
@@ -87,22 +89,30 @@ func migrate(db *sqlx.DB) error {
 			soc_end         REAL    NOT NULL DEFAULT 0,
 			avg_price_eur_mwh REAL  NOT NULL DEFAULT 0,
 			cost_eur        REAL    NOT NULL DEFAULT 0,
-			samples         INTEGER NOT NULL DEFAULT 0
+			samples         INTEGER NOT NULL DEFAULT 0,
+			operating_mode  TEXT    NOT NULL DEFAULT ''
 		);
 		CREATE INDEX IF NOT EXISTS idx_sessions_agent_battery ON sessions(agent_id, battery_name);
 		CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Migration: add operating_mode column to existing databases
+	_, _ = db.Exec(`ALTER TABLE sessions ADD COLUMN operating_mode TEXT NOT NULL DEFAULT ''`)
+
+	return nil
 }
 
 // InsertSession creates a new open session and returns its ID.
 func (s *Store) InsertSession(rec *SessionRecord) (int64, error) {
 	result, err := s.db.Exec(`
-		INSERT INTO sessions (agent_id, battery_name, type, started_at, soc_start)
-		VALUES (?, ?, ?, ?, ?)`,
+		INSERT INTO sessions (agent_id, battery_name, type, started_at, soc_start, operating_mode)
+		VALUES (?, ?, ?, ?, ?, ?)`,
 		rec.AgentID, rec.BatteryName, rec.Type,
 		rec.StartedAt.UTC().Format(time.RFC3339),
-		rec.SocStart,
+		rec.SocStart, rec.OperatingMode,
 	)
 	if err != nil {
 		return 0, err
@@ -138,21 +148,22 @@ func (s *Store) CloseSession(id int64, endedAt time.Time, durationSec, energyWh,
 // GetOpenSessions returns all sessions that have not been closed.
 func (s *Store) GetOpenSessions() ([]SessionRecord, error) {
 	var rows []struct {
-		ID          int64   `db:"id"`
-		AgentID     string  `db:"agent_id"`
-		BatteryName string  `db:"battery_name"`
-		Type        string  `db:"type"`
-		StartedAt   string  `db:"started_at"`
-		SocStart    float64 `db:"soc_start"`
-		EnergyWh    float64 `db:"energy_wh"`
-		AvgPowerW   float64 `db:"avg_power_w"`
-		PeakPowerW  float64 `db:"peak_power_w"`
-		SocEnd      float64 `db:"soc_end"`
-		Samples     int     `db:"samples"`
+		ID            int64   `db:"id"`
+		AgentID       string  `db:"agent_id"`
+		BatteryName   string  `db:"battery_name"`
+		Type          string  `db:"type"`
+		StartedAt     string  `db:"started_at"`
+		SocStart      float64 `db:"soc_start"`
+		EnergyWh      float64 `db:"energy_wh"`
+		AvgPowerW     float64 `db:"avg_power_w"`
+		PeakPowerW    float64 `db:"peak_power_w"`
+		SocEnd        float64 `db:"soc_end"`
+		Samples       int     `db:"samples"`
+		OperatingMode string  `db:"operating_mode"`
 	}
 	err := s.db.Select(&rows, `
 		SELECT id, agent_id, battery_name, type, started_at, soc_start,
-		       energy_wh, avg_power_w, peak_power_w, soc_end, samples
+		       energy_wh, avg_power_w, peak_power_w, soc_end, samples, operating_mode
 		FROM sessions WHERE ended_at IS NULL`)
 	if err != nil {
 		return nil, err
@@ -166,6 +177,7 @@ func (s *Store) GetOpenSessions() ([]SessionRecord, error) {
 			Type: r.Type, StartedAt: t, SocStart: r.SocStart,
 			EnergyWh: r.EnergyWh, AvgPowerW: r.AvgPowerW,
 			PeakPowerW: r.PeakPowerW, SocEnd: r.SocEnd, Samples: r.Samples,
+			OperatingMode: r.OperatingMode,
 		}
 	}
 	return result, nil
@@ -180,7 +192,7 @@ func (s *Store) GetSummaries(agentID string, hours int) ([]BatterySummary, error
 		       COALESCE(SUM(energy_wh), 0) as total_energy_wh,
 		       COALESCE(SUM(cost_eur), 0) as total_cost_eur
 		FROM sessions
-		WHERE started_at >= ? AND ended_at IS NOT NULL`
+		WHERE started_at >= ? AND ended_at IS NOT NULL AND operating_mode = 'manual'`
 	args := []interface{}{cutoff}
 
 	if agentID != "" {
@@ -251,6 +263,7 @@ func (s *Store) GetRecentSessions(agentID string, hours int) ([]SessionRecord, e
 		AvgPriceEurMWh float64        `db:"avg_price_eur_mwh"`
 		CostEur        float64        `db:"cost_eur"`
 		Samples        int            `db:"samples"`
+		OperatingMode  string         `db:"operating_mode"`
 	}
 	if err := s.db.Select(&raw, query, args...); err != nil {
 		return nil, err
@@ -265,6 +278,7 @@ func (s *Store) GetRecentSessions(agentID string, hours int) ([]SessionRecord, e
 			EnergyWh: r.EnergyWh, AvgPowerW: r.AvgPowerW, PeakPowerW: r.PeakPowerW,
 			SocStart: r.SocStart, SocEnd: r.SocEnd,
 			AvgPriceEurMWh: r.AvgPriceEurMWh, CostEur: r.CostEur, Samples: r.Samples,
+			OperatingMode: r.OperatingMode,
 		}
 		if r.EndedAt.Valid {
 			t, _ := time.Parse(time.RFC3339, r.EndedAt.String)

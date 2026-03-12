@@ -122,11 +122,11 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 			prev.charging = snapshot.BatteryCharging
 			// If already charging on first telemetry, start tracking
 			if snapshot.BatteryCharging {
-				st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC)
+				st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC, snapshot.OperatingMode)
 			}
 		} else {
 			if !prev.charging && snapshot.BatteryCharging {
-				st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC)
+				st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC, snapshot.OperatingMode)
 			} else if prev.charging && !snapshot.BatteryCharging {
 				st.endSession(activeKey, now, snapshot.USOC)
 			}
@@ -140,11 +140,11 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 		if !prev.initialized {
 			prev.discharging = snapshot.BatteryDischarging
 			if snapshot.BatteryDischarging {
-				st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC)
+				st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC, snapshot.OperatingMode)
 			}
 		} else {
 			if !prev.discharging && snapshot.BatteryDischarging {
-				st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC)
+				st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC, snapshot.OperatingMode)
 			} else if prev.discharging && !snapshot.BatteryDischarging {
 				st.endSession(activeKey, now, snapshot.USOC)
 			}
@@ -161,13 +161,14 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 	st.accumulateEnergy(stateKey+":discharge", snapshot.PacTotalW, snapshot.USOC, now)
 }
 
-func (st *SessionTracker) startSession(key, agentID, batteryName, sessionType string, now time.Time, soc float64) {
+func (st *SessionTracker) startSession(key, agentID, batteryName, sessionType string, now time.Time, soc float64, operatingMode string) {
 	rec := &sessiondb.SessionRecord{
-		AgentID:     agentID,
-		BatteryName: batteryName,
-		Type:        sessionType,
-		StartedAt:   now,
-		SocStart:    soc,
+		AgentID:       agentID,
+		BatteryName:   batteryName,
+		Type:          sessionType,
+		StartedAt:     now,
+		SocStart:      soc,
+		OperatingMode: operatingMode,
 	}
 	id, err := st.store.InsertSession(rec)
 	if err != nil {
