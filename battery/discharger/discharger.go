@@ -843,8 +843,8 @@ func (d *Discharge) observeStatus(status *entity.SystemStatus) {
 		observers.UpdateCapacity(d.name, status.RemainingCapacityWh)
 		observers.UpdateConsumption(d.name, status.ConsumptionW)
 		observers.UpdatePac(d.name, status.PacTotalW)
-		observers.UpdateDischargeState(d.name, status.BatteryDischarging)
 		observers.UpdateOpMode(d.name, status.OperatingMode)
+		observers.UpdateDischargeState(d.name, status.BatteryDischarging)
 	}(status)
 }
 

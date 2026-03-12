@@ -840,8 +840,8 @@ func (c *Charger) observeStatus(status *entity.SystemStatus) {
 		observers.UpdateCapacity(c.name, status.RemainingCapacityWh)
 		observers.UpdateConsumption(c.name, status.ConsumptionW)
 		observers.UpdatePac(c.name, status.PacTotalW)
-		observers.UpdateChargeState(c.name, status.BatteryCharging)
 		observers.UpdateOpMode(c.name, status.OperatingMode)
+		observers.UpdateChargeState(c.name, status.BatteryCharging)
 	}(status)
 }
 

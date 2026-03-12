@@ -192,7 +192,7 @@ func (s *Store) GetSummaries(agentID string, hours int) ([]BatterySummary, error
 		       COALESCE(SUM(energy_wh), 0) as total_energy_wh,
 		       COALESCE(SUM(cost_eur), 0) as total_cost_eur
 		FROM sessions
-		WHERE started_at >= ? AND ended_at IS NOT NULL AND operating_mode IN ('manual', '1')`
+		WHERE started_at >= ? AND ended_at IS NOT NULL AND operating_mode NOT IN ('auto', '2')`
 	args := []interface{}{cutoff}
 
 	if agentID != "" {

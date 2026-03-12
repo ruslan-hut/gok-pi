@@ -721,9 +721,9 @@ func observeBatteryStatus(name string, status *entity.SystemStatus) {
 		observers.UpdateCapacity(name, status.RemainingCapacityWh)
 		observers.UpdateConsumption(name, status.ConsumptionW)
 		observers.UpdatePac(name, status.PacTotalW)
+		observers.UpdateOpMode(name, status.OperatingMode)
 		observers.UpdateDischargeState(name, status.BatteryDischarging)
 		observers.UpdateChargeState(name, status.BatteryCharging)
-		observers.UpdateOpMode(name, status.OperatingMode)
 	}()
 }
 
