@@ -130,7 +130,7 @@ export function DatabaseInspector() {
             <label>Agent</label>
             <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
               <option value="">All agents</option>
-              {data?.agents.map((a) => (
+              {data?.agents?.map((a) => (
                 <option key={a} value={a}>{a}</option>
               ))}
             </select>
@@ -183,7 +183,7 @@ export function DatabaseInspector() {
       )}
 
       {/* Records table */}
-      {data && data.records.length > 0 && (
+      {data && data.records && data.records.length > 0 && (
         <>
           {/* Card list */}
           <div className="card-list">
@@ -257,7 +257,7 @@ export function DatabaseInspector() {
         </>
       )}
 
-      {data && data.records.length === 0 && !loading && (
+      {data && (!data.records || data.records.length === 0) && !loading && (
         <div className="config-empty">No records match the current filters.</div>
       )}
 
