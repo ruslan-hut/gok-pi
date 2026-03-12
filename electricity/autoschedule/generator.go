@@ -12,6 +12,7 @@ package autoschedule
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"gok-pi/battery/entity"
 	"gok-pi/electricity/pricefetcher"
@@ -22,22 +23,47 @@ const schedulePrefix = "auto-" // Prefix for auto-generated schedule names
 
 // GenerateSchedules creates charge/discharge schedules from price data
 // for batteries that have AutoSchedule enabled.
+// It deduplicates by schedule name (today and tomorrow may produce identical windows)
+// and filters out windows whose end time has already passed today.
 func GenerateSchedules(batteries []entity.BatteryConfig, today, tomorrow *pricefetcher.DayData) []entity.Schedule {
 	var schedules []entity.Schedule
+	seen := make(map[string]bool)
+	now := time.Now()
 
 	for _, bat := range batteries {
 		if !bat.AutoSchedule || !bat.Enabled {
 			continue
 		}
 		if today != nil {
-			schedules = append(schedules, windowsToSchedules(bat, today.Schedule)...)
+			schedules = appendUnique(schedules, windowsToSchedules(bat, today.Schedule), seen, now)
 		}
 		if tomorrow != nil {
-			schedules = append(schedules, windowsToSchedules(bat, tomorrow.Schedule)...)
+			schedules = appendUnique(schedules, windowsToSchedules(bat, tomorrow.Schedule), seen, now)
 		}
 	}
 
 	return schedules
+}
+
+// appendUnique adds schedules that haven't been seen yet and whose time window
+// hasn't expired. A window is expired when current time is past its stop hour today.
+func appendUnique(dst []entity.Schedule, src []entity.Schedule, seen map[string]bool, now time.Time) []entity.Schedule {
+	for _, s := range src {
+		if seen[s.Name] {
+			continue
+		}
+		// Parse stop hour and skip if the window has already ended today.
+		var stopHour int
+		if _, err := fmt.Sscanf(s.StopTime, "%d:", &stopHour); err == nil {
+			stopTime := time.Date(now.Year(), now.Month(), now.Day(), stopHour, 0, 0, 0, now.Location())
+			if now.After(stopTime) {
+				continue
+			}
+		}
+		seen[s.Name] = true
+		dst = append(dst, s)
+	}
+	return dst
 }
 
 // IsAutoSchedule returns true if the schedule name starts with the auto prefix.
