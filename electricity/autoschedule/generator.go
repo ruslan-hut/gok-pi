@@ -119,8 +119,8 @@ func ToLegacySchedules(records []sessiondb.ComputedSchedule, now time.Time) []en
 			// Example: auto-42-charge-battery1
 			Name:        fmt.Sprintf("%s%d-%s-%s", schedulePrefix, r.ID, r.Type, r.BatteryName),
 			Type:        r.Type,
-			StartTime:   fmt.Sprintf("%02d:00", r.StartHour),
-			StopTime:    fmt.Sprintf("%02d:00", r.EndHour),
+			StartTime:   formatHour(r.StartHour),
+			StopTime:    formatHour(r.EndHour),
 			BatteryName: r.BatteryName,
 			Enabled:     true,
 			PowerLimit:  r.PowerLimit,
@@ -179,6 +179,21 @@ func IsAutoSchedule(name string) bool {
 	return strings.HasPrefix(name, schedulePrefix)
 }
 
+// formatHour converts an hour (0-24) to a valid HH:MM string for entity.Schedule.
+// Edge cases: hour 0 → "00:01" (midnight start), hour 24 → "23:59" (end of day).
+// The entity.Schedule.Validate() requires valid HH:MM format where HH is 00-23,
+// so 24:00 is not representable — we use 23:59 as the closest valid value.
+func formatHour(hour int) string {
+	switch hour {
+	case 0:
+		return "00:01"
+	case 24:
+		return "23:59"
+	default:
+		return fmt.Sprintf("%02d:00", hour)
+	}
+}
+
 func windowsToSchedules(bat entity.BatteryConfig, sched scheduler.DaySchedule) []entity.Schedule {
 	var out []entity.Schedule
 
@@ -190,8 +205,8 @@ func windowsToSchedules(bat entity.BatteryConfig, sched scheduler.DaySchedule) [
 		out = append(out, entity.Schedule{
 			Name:        fmt.Sprintf("%scharge-%s-%02d-%02d", schedulePrefix, bat.Name, w.StartHour, w.EndHour),
 			Type:        "charge",
-			StartTime:   fmt.Sprintf("%02d:00", w.StartHour),
-			StopTime:    fmt.Sprintf("%02d:00", w.EndHour),
+			StartTime:   formatHour(w.StartHour),
+			StopTime:    formatHour(w.EndHour),
 			BatteryName: bat.Name,
 			Enabled:     true,
 			PowerLimit:  powerLimit,
@@ -211,8 +226,8 @@ func windowsToSchedules(bat entity.BatteryConfig, sched scheduler.DaySchedule) [
 		out = append(out, entity.Schedule{
 			Name:        fmt.Sprintf("%sdischarge-%s-%02d-%02d", schedulePrefix, bat.Name, w.StartHour, w.EndHour),
 			Type:        "discharge",
-			StartTime:   fmt.Sprintf("%02d:00", w.StartHour),
-			StopTime:    fmt.Sprintf("%02d:00", w.EndHour),
+			StartTime:   formatHour(w.StartHour),
+			StopTime:    formatHour(w.EndHour),
 			BatteryName: bat.Name,
 			Enabled:     true,
 			PowerLimit:  powerLimit,
