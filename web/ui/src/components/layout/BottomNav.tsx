@@ -5,11 +5,13 @@ interface BottomNavProps {
   currentPage: AppPage;
   onNavigate: (page: AppPage) => void;
   configDirty?: boolean;
+  readonly?: boolean;
 }
 
-const globalItems: { page: "overview" | "electricity"; label: string; icon: string }[] = [
+const globalItems: { page: "overview" | "electricity" | "database"; label: string; icon: string; authRequired?: boolean }[] = [
   { page: "overview", label: "Overview", icon: "dashboard" },
   { page: "electricity", label: "Electricity", icon: "bolt" },
+  { page: "database", label: "Database", icon: "database", authRequired: true },
 ];
 
 const deviceItems: { tab: DeviceTab; label: string; icon: string }[] = [
@@ -22,6 +24,7 @@ export function BottomNav({
   currentPage,
   onNavigate,
   configDirty,
+  readonly,
 }: BottomNavProps) {
   if (currentPage.page === "device") {
     return (
@@ -59,7 +62,7 @@ export function BottomNav({
 
   return (
     <nav className="bottom-nav" aria-label="Dashboard sections">
-      {globalItems.map((item) => (
+      {globalItems.filter((item) => !item.authRequired || !readonly).map((item) => (
         <button
           key={item.page}
           className={`bottom-nav-item ${currentPage.page === item.page ? "bottom-nav-item-active" : ""}`}

@@ -126,6 +126,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/prices", s.handlePrices)
 	mux.HandleFunc("/api/sessions", s.handleSessions)
 	mux.HandleFunc("/api/db-stats", s.handleDBStats)
+	mux.HandleFunc("/api/db/records", s.requireAuth(s.handleDBRecords))
 
 	if s.cfg.UIStaticDir != "" {
 		fs := http.FileServer(http.Dir(s.cfg.UIStaticDir))
@@ -826,6 +827,61 @@ func (s *Server) runSessionCleanup(ctx context.Context) {
 		case <-ticker.C:
 			s.sessions.Cleanup(365 * 24 * time.Hour) // 1 year retention
 		}
+	}
+}
+
+func (s *Server) handleDBRecords(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.sessions == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"records":[],"total":0,"limit":100,"offset":0,"agents":[]}`))
+		return
+	}
+
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+
+	result, err := s.sessions.Store().QuerySessions(sessiondb.SessionQuery{
+		AgentID:  q.Get("agent_id"),
+		Type:     q.Get("type"),
+		DateFrom: q.Get("date_from"),
+		DateTo:   q.Get("date_to"),
+		Status:   q.Get("status"),
+		Limit:    limit,
+		Offset:   offset,
+	})
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("query db records")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if result.Records == nil {
+		result.Records = []sessiondb.SessionRecord{}
+	}
+
+	agents, err := s.sessions.Store().GetDistinctAgents()
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("get distinct agents")
+		agents = []string{}
+	}
+
+	resp := struct {
+		*sessiondb.SessionQueryResult
+		Agents []string `json:"agents"`
+	}{
+		SessionQueryResult: result,
+		Agents:             agents,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		s.log.With(slog.Any("error", err)).Error("encode db records response")
 	}
 }
 

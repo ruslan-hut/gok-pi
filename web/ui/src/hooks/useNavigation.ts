@@ -4,7 +4,7 @@ import type { AppPage } from "../types";
 const STORAGE_KEY = "gok-pi-nav";
 
 const validDeviceTabs = new Set(["monitor", "configure", "tools"]);
-const validPages = new Set(["overview", "electricity", "device"]);
+const validPages = new Set(["overview", "electricity", "database", "device"]);
 
 function parseStored(): AppPage | null {
   try {
@@ -12,7 +12,7 @@ function parseStored(): AppPage | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || !validPages.has(parsed.page)) return null;
-    if (parsed.page === "overview" || parsed.page === "electricity") return parsed;
+    if (parsed.page === "overview" || parsed.page === "electricity" || parsed.page === "database") return parsed;
     if (
       parsed.page === "device" &&
       typeof parsed.agentId === "string" &&

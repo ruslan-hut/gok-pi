@@ -1,0 +1,232 @@
+/* inspector.css — database inspector page */
+
+.db-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.db-inspector-stats {
+  animation: fadeInUp 0.3s ease both;
+}
+
+/* Filters card */
+.db-inspector-filters {
+  gap: var(--space-md);
+}
+
+.db-inspector-filters-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--color-text);
+}
+
+.db-inspector-count {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.db-inspector-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-sm);
+}
+
+.db-inspector-filter-grid select,
+.db-inspector-filter-grid input[type="date"] {
+  width: 100%;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.9rem;
+  height: 32px;
+  min-height: 32px;
+  box-sizing: border-box;
+  background: var(--color-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  transition: border-color var(--transition-fast);
+}
+
+.db-inspector-filter-grid select:focus,
+.db-inspector-filter-grid input[type="date"]:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.db-inspector-filter-actions {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.db-inspector-filter-actions .button-small {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.button-secondary {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--color-text-muted);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+  border-color: var(--border-color-strong);
+}
+
+.button-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Records table */
+.db-inspector-table {
+  overflow-x: auto;
+  animation: fadeInUp 0.3s ease both;
+}
+
+.db-inspector-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.db-inspector-table th {
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-color-subtle);
+  white-space: nowrap;
+}
+
+.db-inspector-table td {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-color-subtle);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.db-inspector-row {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.db-inspector-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.db-inspector-row-expanded {
+  background: var(--color-bg-muted);
+}
+
+.db-inspector-cell-mono {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.db-inspector-cell-truncate {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.8rem;
+}
+
+/* Mobile card tweaks */
+.db-inspector-card {
+  cursor: pointer;
+}
+
+/* Record detail panel */
+.db-inspector-detail {
+  padding: var(--space-lg);
+  background: var(--color-bg-overlay);
+  background-image: var(--gradient-surface);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-sm);
+  animation: fadeInUp 0.2s ease both;
+}
+
+.db-inspector-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-sm) var(--space-lg);
+}
+
+.db-inspector-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.db-inspector-detail-label {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.db-inspector-detail-value {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  word-break: break-all;
+}
+
+/* Pagination */
+.db-inspector-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+}
+
+.db-inspector-page-info {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Loading overlay */
+.db-inspector-loading-overlay {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-md);
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .db-inspector-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .db-inspector-filter-grid select,
+  .db-inspector-filter-grid input[type="date"] {
+    height: 44px;
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .db-inspector-detail-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .db-inspector-pagination {
+    gap: var(--space-md);
+  }
+}

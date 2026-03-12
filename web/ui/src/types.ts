@@ -161,6 +161,7 @@ export type DeviceTab = "monitor" | "configure" | "tools";
 export type AppPage =
   | { page: "overview" }
   | { page: "electricity" }
+  | { page: "database" }
   | { page: "device"; agentId: string; tab: DeviceTab };
 
 // Database stats types
@@ -205,6 +206,7 @@ export interface SessionRecord {
   avg_price_eur_mwh: number;
   cost_eur: number;
   samples: number;
+  operating_mode?: string;
 }
 
 export interface BatterySummary {
@@ -220,5 +222,25 @@ export interface BatterySummary {
 export interface SessionsResponse {
   summaries: BatterySummary[];
   sessions: SessionRecord[];
+}
+
+// Database inspector types
+
+export interface DBRecordsQuery {
+  agent_id?: string;
+  type?: string;
+  date_from?: string;
+  date_to?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface DBRecordsResponse {
+  records: SessionRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+  agents: string[];
 }
 
