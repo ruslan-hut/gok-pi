@@ -66,6 +66,14 @@ export function TopNav({
             >
               Electricity
             </button>
+            {!readonly && (
+              <button
+                className={`top-nav-link ${currentPage.page === "database" ? "active" : ""}`}
+                onClick={() => onNavigate({ page: "database" })}
+              >
+                Database
+              </button>
+            )}
           </div>
         )}
       </div>

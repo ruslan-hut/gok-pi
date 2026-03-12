@@ -22,6 +22,7 @@ import { MonitorTab } from "./components/monitor/MonitorTab";
 import { ConfigTab } from "./components/config/ConfigTab";
 import { ToolsTab } from "./components/tools/ToolsTab";
 import PricesDashboard from "./components/prices/PricesDashboard";
+import { DatabaseInspector } from "./components/pages/DatabaseInspector";
 import { MessageBanner } from "./components/shared/MessageBanner";
 import { Icon } from "./components/shared/Icon";
 
@@ -205,6 +206,8 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, b
 
         {nav.page === "electricity" && <PricesDashboard />}
 
+        {nav.page === "database" && !readonly && <DatabaseInspector />}
+
         {nav.page === "device" && (
           <>
             {selectedAgent && (
@@ -334,6 +337,7 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, b
         currentPage={nav}
         onNavigate={handleNavigate}
         configDirty={configHook.configDirty}
+        readonly={readonly}
       />
     </div>
   );

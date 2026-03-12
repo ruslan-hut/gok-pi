@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentSummary, DBStatsResponse, PricesState, SessionsResponse } from "./types";
+import type { AgentConfig, AgentSummary, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, PricesState, SessionsResponse } from "./types";
 
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
 const AUTH_EXPIRY_KEY = "gok-pi-auth-expires";
@@ -210,5 +210,27 @@ export async function fetchDBStats(): Promise<DBStatsResponse> {
     throw new Error(`Failed to load DB stats: ${res.statusText}`);
   }
   return (await res.json()) as DBStatsResponse;
+}
+
+export async function fetchDBRecords(query: DBRecordsQuery): Promise<DBRecordsResponse> {
+  const params = new URLSearchParams();
+  if (query.agent_id) params.set("agent_id", query.agent_id);
+  if (query.type) params.set("type", query.type);
+  if (query.date_from) params.set("date_from", query.date_from);
+  if (query.date_to) params.set("date_to", query.date_to);
+  if (query.status) params.set("status", query.status);
+  if (query.limit) params.set("limit", query.limit.toString());
+  if (query.offset) params.set("offset", query.offset.toString());
+  const qs = params.toString();
+  const res = await fetch(`/api/db/records${qs ? `?${qs}` : ""}`, {
+    headers: { ...getAuthHeaders() },
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("Login required to access database inspector.");
+    }
+    throw new Error(`Failed to load records: ${res.statusText}`);
+  }
+  return (await res.json()) as DBRecordsResponse;
 }
 

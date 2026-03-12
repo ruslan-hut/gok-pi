@@ -396,6 +396,126 @@ func (s *Store) GetAgentStats() ([]AgentDBStats, error) {
 	return result, nil
 }
 
+// SessionQuery defines filters for querying raw session records.
+type SessionQuery struct {
+	AgentID  string // filter by agent_id (empty = all)
+	Type     string // filter by type: "charge" or "discharge" (empty = all)
+	DateFrom string // RFC3339 lower bound on started_at (empty = no lower bound)
+	DateTo   string // RFC3339 upper bound on started_at (empty = no upper bound)
+	Status   string // "open", "closed", or "" (all)
+	Limit    int    // max records to return (0 = default 100)
+	Offset   int    // pagination offset
+}
+
+// SessionQueryResult wraps paginated query results.
+type SessionQueryResult struct {
+	Records []SessionRecord `json:"records"`
+	Total   int64           `json:"total"`
+	Limit   int             `json:"limit"`
+	Offset  int             `json:"offset"`
+}
+
+// QuerySessions returns filtered, paginated session records for the database inspector.
+func (s *Store) QuerySessions(q SessionQuery) (*SessionQueryResult, error) {
+	limit := q.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+
+	where := "WHERE 1=1"
+	var args []interface{}
+
+	if q.AgentID != "" {
+		where += " AND agent_id = ?"
+		args = append(args, q.AgentID)
+	}
+	if q.Type != "" {
+		where += " AND type = ?"
+		args = append(args, q.Type)
+	}
+	if q.DateFrom != "" {
+		where += " AND started_at >= ?"
+		args = append(args, q.DateFrom)
+	}
+	if q.DateTo != "" {
+		where += " AND started_at <= ?"
+		args = append(args, q.DateTo)
+	}
+	if q.Status == "open" {
+		where += " AND ended_at IS NULL"
+	} else if q.Status == "closed" {
+		where += " AND ended_at IS NOT NULL"
+	}
+
+	// Count total matching records
+	var total int64
+	countQuery := "SELECT COUNT(*) FROM sessions " + where
+	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count sessions: %w", err)
+	}
+
+	// Fetch page
+	dataQuery := "SELECT * FROM sessions " + where + " ORDER BY started_at DESC LIMIT ? OFFSET ?"
+	dataArgs := append(append([]interface{}{}, args...), limit, q.Offset)
+
+	var raw []struct {
+		ID             int64          `db:"id"`
+		AgentID        string         `db:"agent_id"`
+		BatteryName    string         `db:"battery_name"`
+		Type           string         `db:"type"`
+		StartedAt      string         `db:"started_at"`
+		EndedAt        sql.NullString `db:"ended_at"`
+		DurationSec    float64        `db:"duration_sec"`
+		EnergyWh       float64        `db:"energy_wh"`
+		AvgPowerW      float64        `db:"avg_power_w"`
+		PeakPowerW     float64        `db:"peak_power_w"`
+		SocStart       float64        `db:"soc_start"`
+		SocEnd         float64        `db:"soc_end"`
+		AvgPriceEurMWh float64        `db:"avg_price_eur_mwh"`
+		CostEur        float64        `db:"cost_eur"`
+		Samples        int            `db:"samples"`
+		OperatingMode  string         `db:"operating_mode"`
+	}
+	if err := s.db.Select(&raw, dataQuery, dataArgs...); err != nil {
+		return nil, fmt.Errorf("query sessions: %w", err)
+	}
+
+	records := make([]SessionRecord, len(raw))
+	for i, r := range raw {
+		startedAt, _ := time.Parse(time.RFC3339, r.StartedAt)
+		rec := SessionRecord{
+			ID: r.ID, AgentID: r.AgentID, BatteryName: r.BatteryName,
+			Type: r.Type, StartedAt: startedAt, DurationSec: r.DurationSec,
+			EnergyWh: r.EnergyWh, AvgPowerW: r.AvgPowerW, PeakPowerW: r.PeakPowerW,
+			SocStart: r.SocStart, SocEnd: r.SocEnd,
+			AvgPriceEurMWh: r.AvgPriceEurMWh, CostEur: r.CostEur, Samples: r.Samples,
+			OperatingMode: r.OperatingMode,
+		}
+		if r.EndedAt.Valid {
+			t, _ := time.Parse(time.RFC3339, r.EndedAt.String)
+			rec.EndedAt = &t
+		}
+		records[i] = rec
+	}
+
+	return &SessionQueryResult{
+		Records: records,
+		Total:   total,
+		Limit:   limit,
+		Offset:  q.Offset,
+	}, nil
+}
+
+// GetDistinctAgents returns all distinct agent_id values in the sessions table.
+func (s *Store) GetDistinctAgents() ([]string, error) {
+	var agents []string
+	err := s.db.Select(&agents, "SELECT DISTINCT agent_id FROM sessions ORDER BY agent_id")
+	if err != nil {
+		return nil, err
+	}
+	return agents, nil
+}
+
 // Close closes the database connection.
 func (s *Store) Close() error {
 	return s.db.Close()

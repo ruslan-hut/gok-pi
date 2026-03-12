@@ -8,6 +8,7 @@ import "./styles/monitor.css";
 import "./styles/config.css";
 import "./styles/tools.css";
 import "./styles/prices.css";
+import "./styles/inspector.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
