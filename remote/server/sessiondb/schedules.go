@@ -31,7 +31,17 @@ type ComputedSchedule struct {
 // upsert semantics: recomputing the same day updates existing rows without
 // changing their IDs, so schedule names pushed to agents remain stable.
 func migrateSchedules(db *sqlx.DB) error {
-	_, err := db.Exec(`
+	// Migrate from old p25/p75 columns to low/high.
+	// Check if the table exists with old schema and recreate it.
+	// Computed schedules are ephemeral (recomputed daily), so data loss is acceptable.
+	var colName string
+	err := db.QueryRow(`SELECT name FROM pragma_table_info('computed_schedules') WHERE name = 'low'`).Scan(&colName)
+	if err != nil {
+		// Column 'low' doesn't exist — drop old table so it gets recreated with new schema.
+		db.Exec(`DROP TABLE IF EXISTS computed_schedules`)
+	}
+
+	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS computed_schedules (
 			id           INTEGER PRIMARY KEY AUTOINCREMENT,
 			date         TEXT    NOT NULL,
