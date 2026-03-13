@@ -138,6 +138,24 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 				}
 			}
 		}
+
+		// If mode changed TO manual, start sessions for already-active states.
+		// This handles the race where BatteryDischargingSet/BatteryChargingSet
+		// arrived before OperatingModeSet on the first telemetry cycle.
+		if oldMode != "manual" && newMode == "manual" && prev.initialized {
+			if prev.discharging {
+				activeKey := stateKey + ":discharge"
+				if _, ok := st.active[activeKey]; !ok {
+					st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC)
+				}
+			}
+			if prev.charging {
+				activeKey := stateKey + ":charge"
+				if _, ok := st.active[activeKey]; !ok {
+					st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC)
+				}
+			}
+		}
 	}
 
 	isManual := prev.operatingMode == "manual"
