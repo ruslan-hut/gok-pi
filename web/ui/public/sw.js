@@ -1,4 +1,5 @@
-const CACHE_NAME = "gok-pi-v1";
+const BUILD_HASH = "__BUILD_HASH__";
+const CACHE_NAME = "gok-pi-" + BUILD_HASH;
 
 // Static assets to pre-cache on install
 const PRECACHE_URLS = ["/", "/index.html"];
