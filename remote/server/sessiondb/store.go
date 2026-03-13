@@ -121,12 +121,13 @@ func (s *Store) InsertSession(rec *SessionRecord) (int64, error) {
 }
 
 // UpdateSession writes accumulated telemetry data to an open session.
-func (s *Store) UpdateSession(id int64, energyWh, avgPowerW, peakPowerW, socEnd float64, samples int) error {
+func (s *Store) UpdateSession(id int64, energyWh, avgPowerW, peakPowerW, socEnd, avgPriceEurMWh, costEur float64, samples int) error {
 	_, err := s.db.Exec(`
 		UPDATE sessions
-		SET energy_wh = ?, avg_power_w = ?, peak_power_w = ?, soc_end = ?, samples = ?
+		SET energy_wh = ?, avg_power_w = ?, peak_power_w = ?, soc_end = ?,
+		    avg_price_eur_mwh = ?, cost_eur = ?, samples = ?
 		WHERE id = ?`,
-		energyWh, avgPowerW, peakPowerW, socEnd, samples, id,
+		energyWh, avgPowerW, peakPowerW, socEnd, avgPriceEurMWh, costEur, samples, id,
 	)
 	return err
 }

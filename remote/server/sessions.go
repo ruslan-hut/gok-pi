@@ -296,7 +296,12 @@ func (st *SessionTracker) accumulateEnergy(key string, pacTotalW, soc float64, n
 	// Periodically flush to DB (every 30 samples ≈ 5 min at 10s interval)
 	if sess.samples%30 == 0 {
 		avgPower := sess.powerSum / float64(sess.samples)
-		if err := st.store.UpdateSession(sess.dbID, sess.energyWh, avgPower, sess.peakPowerW, sess.socEnd, sess.samples); err != nil {
+		avgPrice := st.getAvgPrice(sess.startedAt, now)
+		costEur := sess.energyWh / 1e6 * avgPrice
+		if strings.HasSuffix(key, ":charge") {
+			costEur = -costEur
+		}
+		if err := st.store.UpdateSession(sess.dbID, sess.energyWh, avgPower, sess.peakPowerW, sess.socEnd, avgPrice, costEur, sess.samples); err != nil {
 			st.log.Warn("failed to flush session", slog.Any("error", err), slog.Int64("id", sess.dbID))
 		}
 	}
