@@ -1,20 +1,20 @@
 // Package scheduler analyzes hourly electricity prices to determine optimal
 // charge and discharge time windows for battery systems.
 //
-// Algorithm — P25/P75 Percentile Strategy:
+// Algorithm — P20/P80 Percentile Strategy:
 //
 //  1. Sort all 24 hourly prices ascending
-//  2. Compute P25 (25th percentile) — the price threshold below which to charge (buy)
-//  3. Compute P75 (75th percentile) — the price threshold above which to discharge (sell)
-//  4. Select all hours with price ≤ P25 as charge hours
-//  5. Select all hours with price ≥ P75 as discharge hours
+//  2. Compute P20 (20th percentile) — the price threshold below which to charge (buy)
+//  3. Compute P80 (80th percentile) — the price threshold above which to discharge (sell)
+//  4. Select all hours with price ≤ P20 as charge hours
+//  5. Select all hours with price ≥ P80 as discharge hours
 //  6. Merge adjacent hours into contiguous windows (e.g., hours 2,3,4 → window 02:00-05:00)
 //
 // This strategy is self-adaptive: thresholds recalculate daily based on actual
 // price distribution from REE forecast. On flat-price days fewer hours qualify
 // (avoiding unprofitable cycling), on volatile days more hours qualify at extremes
-// (capturing more opportunity). The logic buys at the lower quartile and sells at
-// the upper quartile, guaranteeing operations always occur at the extremes of the
+// (capturing more opportunity). The logic buys at the lower percentile and sells at
+// the upper percentile, guaranteeing operations always occur at the extremes of the
 // real price range for each day, regardless of absolute market level.
 //
 // The output DaySchedule is consumed by the autoschedule package to generate
@@ -26,6 +26,13 @@ import (
 	"sort"
 
 	"gok-pi/electricity/redata"
+)
+
+const (
+	// ChargePercentile is the percentile threshold for charging — hours with price ≤ this are cheap.
+	ChargePercentile = 0.20
+	// DischargePercentile is the percentile threshold for discharging — hours with price ≥ this are expensive.
+	DischargePercentile = 0.80
 )
 
 // Window represents a contiguous time window for charging or discharging.
@@ -46,19 +53,19 @@ type Stats struct {
 	MinPrice float64 `json:"min_price_eur_mwh"`
 	MaxPrice float64 `json:"max_price_eur_mwh"`
 	AvgPrice float64 `json:"avg_price_eur_mwh"`
-	P25      float64 `json:"p25_eur_mwh"` // 25th percentile — charge threshold
-	P75      float64 `json:"p75_eur_mwh"` // 75th percentile — discharge threshold
+	Low      float64 `json:"low_eur_mwh"`  // low percentile threshold — charge below this
+	High     float64 `json:"high_eur_mwh"` // high percentile threshold — discharge above this
 }
 
-// ComputeSchedule analyzes hourly prices using a P25/P75 percentile strategy.
+// ComputeSchedule analyzes hourly prices using a P20/P80 percentile strategy.
 //
 // How it works:
-//   - P25 (25th percentile): 25% of hours have a price ≤ this value — these are
+//   - P20 (20th percentile): 20% of hours have a price ≤ this value — these are
 //     the cheap hours suitable for charging.
-//   - P75 (75th percentile): only 25% of hours have a price ≥ this value — these
+//   - P80 (80th percentile): only 20% of hours have a price ≥ this value — these
 //     are the expensive hours suitable for discharging/selling.
-//   - Hours with price ≤ P25 → charge windows (buy at the lower quartile)
-//   - Hours with price ≥ P75 → discharge windows (sell at the upper quartile)
+//   - Hours with price ≤ P20 → charge windows (buy at the lower percentile)
+//   - Hours with price ≥ P80 → discharge windows (sell at the upper percentile)
 //
 // This replaces the previous Top-N approach (fixed 3 cheapest / 3 most expensive)
 // with a fully adaptive strategy where the number of active hours depends on the
@@ -75,34 +82,34 @@ func ComputeSchedule(prices []redata.HourlyPrice) DaySchedule {
 	}
 	sort.Float64s(sorted)
 
-	// Compute P25 and P75 thresholds using linear interpolation
+	// Compute P20 and P80 thresholds using linear interpolation
 	//
 	// Example with 24 values:
-	//   P25 position = 24 × 0.25 = 6.0 → value at index 6 (7th value)
-	//   P75 position = 24 × 0.75 = 18.0 → value at index 18 (19th value)
+	//   P20 position = 24 × 0.20 = 4.8 → interpolated between index 4 and 5
+	//   P80 position = 24 × 0.80 = 19.2 → interpolated between index 19 and 20
 	//
-	// Hours with price ≤ P25 are cheap → charge
-	// Hours with price ≥ P75 are expensive → discharge
-	p25 := percentile(sorted, 0.25)
-	p75 := percentile(sorted, 0.75)
+	// Hours with price ≤ P20 are cheap → charge
+	// Hours with price ≥ P80 are expensive → discharge
+	low := percentile(sorted, ChargePercentile)
+	high := percentile(sorted, DischargePercentile)
 
 	priceByHour := make(map[int]float64, len(prices))
 	for _, p := range prices {
 		priceByHour[p.Hour] = p.Price
 	}
 
-	// Select hours at or below P25 for charging (the cheapest ~25% of hours)
+	// Select hours at or below P20 for charging (the cheapest ~20% of hours)
 	chargeSet := make(map[int]bool)
 	for _, p := range prices {
-		if p.Price <= p25 {
+		if p.Price <= low {
 			chargeSet[p.Hour] = true
 		}
 	}
 
-	// Select hours at or above P75 for discharging (the most expensive ~25% of hours)
+	// Select hours at or above P80 for discharging (the most expensive ~20% of hours)
 	dischargeSet := make(map[int]bool)
 	for _, p := range prices {
-		if p.Price >= p75 {
+		if p.Price >= high {
 			dischargeSet[p.Hour] = true
 		}
 	}
@@ -143,7 +150,7 @@ func percentile(sorted []float64, p float64) float64 {
 	return sorted[lower] + frac*(sorted[upper]-sorted[lower])
 }
 
-// ComputeStats calculates price statistics for the day, including P25/P75 thresholds.
+// ComputeStats calculates price statistics for the day, including P20/P80 thresholds.
 func ComputeStats(prices []redata.HourlyPrice) Stats {
 	if len(prices) == 0 {
 		return Stats{}
@@ -170,8 +177,8 @@ func ComputeStats(prices []redata.HourlyPrice) Stats {
 		MinPrice: minP,
 		MaxPrice: maxP,
 		AvgPrice: sum / float64(len(prices)),
-		P25:      percentile(sorted, 0.25),
-		P75:      percentile(sorted, 0.75),
+		Low:      percentile(sorted, ChargePercentile),
+		High:     percentile(sorted, DischargePercentile),
 	}
 }
 

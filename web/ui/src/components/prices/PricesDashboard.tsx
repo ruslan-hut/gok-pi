@@ -122,13 +122,13 @@ function DayPanel({ label, data }: { label: string; data: DayData }) {
           Min: <strong>{data.stats.min_price_eur_mwh.toFixed(1)}</strong>
         </span>
         <span>
-          P25: <strong>{data.stats.p25_eur_mwh.toFixed(1)}</strong>
+          Low: <strong>{data.stats.low_eur_mwh.toFixed(1)}</strong>
         </span>
         <span>
           Avg: <strong>{data.stats.avg_price_eur_mwh.toFixed(1)}</strong>
         </span>
         <span>
-          P75: <strong>{data.stats.p75_eur_mwh.toFixed(1)}</strong>
+          High: <strong>{data.stats.high_eur_mwh.toFixed(1)}</strong>
         </span>
         <span>
           Max: <strong>{data.stats.max_price_eur_mwh.toFixed(1)}</strong>
@@ -213,24 +213,24 @@ function PriceChart({
         </g>
       ))}
 
-      {/* P25 threshold line — charge below this */}
+      {/* Low threshold line — charge below this */}
       <line
         x1={padding.left}
         x2={width - padding.right}
-        y1={yScale(stats.p25_eur_mwh)}
-        y2={yScale(stats.p25_eur_mwh)}
+        y1={yScale(stats.low_eur_mwh)}
+        y2={yScale(stats.low_eur_mwh)}
         style={{ stroke: "var(--color-success)" }}
         strokeDasharray="4,3"
         strokeWidth="1"
         opacity="0.5"
       />
 
-      {/* P75 threshold line — discharge above this */}
+      {/* High threshold line — discharge above this */}
       <line
         x1={padding.left}
         x2={width - padding.right}
-        y1={yScale(stats.p75_eur_mwh)}
-        y2={yScale(stats.p75_eur_mwh)}
+        y1={yScale(stats.high_eur_mwh)}
+        y2={yScale(stats.high_eur_mwh)}
         style={{ stroke: "var(--color-danger)" }}
         strokeDasharray="4,3"
         strokeWidth="1"
@@ -303,7 +303,7 @@ function PriceChart({
         rx="2"
       />
       <text x={width - 156} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
-        ≤ P25
+        ≤ Low
       </text>
       <rect
         x={width - 120}
@@ -314,7 +314,7 @@ function PriceChart({
         rx="2"
       />
       <text x={width - 106} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
-        ≥ P75
+        ≥ High
       </text>
       <line
         x1={width - 46}
@@ -367,7 +367,7 @@ function ScheduleTable({
               <tr key={key}>
                 <td>
                   <span className={`schedule-badge ${type === "charge" ? "schedule-badge-charge" : "schedule-badge-discharge"}`}>
-                    {type === "charge" ? "CHARGE ≤P25" : "DISCHARGE ≥P75"}
+                    {type === "charge" ? "CHARGE ≤Low" : "DISCHARGE ≥High"}
                   </span>
                 </td>
                 <td>
@@ -385,7 +385,7 @@ function ScheduleTable({
           <div key={key} className="data-card">
             <div className="data-card-header">
               <span className={`schedule-badge ${type === "charge" ? "schedule-badge-charge" : "schedule-badge-discharge"}`}>
-                {type === "charge" ? "CHARGE ≤P25" : "DISCHARGE ≥P75"}
+                {type === "charge" ? "CHARGE ≤Low" : "DISCHARGE ≥High"}
               </span>
             </div>
             <div className="data-card-row">

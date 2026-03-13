@@ -37,7 +37,7 @@ type State struct {
 }
 
 // Previously used fixed Top-N constants (chargePeriods=3, dischargePeriods=3).
-// Now replaced by P25/P75 percentile strategy in the scheduler package —
+// Now replaced by P20/P80 percentile strategy in the scheduler package —
 // the number of charge/discharge hours adapts automatically to the daily price distribution.
 
 type Fetcher struct {
@@ -64,7 +64,7 @@ func (f *Fetcher) GetState() State {
 
 // Run starts the background fetch loop. Blocks until ctx is cancelled.
 func (f *Fetcher) Run(ctx context.Context) {
-	f.log.Info("price fetcher started (P25/P75 percentile strategy)")
+	f.log.Info("price fetcher started (P20/P80 percentile strategy)")
 
 	// Initial fetch
 	f.fetchAll(ctx)

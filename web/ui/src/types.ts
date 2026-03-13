@@ -123,8 +123,8 @@ export interface PriceStats {
   min_price_eur_mwh: number;
   max_price_eur_mwh: number;
   avg_price_eur_mwh: number;
-  p25_eur_mwh: number; // 25th percentile — charge threshold
-  p75_eur_mwh: number; // 75th percentile — discharge threshold
+  low_eur_mwh: number;  // low percentile threshold — charge below this
+  high_eur_mwh: number; // high percentile threshold — discharge above this
 }
 
 export interface DayData {

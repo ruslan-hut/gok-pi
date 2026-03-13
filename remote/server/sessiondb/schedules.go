@@ -9,7 +9,7 @@ import (
 
 // ComputedSchedule is the database representation of a price-computed schedule window.
 // Each record represents a single charge or discharge window for one battery on one day,
-// computed from P25/P75 percentile analysis of PVPC hourly prices.
+// computed from P20/P80 percentile analysis of PVPC hourly prices.
 // Schedules are always valid for exactly one day (00:00–23:59, no cross-midnight windows).
 type ComputedSchedule struct {
 	ID          int64   `db:"id"           json:"id"`
@@ -21,8 +21,8 @@ type ComputedSchedule struct {
 	AvgPrice    float64 `db:"avg_price"    json:"avg_price"`    // average price in window (EUR/MWh)
 	PowerLimit  int     `db:"power_limit"  json:"power_limit"`  // max power in Watts
 	SocLimit    int     `db:"soc_limit"    json:"soc_limit"`    // SoC limit (0-100)
-	P25         float64 `db:"p25"          json:"p25"`          // 25th percentile threshold (charge)
-	P75         float64 `db:"p75"          json:"p75"`          // 75th percentile threshold (discharge)
+	Low         float64 `db:"low"          json:"low"`          // low percentile threshold (charge)
+	High        float64 `db:"high"         json:"high"`         // high percentile threshold (discharge)
 	ComputedAt  string  `db:"computed_at"  json:"computed_at"`  // RFC3339 timestamp
 }
 
@@ -42,8 +42,8 @@ func migrateSchedules(db *sqlx.DB) error {
 			avg_price    REAL    NOT NULL DEFAULT 0,
 			power_limit  INTEGER NOT NULL DEFAULT 2000,
 			soc_limit    INTEGER NOT NULL DEFAULT 100,
-			p25          REAL    NOT NULL DEFAULT 0,
-			p75          REAL    NOT NULL DEFAULT 0,
+			low          REAL    NOT NULL DEFAULT 0,
+			high         REAL    NOT NULL DEFAULT 0,
 			computed_at  TEXT    NOT NULL
 		);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_cs_unique
@@ -70,14 +70,14 @@ func (s *Store) UpsertSchedules(schedules []ComputedSchedule) error {
 
 	stmt, err := tx.Preparex(`
 		INSERT INTO computed_schedules (date, battery_name, type, start_hour, end_hour,
-			avg_price, power_limit, soc_limit, p25, p75, computed_at)
+			avg_price, power_limit, soc_limit, low, high, computed_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(date, battery_name, type, start_hour, end_hour) DO UPDATE SET
 			avg_price   = excluded.avg_price,
 			power_limit = excluded.power_limit,
 			soc_limit   = excluded.soc_limit,
-			p25         = excluded.p25,
-			p75         = excluded.p75,
+			low         = excluded.low,
+			high        = excluded.high,
 			computed_at = excluded.computed_at
 	`)
 	if err != nil {
@@ -88,7 +88,7 @@ func (s *Store) UpsertSchedules(schedules []ComputedSchedule) error {
 	for _, cs := range schedules {
 		if _, err := stmt.Exec(
 			cs.Date, cs.BatteryName, cs.Type, cs.StartHour, cs.EndHour,
-			cs.AvgPrice, cs.PowerLimit, cs.SocLimit, cs.P25, cs.P75, cs.ComputedAt,
+			cs.AvgPrice, cs.PowerLimit, cs.SocLimit, cs.Low, cs.High, cs.ComputedAt,
 		); err != nil {
 			return fmt.Errorf("upsert schedule (date=%s battery=%s %s %d-%d): %w",
 				cs.Date, cs.BatteryName, cs.Type, cs.StartHour, cs.EndHour, err)
@@ -104,7 +104,7 @@ func (s *Store) GetSchedulesByDate(date string) ([]ComputedSchedule, error) {
 	var rows []ComputedSchedule
 	err := s.db.Select(&rows,
 		`SELECT id, date, battery_name, type, start_hour, end_hour,
-		        avg_price, power_limit, soc_limit, p25, p75, computed_at
+		        avg_price, power_limit, soc_limit, low, high, computed_at
 		 FROM computed_schedules WHERE date = ? ORDER BY start_hour`, date)
 	if err != nil {
 		return nil, fmt.Errorf("query schedules for date %s: %w", date, err)

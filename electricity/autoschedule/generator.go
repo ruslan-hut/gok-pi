@@ -46,7 +46,7 @@ func BuildComputedSchedules(batteries []entity.BatteryConfig, dayData *pricefetc
 			continue
 		}
 
-		// Charge windows: buy at prices ≤ P25
+		// Charge windows: buy at prices ≤ P20
 		for _, w := range dayData.Schedule.ChargeWindows {
 			powerLimit := bat.PowerLimit
 			if powerLimit <= 0 {
@@ -61,13 +61,13 @@ func BuildComputedSchedules(batteries []entity.BatteryConfig, dayData *pricefetc
 				AvgPrice:    w.AvgPrice,
 				PowerLimit:  powerLimit,
 				SocLimit:    100,
-				P25:         dayData.Stats.P25,
-				P75:         dayData.Stats.P75,
+				Low:         dayData.Stats.Low,
+				High:         dayData.Stats.High,
 				ComputedAt:  now,
 			})
 		}
 
-		// Discharge windows: sell at prices ≥ P75
+		// Discharge windows: sell at prices ≥ P80
 		for _, w := range dayData.Schedule.DischargeWindows {
 			socLimit := bat.SocLimit
 			if socLimit <= 0 {
@@ -86,8 +86,8 @@ func BuildComputedSchedules(batteries []entity.BatteryConfig, dayData *pricefetc
 				AvgPrice:    w.AvgPrice,
 				PowerLimit:  powerLimit,
 				SocLimit:    socLimit,
-				P25:         dayData.Stats.P25,
-				P75:         dayData.Stats.P75,
+				Low:         dayData.Stats.Low,
+				High:         dayData.Stats.High,
 				ComputedAt:  now,
 			})
 		}
