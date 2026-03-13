@@ -3,6 +3,7 @@ import { fetchPrices, fetchSessions } from "../../api";
 import type { BatterySummary, DayData, PricesState, ScheduleWindow, SessionsResponse } from "../../types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const ACTIVE_POLL_INTERVAL_MS = 30 * 1000; // 30 seconds when sessions are active
 
 export default function PricesDashboard() {
   const [state, setState] = useState<PricesState | null>(null);
@@ -11,6 +12,9 @@ export default function PricesDashboard() {
   const [error, setError] = useState<string>();
   const [sessError, setSessError] = useState<string>();
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const hasActiveSessions = sessData?.summaries?.some(
+    (s) => s.active_charge || s.active_discharge,
+  ) ?? false;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,11 +44,12 @@ export default function PricesDashboard() {
 
   useEffect(() => {
     load();
-    intervalRef.current = setInterval(load, POLL_INTERVAL_MS);
+    const ms = hasActiveSessions ? ACTIVE_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+    intervalRef.current = setInterval(load, ms);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [load]);
+  }, [load, hasActiveSessions]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
