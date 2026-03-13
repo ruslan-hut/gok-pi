@@ -30,6 +30,7 @@
 .price-chart-svg {
   width: 100%;
   max-width: 720px;
+  align-self: center;
   height: auto;
   min-height: 140px;
   background: var(--color-bg-overlay);
