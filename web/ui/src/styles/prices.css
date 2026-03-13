@@ -96,6 +96,29 @@
   box-shadow: 0 1px 4px rgba(248, 113, 113, 0.3);
 }
 
+/* Schedule status badges (active/next) */
+.schedule-status-badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-full);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-family: var(--font-body), sans-serif;
+}
+
+.schedule-status-active {
+  color: var(--color-bg);
+  background: var(--color-warning);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.schedule-status-next {
+  color: var(--color-text-muted);
+  border: 1px solid var(--border-color);
+  background: transparent;
+}
+
 .prices-meta {
   display: flex;
   flex-wrap: wrap;
@@ -126,14 +149,13 @@
 }
 
 /* Card list (mobile alternative to tables) */
-.show-mobile {
-  display: none;
-}
-
 .card-list {
-  display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.show-mobile {
+  display: none;
 }
 
 .data-card {

@@ -50,11 +50,13 @@ type DaySchedule struct {
 
 // Stats holds price statistics for the day.
 type Stats struct {
-	MinPrice float64 `json:"min_price_eur_mwh"`
-	MaxPrice float64 `json:"max_price_eur_mwh"`
-	AvgPrice float64 `json:"avg_price_eur_mwh"`
-	Low      float64 `json:"low_eur_mwh"`  // low percentile threshold — charge below this
-	High     float64 `json:"high_eur_mwh"` // high percentile threshold — discharge above this
+	MinPrice            float64 `json:"min_price_eur_mwh"`
+	MaxPrice            float64 `json:"max_price_eur_mwh"`
+	AvgPrice            float64 `json:"avg_price_eur_mwh"`
+	Low                 float64 `json:"low_eur_mwh"`             // low percentile threshold — charge below this
+	High                float64 `json:"high_eur_mwh"`            // high percentile threshold — discharge above this
+	ChargePercentile    int     `json:"charge_percentile"`       // e.g. 20 (means P20)
+	DischargePercentile int     `json:"discharge_percentile"`    // e.g. 80 (means P80)
 }
 
 // ComputeSchedule analyzes hourly prices using a P20/P80 percentile strategy.
@@ -174,11 +176,13 @@ func ComputeStats(prices []redata.HourlyPrice) Stats {
 	sort.Float64s(sorted)
 
 	return Stats{
-		MinPrice: minP,
-		MaxPrice: maxP,
-		AvgPrice: sum / float64(len(prices)),
-		Low:      percentile(sorted, ChargePercentile),
-		High:     percentile(sorted, DischargePercentile),
+		MinPrice:            minP,
+		MaxPrice:            maxP,
+		AvgPrice:            sum / float64(len(prices)),
+		Low:                 percentile(sorted, ChargePercentile),
+		High:                percentile(sorted, DischargePercentile),
+		ChargePercentile:    int(ChargePercentile * 100),
+		DischargePercentile: int(DischargePercentile * 100),
 	}
 }
 

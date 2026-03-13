@@ -78,9 +78,6 @@ func Open(path string, log *slog.Logger) (*Store, error) {
 }
 
 func migrate(db *sqlx.DB) error {
-	// Drop legacy table that had operating_mode column — all sessions are now manual-only.
-	_, _ = db.Exec(`DROP TABLE IF EXISTS sessions`)
-
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS sessions (
 			id              INTEGER PRIMARY KEY AUTOINCREMENT,

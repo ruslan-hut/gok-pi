@@ -122,13 +122,13 @@ function DayPanel({ label, data }: { label: string; data: DayData }) {
           Min: <strong>{data.stats.min_price_eur_mwh.toFixed(1)}</strong>
         </span>
         <span>
-          Low: <strong>{data.stats.low_eur_mwh.toFixed(1)}</strong>
+          P{data.stats.charge_percentile}: <strong>{data.stats.low_eur_mwh.toFixed(1)}</strong>
         </span>
         <span>
           Avg: <strong>{data.stats.avg_price_eur_mwh.toFixed(1)}</strong>
         </span>
         <span>
-          High: <strong>{data.stats.high_eur_mwh.toFixed(1)}</strong>
+          P{data.stats.discharge_percentile}: <strong>{data.stats.high_eur_mwh.toFixed(1)}</strong>
         </span>
         <span>
           Max: <strong>{data.stats.max_price_eur_mwh.toFixed(1)}</strong>
@@ -144,6 +144,8 @@ function DayPanel({ label, data }: { label: string; data: DayData }) {
       <ScheduleTable
         chargeWindows={data.schedule.charge_windows}
         dischargeWindows={data.schedule.discharge_windows}
+        stats={data.stats}
+        isToday={label === "Today"}
       />
     </div>
   );
@@ -303,7 +305,7 @@ function PriceChart({
         rx="2"
       />
       <text x={width - 156} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
-        ≤ Low
+        ≤ P{stats.charge_percentile}
       </text>
       <rect
         x={width - 120}
@@ -314,7 +316,7 @@ function PriceChart({
         rx="2"
       />
       <text x={width - 106} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
-        ≥ High
+        ≥ P{stats.discharge_percentile}
       </text>
       <line
         x1={width - 46}
@@ -335,9 +337,13 @@ function PriceChart({
 function ScheduleTable({
   chargeWindows,
   dischargeWindows,
+  stats,
+  isToday,
 }: {
   chargeWindows: ScheduleWindow[] | null;
   dischargeWindows: ScheduleWindow[] | null;
+  stats: DayData["stats"];
+  isToday: boolean;
 }) {
   const charge = chargeWindows ?? [];
   const discharge = dischargeWindows ?? [];
@@ -351,8 +357,38 @@ function ScheduleTable({
     ...discharge.map((w, i) => ({ key: `d-${i}`, type: "discharge" as const, w })),
   ];
 
+  // Determine active/next window
+  const nowHour = new Date().getHours();
+  let activeIdx = -1;
+  let nextIdx = -1;
+
+  if (isToday) {
+    for (let i = 0; i < all.length; i++) {
+      const { w } = all[i];
+      if (nowHour >= w.start_hour && nowHour < w.end_hour) {
+        activeIdx = i;
+        break;
+      }
+    }
+    if (activeIdx === -1) {
+      for (let i = 0; i < all.length; i++) {
+        if (all[i].w.start_hour > nowHour) {
+          nextIdx = i;
+          break;
+        }
+      }
+    }
+  } else {
+    // Tomorrow: first window is "next"
+    nextIdx = 0;
+  }
+
+  const chargeLabel = `CHARGE ≤P${stats.charge_percentile}`;
+  const dischargeLabel = `DISCHARGE ≥P${stats.discharge_percentile}`;
+
   return (
     <>
+      {/* Desktop table */}
       <div className="schedule-table hide-mobile">
         <table>
           <thead>
@@ -360,33 +396,41 @@ function ScheduleTable({
               <th>Type</th>
               <th>Window</th>
               <th>Avg Price</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {all.map(({ key, type, w }) => (
+            {all.map(({ key, type, w }, i) => (
               <tr key={key}>
                 <td>
                   <span className={`schedule-badge ${type === "charge" ? "schedule-badge-charge" : "schedule-badge-discharge"}`}>
-                    {type === "charge" ? "CHARGE ≤Low" : "DISCHARGE ≥High"}
+                    {type === "charge" ? chargeLabel : dischargeLabel}
                   </span>
                 </td>
                 <td>
                   {fmt2(w.start_hour)}:00 — {fmt2(w.end_hour)}:00
                 </td>
                 <td>{w.avg_price_eur_mwh.toFixed(1)} EUR/MWh</td>
+                <td>
+                  {i === activeIdx && <span className="schedule-status-badge schedule-status-active">ACTIVE</span>}
+                  {i === nextIdx && <span className="schedule-status-badge schedule-status-next">NEXT</span>}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
+      {/* Mobile cards */}
       <div className="card-list show-mobile">
-        {all.map(({ key, type, w }) => (
+        {all.map(({ key, type, w }, i) => (
           <div key={key} className="data-card">
             <div className="data-card-header">
               <span className={`schedule-badge ${type === "charge" ? "schedule-badge-charge" : "schedule-badge-discharge"}`}>
-                {type === "charge" ? "CHARGE ≤Low" : "DISCHARGE ≥High"}
+                {type === "charge" ? chargeLabel : dischargeLabel}
               </span>
+              {i === activeIdx && <span className="schedule-status-badge schedule-status-active">ACTIVE</span>}
+              {i === nextIdx && <span className="schedule-status-badge schedule-status-next">NEXT</span>}
             </div>
             <div className="data-card-row">
               <span className="data-card-label">Window</span>
