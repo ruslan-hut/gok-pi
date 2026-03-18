@@ -146,7 +146,7 @@ func (f *Fetcher) fetchAll(ctx context.Context) {
 		}
 	}
 
-	nextUpdate := f.computeNextUpdate(now, haveTomorrow || tomorrowData != nil)
+	nextUpdate := f.computeNextUpdate(now, haveToday || todayData != nil, haveTomorrow || tomorrowData != nil)
 
 	f.mu.Lock()
 	if todayData != nil {
@@ -186,7 +186,11 @@ func (f *Fetcher) fetchDay(ctx context.Context, date time.Time) (*DayData, error
 	}, nil
 }
 
-func (f *Fetcher) computeNextUpdate(now time.Time, haveTomorrow bool) time.Time {
+func (f *Fetcher) computeNextUpdate(now time.Time, haveToday, haveTomorrow bool) time.Time {
+	if !haveToday {
+		// Retry frequently when today's prices are missing
+		return now.Add(15 * time.Minute)
+	}
 	if now.Hour() >= 20 && !haveTomorrow {
 		// Retry more frequently when waiting for tomorrow's prices
 		return now.Add(15 * time.Minute)
