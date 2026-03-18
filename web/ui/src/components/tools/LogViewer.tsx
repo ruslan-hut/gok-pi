@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { CopyButton } from "../shared/CopyButton";
 import { Icon } from "../shared/Icon";
 
 interface LogViewerProps {
@@ -29,6 +30,7 @@ export function LogViewer({
   disabled,
 }: LogViewerProps) {
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const getLogText = useCallback(() => logs, [logs]);
 
   // Auto-scroll to bottom when logs update
   useEffect(() => {
@@ -71,43 +73,28 @@ export function LogViewer({
               <option value="agent">Agent Logs</option>
               <option value="updater">Autoupdater Logs</option>
             </select>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
+            <select
+              id="log-lines"
+              value={lines}
+              onChange={(e) => {
+                e.stopPropagation();
+                onLinesChange(Number(e.target.value));
               }}
+              disabled={disabled || loading}
             >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onLinesChange(500);
-                }}
-                disabled={disabled || loading}
-                className={lines === 500 ? "primary" : ""}
-              >
-                500
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onLinesChange(1000);
-                }}
-                disabled={disabled || loading}
-                className={lines === 1000 ? "primary" : ""}
-              >
-                1000
-              </button>
-            </div>
+              <option value={500}>500</option>
+              <option value={1000}>1000</option>
+            </select>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onRefresh();
               }}
               disabled={disabled || loading}
-              className="primary"
+              className="log-viewer-refresh"
+              title="Refresh logs"
             >
-              {loading ? "Loading..." : "Refresh"}
+              <Icon name={loading ? "hourglass_empty" : "refresh"} size={18} />
             </button>
           </div>
         )}
@@ -136,8 +123,11 @@ export function LogViewer({
               <p>Loading logs...</p>
             </div>
           ) : (
-            <div ref={logContainerRef} className="log-viewer-content">
-              {logs || "No logs available"}
+            <div className="text-content-wrapper">
+              <CopyButton getText={getLogText} />
+              <div ref={logContainerRef} className="log-viewer-content">
+                {logs || "No logs available"}
+              </div>
             </div>
           )}
         </>

@@ -1,3 +1,5 @@
+import { useCallback } from "react";
+import { CopyButton } from "../shared/CopyButton";
 import { Icon } from "../shared/Icon";
 
 interface StatusMessagePreviewProps {
@@ -83,19 +85,29 @@ export function StatusMessagePreview({
         </div>
       </div>
       {showStatusMessage && (
-        <div className="status-message-content">
-          {lastStatusMessage
-            ? (() => {
-                try {
-                  const parsed = JSON.parse(lastStatusMessage);
-                  return JSON.stringify(parsed, null, 2);
-                } catch {
-                  return lastStatusMessage;
-                }
-              })()
-            : "No status messages received yet"}
-        </div>
+        <StatusMessageContent message={lastStatusMessage} />
       )}
     </section>
+  );
+}
+
+function formatMessage(raw: string): string {
+  if (!raw) return "No status messages received yet";
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
+function StatusMessageContent({ message }: { message: string }) {
+  const getText = useCallback(() => formatMessage(message), [message]);
+  return (
+    <div className="text-content-wrapper">
+      <CopyButton getText={getText} />
+      <div className="status-message-content">
+        {formatMessage(message)}
+      </div>
+    </div>
   );
 }

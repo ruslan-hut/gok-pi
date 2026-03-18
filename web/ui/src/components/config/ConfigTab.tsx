@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DeviceSettings } from "./DeviceSettings";
 import { BatteryConfigForm } from "./BatteryConfigForm";
 import { ScheduleConfigForm } from "./ScheduleConfigForm";
 import { ConfigActions } from "./ConfigActions";
+import { CopyButton } from "../shared/CopyButton";
 import { Icon } from "../shared/Icon";
 import { formatConfigDraft } from "../../hooks/useConfig";
 import type { AgentConfig, BatteryConfig, ScheduleConfig } from "../../types";
@@ -46,6 +47,7 @@ export function ConfigTab({
 }: ConfigTabProps) {
   const [showJson, setShowJson] = useState(false);
   const [localConfig, setLocalConfig] = useState<AgentConfig | null>(null);
+  const getDraftText = useCallback(() => draft, [draft]);
 
   // Parse draft into local config state
   useEffect(() => {
@@ -258,13 +260,16 @@ export function ConfigTab({
 
         </div>
       ) : (
-        <textarea
-          className="config-editor"
-          value={draft}
-          onChange={(event) => onDraftChange(event.target.value)}
-          disabled={saving}
-          spellCheck={false}
-        />
+        <div className="text-content-wrapper">
+          <CopyButton getText={getDraftText} />
+          <textarea
+            className="config-editor"
+            value={draft}
+            onChange={(event) => onDraftChange(event.target.value)}
+            disabled={saving}
+            spellCheck={false}
+          />
+        </div>
       )}
 
       {!readonly && (
