@@ -32,6 +32,7 @@ export interface AgentSummary {
 
 export interface BatteryConfig {
   name: string;
+  driver?: string;
   url: string;
   token: string;
   enabled: boolean;

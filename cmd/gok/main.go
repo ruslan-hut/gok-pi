@@ -17,9 +17,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	apiclient "gok-pi/battery/api-client"
 	"gok-pi/battery/charger"
 	"gok-pi/battery/discharger"
+	"gok-pi/battery/driver"
+	_ "gok-pi/battery/driver/sonnen"
 	"gok-pi/battery/entity"
 	"gok-pi/internal/config"
 	"gok-pi/internal/lib/logger"
@@ -416,17 +417,19 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 	for name, cfg := range desired {
 		entry, ok := m.getEntry(name)
 		if ok {
-			// Check if critical fields (URL or token) have changed, which require worker restart
+			// Check if critical fields (URL, token, or driver) have changed, which require worker restart
 			urlChanged := entry.config.Url != cfg.Url
 			tokenChanged := entry.config.Token != cfg.Token
+			driverChanged := entry.config.Driver != cfg.Driver
 
-			// If URL or token changed, we must restart workers to use the new ApiClient
-			if urlChanged || tokenChanged {
+			// If URL, token, or driver changed, we must restart workers with a new driver instance
+			if urlChanged || tokenChanged || driverChanged {
 				log.With(
 					slog.String("battery", name),
 					slog.Bool("url_changed", urlChanged),
 					slog.Bool("token_changed", tokenChanged),
-				).Info("restarting workers (URL or token changed)")
+					slog.Bool("driver_changed", driverChanged),
+				).Info("restarting workers (connection config changed)")
 				if removed, ok := m.remove(name); ok {
 					if removed.dischargerWorker != nil {
 						removed.dischargerWorker.Stop()
@@ -521,7 +524,10 @@ func (m *workerManager) remove(name string) (*workerEntry, bool) {
 
 func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.BatteryConfig, schedules []entity.Schedule, timezone string, log *slog.Logger) (*workerEntry, error) {
 	workerLog := log.With(slog.String("battery", battery.Name))
-	api := apiclient.New(battery.Url, battery.Token, workerLog)
+	api, err := driver.New(battery.Driver, battery, workerLog)
+	if err != nil {
+		return nil, fmt.Errorf("creating battery driver: %w", err)
+	}
 
 	entry := &workerEntry{
 		config: battery,
@@ -684,7 +690,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 
 // monitorBattery continuously monitors battery status and emits data to observers
 // This ensures enabled batteries are always monitored, even without schedules
-func monitorBattery(ctx context.Context, name string, api *apiclient.ApiClient, log *slog.Logger) {
+func monitorBattery(ctx context.Context, name string, api driver.Driver, log *slog.Logger) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 

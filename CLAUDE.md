@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-GOK-Pi is a Go-based service for automated Sonnen battery discharge/charge control with optional remote monitoring and control. It manages battery systems via Sonnen's API, executes scheduled operations, and exposes Prometheus metrics.
+GOK-Pi is a Go-based service for automated battery discharge/charge control with optional remote monitoring and control. It uses a driver-based architecture to support multiple battery vendors (currently Sonnen). It manages battery systems via vendor APIs, executes scheduled operations, and exposes Prometheus metrics.
 
 ## Build and Run Commands
 
@@ -53,9 +53,10 @@ Three main executables:
 - **Agent Updater** (`cmd/agentupdater`) - Auto-updates agent binary by comparing SHA-256 hashes
 
 Key packages:
+- `battery/driver` - Battery driver interface and registry; drivers self-register via `init()`
+- `battery/driver/sonnen` - Sonnen battery API driver implementation
 - `battery/discharger` - Discharge control with schedule windows and power/SoC limits
 - `battery/charger` - Charge control logic
-- `battery/api-client` - Sonnen API HTTP client with retry logic
 - `internal/remote/wsclient` - Agent-side WebSocket client with reconnection backoff
 - `remote/server` - Control server WebSocket handlers, config store, UI serving
 - `metrics/observers` - Prometheus gauges and telemetry snapshots
@@ -64,7 +65,7 @@ Key packages:
 ## Configuration
 
 Config file: `config.yml` (YAML format)
-- `batteries[]` - Battery endpoints with URL, token, capacity_limit
+- `batteries[]` - Battery endpoints with driver, URL, token, capacity_limit
 - `schedules[]` - Time-based discharge/charge windows with power_limit and soc_limit
 - `remote_control` - WebSocket connection to control server (enabled, server_url, shared_secret)
 - `metrics` - Prometheus endpoint settings
@@ -78,6 +79,19 @@ Environment variables override config values via cleanenv tags.
 3. If remote_control enabled: WebSocket streams telemetry to control server, receives commands
 4. Control server aggregates telemetry, broadcasts to web UI clients, routes commands to agents
 5. Config updates from UI persist to agent's local `config.yml` via optimistic locking
+
+## Battery Drivers
+
+The agent uses a driver-based architecture (`battery/driver`) to support multiple battery vendors.
+Each driver implements the `driver.Driver` interface and self-registers via `init()`.
+
+Adding a new driver:
+1. Create package `battery/driver/<name>/` implementing `driver.Driver`
+2. Call `driver.Register("<name>", constructor)` in its `init()`
+3. Add blank import `_ "gok-pi/battery/driver/<name>"` in `cmd/gok/main.go`
+4. Add corresponding `<option>` in the Web UI driver select (`web/ui/src/components/config/BatteryConfigForm.tsx`)
+
+The driver options in the UI must match the registered driver names in the backend.
 
 ## Development Notes
 

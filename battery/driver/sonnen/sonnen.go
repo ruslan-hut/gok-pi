@@ -1,8 +1,4 @@
-// Package apiclient provides an HTTP client for the Sonnen battery REST API.
-//
-// It wraps all battery control operations (status polling, charge/discharge control,
-// operating mode switching) behind a retry-capable HTTP client. Each request uses
-// a 5-second timeout and will retry up to 5 times with linear backoff (3s, 6s, 9s, 12s, 15s).
+// Package sonnen implements the battery driver for the Sonnen battery REST API.
 //
 // Sonnen API endpoints used:
 //   - GET  /status                           → battery state (SoC, capacity, power, mode)
@@ -12,7 +8,7 @@
 //
 // Operating modes: "1" = manual (agent-controlled), "2" = automatic (battery self-managed).
 // Auth is via "Auth-Token" header using the token from config.yml.
-package apiclient
+package sonnen
 
 import (
 	"bytes"
@@ -20,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gok-pi/battery/driver"
 	"gok-pi/battery/entity"
 	"gok-pi/internal/lib/sl"
 	"io"
@@ -31,34 +28,38 @@ import (
 	"time"
 )
 
+func init() {
+	driver.Register("sonnen", New)
+}
+
 const (
-	maxRetry     = 5             // Maximum number of HTTP request attempts
-	retryStep    = 3             // Linear backoff step in seconds: attempt_number * retryStep
-	opModeAuto   = "2"           // Sonnen operating mode: automatic (battery self-managed)
-	opModeManual = "1"           // Sonnen operating mode: manual (agent-controlled discharge/charge)
+	maxRetry     = 5   // Maximum number of HTTP request attempts
+	retryStep    = 3   // Linear backoff step in seconds: attempt_number * retryStep
+	opModeAuto   = "2" // Sonnen operating mode: automatic (battery self-managed)
+	opModeManual = "1" // Sonnen operating mode: manual (agent-controlled discharge/charge)
 )
 
 var httpClient = &http.Client{}
 
-type ApiClient struct {
+type Driver struct {
 	url   string
 	token string
 	log   *slog.Logger
 }
 
-func New(url, token string, log *slog.Logger) *ApiClient {
+func New(cfg entity.BatteryConfig, log *slog.Logger) (driver.Driver, error) {
 	log.With(
-		slog.String("url", url),
-		sl.Secret("token", token),
-	).Info("creating api client")
-	return &ApiClient{
-		url:   url,
-		token: token,
-		log:   log.With(sl.Module("client")),
-	}
+		slog.String("url", cfg.Url),
+		sl.Secret("token", cfg.Token),
+	).Info("creating sonnen api client")
+	return &Driver{
+		url:   cfg.Url,
+		token: cfg.Token,
+		log:   log.With(sl.Module("sonnen")),
+	}, nil
 }
 
-func (c *ApiClient) Status() (*entity.SystemStatus, error) {
+func (c *Driver) Status() (*entity.SystemStatus, error) {
 	body, err := c.requestWithRetry(http.MethodGet, nil, c.url, "status")
 	if err != nil {
 		return nil, err
@@ -70,47 +71,41 @@ func (c *ApiClient) Status() (*entity.SystemStatus, error) {
 	return status, nil
 }
 
-func (c *ApiClient) StartDischarge(power int) error {
+func (c *Driver) StartDischarge(power int) error {
 	_, err := c.requestWithRetry(http.MethodPost, nil, c.url, "setpoint", "discharge", fmt.Sprintf("%d", power))
 	return err
 }
 
-func (c *ApiClient) StopDischarge() error {
+func (c *Driver) StopDischarge() error {
 	_, err := c.requestWithRetry(http.MethodPost, nil, c.url, "setpoint", "discharge", "0")
 	return err
 }
 
-func (c *ApiClient) StartCharge(power int) error {
+func (c *Driver) StartCharge(power int) error {
 	_, err := c.requestWithRetry(http.MethodPost, nil, c.url, "setpoint", "charge", fmt.Sprintf("%d", power))
 	return err
 }
 
-func (c *ApiClient) StopCharge() error {
+func (c *Driver) StopCharge() error {
 	_, err := c.requestWithRetry(http.MethodPost, nil, c.url, "setpoint", "charge", "0")
 	return err
 }
 
-// SwitchOperatingModeToManual switches the operating mode of the API client to manual.
-// It returns nil if the current mode is already set to manual, otherwise it sends a request to change the operating mode to manual.
-func (c *ApiClient) SwitchOperatingModeToManual(currentMode string) error {
+func (c *Driver) SwitchOperatingModeToManual(currentMode string) error {
 	if currentMode == opModeManual {
 		return nil
 	}
 	return c.doRequestChangeConfig("EM_OperatingMode", opModeManual)
 }
 
-// SwitchOperatingModeToAuto switches the operating mode of the API client to automatic.
-// It sends a request to change the operating mode to automatic.
-func (c *ApiClient) SwitchOperatingModeToAuto(currentMode string) error {
+func (c *Driver) SwitchOperatingModeToAuto(currentMode string) error {
 	if currentMode == opModeAuto {
 		return nil
 	}
 	return c.doRequestChangeConfig("EM_OperatingMode", opModeAuto)
 }
 
-// fullPath constructs a full URL by joining the base URL with path segments.
-// It properly handles URL path joining to avoid issues with double slashes or missing slashes.
-func (c *ApiClient) fullPath(params ...string) string {
+func (c *Driver) fullPath(params ...string) string {
 	if len(params) == 0 {
 		return ""
 	}
@@ -120,22 +115,17 @@ func (c *ApiClient) fullPath(params ...string) string {
 		return baseURL
 	}
 
-	// Parse the base URL to ensure proper joining
 	u, err := url.Parse(baseURL)
 	if err != nil {
-		// If parsing fails, fall back to simple string joining
 		return strings.Join(params, "/")
 	}
 
-	// Join path segments properly using path.Join, then append to base path
 	pathSegments := params[1:]
 	joinedPath := path.Join(pathSegments...)
 
-	// Append to existing path, ensuring proper slash handling
 	if u.Path == "" {
 		u.Path = "/" + joinedPath
 	} else {
-		// Remove trailing slash from base path if present, then add joined path
 		basePath := strings.TrimSuffix(u.Path, "/")
 		u.Path = basePath + "/" + joinedPath
 	}
@@ -143,15 +133,7 @@ func (c *ApiClient) fullPath(params ...string) string {
 	return u.String()
 }
 
-// requestWithRetry sends an HTTP request with retry logic.
-// It takes in the HTTP method, request body data, and optional parameters strings.
-// It returns the response body if successful or an error if the request failed after the maximum number of retries.
-// If the request body data is not nil, it converts the data into JSON format.
-// If marshalling the data fails, it returns an error.
-// It retries the request up to a maximum number of times, with a delay between each retry.
-// The maximum number of retries and the delay between retries are defined by constants.
-// After the maximum number of retries, it returns an error indicating the request failure.
-func (c *ApiClient) requestWithRetry(method string, data interface{}, params ...string) ([]byte, error) {
+func (c *Driver) requestWithRetry(method string, data interface{}, params ...string) ([]byte, error) {
 	path := c.fullPath(params...)
 	log := c.log.With(
 		slog.String("url", path),
@@ -180,7 +162,7 @@ func (c *ApiClient) requestWithRetry(method string, data interface{}, params ...
 	return nil, fmt.Errorf("request failed after %d retries", maxRetry)
 }
 
-func (c *ApiClient) doRequest(method, url string, reader io.Reader) ([]byte, error) {
+func (c *Driver) doRequest(method, url string, reader io.Reader) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -231,13 +213,7 @@ func (c *ApiClient) doRequest(method, url string, reader io.Reader) ([]byte, err
 	return body, nil
 }
 
-// doRequestChangeConfig sends a request to change the configuration of the API client.
-// It takes in a parameter name and its corresponding value as input strings.
-// It returns nil if the request is successful, otherwise it returns an error.
-// The request is sent as a PUT method to the "configurations" endpoint with the specified parameter and value in the request body.
-// The request is made with a timeout of 5 seconds.
-// If the request fails with a status code of 400 or higher, an error is returned.
-func (c *ApiClient) doRequestChangeConfig(parameter, value string) error {
+func (c *Driver) doRequestChangeConfig(parameter, value string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

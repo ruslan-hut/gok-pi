@@ -2,6 +2,7 @@ package entity
 
 type BatteryConfig struct {
 	Name          string `yaml:"name" json:"name" env-default:"battery1"`
+	Driver        string `yaml:"driver" json:"driver" env-default:"sonnen"`
 	Url           string `yaml:"url" json:"url" env-default:"https://example.battery/api"`
 	Token         string `yaml:"token" json:"token" env-default:"auth-token"`
 	Enabled       bool   `yaml:"enabled" json:"enabled" env-default:"true"`

@@ -70,6 +70,8 @@ export function BatteryConfigForm({
       </div>
       {collapsed && (
         <div className="config-item-summary">
+          {battery.driver || "sonnen"}
+          {" · "}
           {battery.url?.replace(/^https?:\/\//, "") || "No URL"}
           {" · "}
           {battery.capacity_limit > 0
@@ -92,6 +94,20 @@ export function BatteryConfigForm({
               required
               placeholder="battery-1"
             />
+          </div>
+          <div className="form-field">
+            <label htmlFor={`battery-driver-${index}`}>
+              Driver
+            </label>
+            {/* Available options must match registered driver names in battery/driver/ (backend). */}
+            <select
+              id={`battery-driver-${index}`}
+              value={battery.driver || "sonnen"}
+              onChange={(e) => onChange({ ...battery, driver: e.target.value })}
+              disabled={disabled}
+            >
+              <option value="sonnen">Sonnen</option>
+            </select>
           </div>
           <div className="form-field">
             <label htmlFor={`battery-url-${index}`}>
