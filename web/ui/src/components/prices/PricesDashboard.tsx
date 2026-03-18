@@ -75,7 +75,7 @@ export default function PricesDashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {loading && !state && !sessData && (
+      {loading && !state && !todaySess && (
         <div className="config-loading">
           <div className="spinner" />
           <span>Loading prices...</span>
