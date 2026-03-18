@@ -63,42 +63,64 @@ func (f *Fetcher) GetState() State {
 }
 
 // Run starts the background fetch loop. Blocks until ctx is cancelled.
+// The loop uses adaptive scheduling: it sleeps until the next meaningful
+// update time computed by computeNextUpdate, avoiding redundant API calls
+// when data is already loaded.
 func (f *Fetcher) Run(ctx context.Context) {
 	f.log.Info("price fetcher started (P20/P80 percentile strategy)")
 
-	// Initial fetch
-	f.fetchAll(ctx)
-
-	ticker := time.NewTicker(15 * time.Minute)
-	defer ticker.Stop()
-
 	for {
+		f.fetchAll(ctx)
+
+		f.mu.RLock()
+		nextUpdate := f.state.NextUpdate
+		f.mu.RUnlock()
+
+		delay := time.Until(nextUpdate)
+		if delay < time.Minute {
+			delay = time.Minute
+		}
+		f.log.Debug("next price fetch scheduled", slog.Time("at", nextUpdate), slog.Duration("in", delay))
+
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			f.log.Info("price fetcher stopped")
 			return
-		case <-ticker.C:
-			f.fetchAll(ctx)
+		case <-timer.C:
 		}
 	}
 }
 
 func (f *Fetcher) fetchAll(ctx context.Context) {
 	now := f.madridNow()
+	todayStr := now.Format("2006-01-02")
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	tomorrow := today.Add(24 * time.Hour)
 
 	var lastErr string
 
-	todayData, err := f.fetchDay(ctx, today)
-	if err != nil {
-		lastErr = fmt.Sprintf("today: %s", err)
-		f.log.Warn("failed to fetch today's prices", slog.Any("error", err))
+	// Skip fetching today's prices if we already have them for the current date.
+	// Prices don't change within a day, so re-fetching is redundant.
+	f.mu.RLock()
+	haveToday := f.state.Today != nil && f.state.Today.Date == todayStr
+	haveTomorrow := f.state.Tomorrow != nil && f.state.Tomorrow.Date == tomorrow.Format("2006-01-02")
+	f.mu.RUnlock()
+
+	var todayData *DayData
+	if !haveToday {
+		var err error
+		todayData, err = f.fetchDay(ctx, today)
+		if err != nil {
+			lastErr = fmt.Sprintf("today: %s", err)
+			f.log.Warn("failed to fetch today's prices", slog.Any("error", err))
+		}
 	}
 
 	var tomorrowData *DayData
-	// Only try to fetch tomorrow after 20:00 CET
-	if now.Hour() >= 20 {
+	// Only try to fetch tomorrow after 20:00 CET, and only if we don't have it yet
+	if now.Hour() >= 20 && !haveTomorrow {
 		td, err := f.fetchDay(ctx, tomorrow)
 		if err != nil {
 			if !errors.Is(err, redata.ErrNoData) {
@@ -117,10 +139,9 @@ func (f *Fetcher) fetchAll(ctx context.Context) {
 		}
 	}
 
-	nextUpdate := f.computeNextUpdate(now, tomorrowData != nil)
+	nextUpdate := f.computeNextUpdate(now, haveTomorrow || tomorrowData != nil)
 
 	f.mu.Lock()
-	// Keep existing data if new fetch failed
 	if todayData != nil {
 		f.state.Today = todayData
 	}
@@ -128,7 +149,7 @@ func (f *Fetcher) fetchAll(ctx context.Context) {
 		f.state.Tomorrow = tomorrowData
 	}
 	// Clear stale tomorrow data if it's now today
-	if f.state.Tomorrow != nil && f.state.Tomorrow.Date == today.Format("2006-01-02") {
+	if f.state.Tomorrow != nil && f.state.Tomorrow.Date == todayStr {
 		f.state.Tomorrow = nil
 	}
 	f.state.LastUpdated = time.Now().UTC()
