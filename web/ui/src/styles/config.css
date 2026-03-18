@@ -44,10 +44,12 @@
 }
 
 .config-editor {
+  width: 100%;
   min-height: 220px;
   font-family: var(--font-mono), monospace;
   line-height: 1.4;
   resize: vertical;
+  box-sizing: border-box;
 }
 
 .config-actions {

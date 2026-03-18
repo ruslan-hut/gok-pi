@@ -6,8 +6,8 @@
 
 .copy-btn {
   position: absolute;
-  top: var(--space-sm);
-  right: var(--space-sm);
+  top: var(--space-md);
+  right: calc(var(--space-md) + 12px);
   z-index: 1;
   display: inline-flex;
   align-items: center;
@@ -68,6 +68,10 @@
   justify-content: flex-end;
 }
 
+.log-viewer-selects {
+  display: contents;
+}
+
 .log-viewer-refresh {
   display: inline-flex;
   align-items: center;
@@ -103,10 +107,19 @@
   }
 
   .log-viewer-controls {
+    flex-wrap: wrap;
     gap: var(--space-sm);
   }
 
-  .log-viewer-controls select {
+  .log-viewer-selects {
+    display: flex;
+    order: 1;
+    gap: var(--space-sm);
+    width: 100%;
+  }
+
+  .log-viewer-selects select {
+    flex: 1;
     min-width: 0;
   }
 }

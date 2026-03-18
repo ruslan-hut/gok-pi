@@ -134,9 +134,9 @@ func (c *Driver) fullPath(params ...string) string {
 }
 
 func (c *Driver) requestWithRetry(method string, data interface{}, params ...string) ([]byte, error) {
-	path := c.fullPath(params...)
+	reqPath := c.fullPath(params...)
 	log := c.log.With(
-		slog.String("url", path),
+		slog.String("url", reqPath),
 		slog.String("method", method),
 	)
 	var body []byte
@@ -150,7 +150,7 @@ func (c *Driver) requestWithRetry(method string, data interface{}, params ...str
 	}
 
 	for i := 0; i < maxRetry; i++ {
-		responseBody, err := c.doRequest(method, path, bytes.NewReader(body))
+		responseBody, err := c.doRequest(method, reqPath, bytes.NewReader(body))
 		if err == nil {
 			return responseBody, nil
 		}
@@ -217,12 +217,12 @@ func (c *Driver) doRequestChangeConfig(parameter, value string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	url := c.fullPath(c.url, "configurations")
+	reqPath := c.fullPath(c.url, "configurations")
 	reader := strings.NewReader(fmt.Sprintf(`%s=%s`, parameter, value))
 
 	var err error
 	log := c.log.With(
-		slog.String("url", url),
+		slog.String("url", reqPath),
 		sl.Secret("token", c.token),
 		slog.String("method", "PUT"),
 		slog.String(parameter, value),
@@ -237,7 +237,7 @@ func (c *Driver) doRequestChangeConfig(parameter, value string) error {
 		}
 	}()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, reader)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, reqPath, reader)
 	if err != nil {
 		return err
 	}

@@ -61,30 +61,32 @@ export function LogViewer({
         </button>
         {isOpen && (
           <div className="log-viewer-controls">
-            <select
-              id="log-stream"
-              value={stream}
-              onChange={(e) => {
-                e.stopPropagation();
-                onStreamChange(e.target.value);
-              }}
-              disabled={disabled || loading}
-            >
-              <option value="agent">Agent Logs</option>
-              <option value="updater">Autoupdater Logs</option>
-            </select>
-            <select
-              id="log-lines"
-              value={lines}
-              onChange={(e) => {
-                e.stopPropagation();
-                onLinesChange(Number(e.target.value));
-              }}
-              disabled={disabled || loading}
-            >
-              <option value={500}>500</option>
-              <option value={1000}>1000</option>
-            </select>
+            <div className="log-viewer-selects">
+              <select
+                id="log-stream"
+                value={stream}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onStreamChange(e.target.value);
+                }}
+                disabled={disabled || loading}
+              >
+                <option value="agent">Agent Logs</option>
+                <option value="updater">Autoupdater Logs</option>
+              </select>
+              <select
+                id="log-lines"
+                value={lines}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onLinesChange(Number(e.target.value));
+                }}
+                disabled={disabled || loading}
+              >
+                <option value={500}>500</option>
+                <option value={1000}>1000</option>
+              </select>
+            </div>
             <button
               onClick={(e) => {
                 e.stopPropagation();
