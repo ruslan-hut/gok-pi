@@ -9,9 +9,12 @@ package pricefetcher
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -41,18 +44,22 @@ type State struct {
 // the number of charge/discharge hours adapts automatically to the daily price distribution.
 
 type Fetcher struct {
-	client *redata.Client
-	log    *slog.Logger
+	client    *redata.Client
+	log       *slog.Logger
+	cachePath string
 
 	mu    sync.RWMutex
 	state State
 }
 
-func New(log *slog.Logger) *Fetcher {
-	return &Fetcher{
-		client: redata.NewClient(log),
-		log:    log.With(slog.String("component", "price-fetcher")),
+func New(log *slog.Logger, cachePath string) *Fetcher {
+	f := &Fetcher{
+		client:    redata.NewClient(log),
+		log:       log.With(slog.String("component", "price-fetcher")),
+		cachePath: cachePath,
 	}
+	f.loadCache()
+	return f
 }
 
 // GetState returns a snapshot of the current price data.
@@ -156,6 +163,10 @@ func (f *Fetcher) fetchAll(ctx context.Context) {
 	f.state.LastError = lastErr
 	f.state.NextUpdate = nextUpdate
 	f.mu.Unlock()
+
+	if todayData != nil || tomorrowData != nil {
+		f.saveCache()
+	}
 }
 
 func (f *Fetcher) fetchDay(ctx context.Context, date time.Time) (*DayData, error) {
@@ -196,4 +207,85 @@ func (f *Fetcher) madridNow() time.Time {
 		loc = time.FixedZone("CET", 3600)
 	}
 	return time.Now().In(loc)
+}
+
+// priceCache is the on-disk format for persisted price data.
+type priceCache struct {
+	Today    *DayData `json:"today,omitempty"`
+	Tomorrow *DayData `json:"tomorrow,omitempty"`
+}
+
+func (f *Fetcher) loadCache() {
+	if f.cachePath == "" {
+		return
+	}
+	data, err := os.ReadFile(f.cachePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			f.log.Warn("failed to read price cache", slog.Any("error", err))
+		}
+		return
+	}
+	var cache priceCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		f.log.Warn("failed to parse price cache", slog.Any("error", err))
+		return
+	}
+
+	now := f.madridNow()
+	todayStr := now.Format("2006-01-02")
+	tomorrowStr := now.Add(24 * time.Hour).Format("2006-01-02")
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Only restore data that is still current
+	if cache.Today != nil && cache.Today.Date == todayStr {
+		f.state.Today = cache.Today
+		f.log.Info("restored today's prices from cache")
+	}
+	if cache.Tomorrow != nil && cache.Tomorrow.Date == tomorrowStr {
+		f.state.Tomorrow = cache.Tomorrow
+		f.log.Info("restored tomorrow's prices from cache")
+	} else if cache.Tomorrow != nil && cache.Tomorrow.Date == todayStr {
+		// Yesterday's "tomorrow" is now today
+		f.state.Today = cache.Tomorrow
+		f.log.Info("restored today's prices from yesterday's tomorrow cache")
+	}
+}
+
+func (f *Fetcher) saveCache() {
+	if f.cachePath == "" {
+		return
+	}
+	f.mu.RLock()
+	cache := priceCache{
+		Today:    f.state.Today,
+		Tomorrow: f.state.Tomorrow,
+	}
+	f.mu.RUnlock()
+
+	if cache.Today == nil && cache.Tomorrow == nil {
+		return
+	}
+
+	data, err := json.Marshal(cache)
+	if err != nil {
+		f.log.Warn("failed to marshal price cache", slog.Any("error", err))
+		return
+	}
+
+	if err := os.MkdirAll(filepath.Dir(f.cachePath), 0o755); err != nil {
+		f.log.Warn("failed to create cache directory", slog.Any("error", err))
+		return
+	}
+
+	tmp := f.cachePath + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		f.log.Warn("failed to write price cache", slog.Any("error", err))
+		return
+	}
+	if err := os.Rename(tmp, f.cachePath); err != nil {
+		f.log.Warn("failed to rename price cache", slog.Any("error", err))
+	}
 }

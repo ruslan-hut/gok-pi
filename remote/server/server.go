@@ -83,7 +83,7 @@ func New(cfg Config, log *slog.Logger) *Server {
 		log.With(slog.String("path", sessionDBPath)).Info("session database opened")
 	}
 
-	prices := pricefetcher.New(log)
+	prices := pricefetcher.New(log, "data/prices-cache.json")
 
 	var sessions *SessionTracker
 	if sessDB != nil {
