@@ -192,10 +192,17 @@ export async function fetchPrices(): Promise<PricesState> {
   return (await res.json()) as PricesState;
 }
 
-export async function fetchSessions(agentId?: string, hours?: number): Promise<SessionsResponse> {
+export async function fetchSessions(opts?: {
+  agentId?: string;
+  hours?: number;
+  since?: string;
+  until?: string;
+}): Promise<SessionsResponse> {
   const params = new URLSearchParams();
-  if (agentId) params.set("agent_id", agentId);
-  if (hours) params.set("hours", hours.toString());
+  if (opts?.agentId) params.set("agent_id", opts.agentId);
+  if (opts?.since) params.set("since", opts.since);
+  if (opts?.until) params.set("until", opts.until);
+  if (opts?.hours) params.set("hours", opts.hours.toString());
   const qs = params.toString();
   const res = await fetch(`/api/sessions${qs ? `?${qs}` : ""}`);
   if (!res.ok) {

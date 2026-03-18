@@ -5,21 +5,32 @@ import type { BatterySummary, DayData, PricesState, ScheduleWindow, SessionsResp
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const ACTIVE_POLL_INTERVAL_MS = 30 * 1000; // 30 seconds when sessions are active
 
+function dayBounds(daysAgo: number): { since: string; until: string } {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - daysAgo);
+  const since = d.toISOString();
+  const next = new Date(d);
+  next.setDate(next.getDate() + 1);
+  const until = next.toISOString();
+  return { since, until };
+}
+
 export default function PricesDashboard() {
   const [state, setState] = useState<PricesState | null>(null);
-  const [sessData, setSessData] = useState<SessionsResponse | null>(null);
+  const [todaySess, setTodaySess] = useState<SessionsResponse | null>(null);
+  const [yesterdaySess, setYesterdaySess] = useState<SessionsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [sessError, setSessError] = useState<string>();
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
-  const hasActiveSessions = sessData?.summaries?.some(
+  const hasActiveSessions = todaySess?.summaries?.some(
     (s) => s.active_charge || s.active_discharge,
   ) ?? false;
 
   const load = useCallback(async () => {
     setLoading(true);
 
-    // Fetch prices and sessions independently
     const pricesPromise = fetchPrices()
       .then((data) => {
         setState(data);
@@ -29,16 +40,27 @@ export default function PricesDashboard() {
         setError(err instanceof Error ? err.message : "Failed to fetch prices");
       });
 
-    const sessionsPromise = fetchSessions()
+    const today = dayBounds(0);
+    const yesterday = dayBounds(1);
+
+    const todayPromise = fetchSessions({ since: today.since })
       .then((data) => {
-        setSessData(data);
+        setTodaySess(data);
         setSessError(undefined);
       })
       .catch((err) => {
         setSessError(err instanceof Error ? err.message : "Failed to fetch sessions");
       });
 
-    await Promise.all([pricesPromise, sessionsPromise]);
+    const yesterdayPromise = fetchSessions({ since: yesterday.since, until: yesterday.until })
+      .then((data) => {
+        setYesterdaySess(data);
+      })
+      .catch(() => {
+        // yesterday error is not critical
+      });
+
+    await Promise.all([pricesPromise, todayPromise, yesterdayPromise]);
     setLoading(false);
   }, []);
 
@@ -88,8 +110,11 @@ export default function PricesDashboard() {
         </>
       )}
       {sessError && <div className="config-error">{sessError}</div>}
-      {sessData && (
-        <SessionsPanel summaries={sessData.summaries} />
+      {todaySess && (
+        <SessionsPanel label="Today" summaries={todaySess.summaries} />
+      )}
+      {yesterdaySess && yesterdaySess.summaries.length > 0 && (
+        <SessionsPanel label="Yesterday" summaries={yesterdaySess.summaries} />
       )}
     </div>
   );
@@ -448,22 +473,24 @@ function ScheduleTable({
 }
 
 function SessionsPanel({
+  label,
   summaries,
 }: {
+  label: string;
   summaries: BatterySummary[];
 }) {
   if (summaries.length === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        <h4>Battery Sessions (48h)</h4>
-        <div className="config-empty">No sessions recorded yet.</div>
+        <h4>Sessions — {label}</h4>
+        <div className="config-empty">No sessions recorded.</div>
       </div>
     );
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      <h4>Battery Sessions (48h)</h4>
+      <h4>Sessions — {label}</h4>
 
       <div className="schedule-table hide-mobile">
         <table>

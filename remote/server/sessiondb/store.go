@@ -181,16 +181,25 @@ func (s *Store) GetOpenSessions() ([]SessionRecord, error) {
 
 // GetSummaries returns per-battery aggregated data for the last N hours.
 func (s *Store) GetSummaries(agentID string, hours int) ([]BatterySummary, error) {
-	cutoff := time.Now().UTC().Add(-time.Duration(hours) * time.Hour).Format(time.RFC3339)
+	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
+	return s.GetSummariesRange(agentID, since, time.Time{})
+}
 
+// GetSummariesRange returns per-battery aggregated data for a time range.
+// If until is zero, no upper bound is applied.
+func (s *Store) GetSummariesRange(agentID string, since, until time.Time) ([]BatterySummary, error) {
 	query := `
 		SELECT battery_name, type,
 		       COALESCE(SUM(energy_wh), 0) as total_energy_wh,
 		       COALESCE(SUM(cost_eur), 0) as total_cost_eur
 		FROM sessions
 		WHERE started_at >= ?`
-	args := []interface{}{cutoff}
+	args := []interface{}{since.Format(time.RFC3339)}
 
+	if !until.IsZero() {
+		query += " AND started_at < ?"
+		args = append(args, until.Format(time.RFC3339))
+	}
 	if agentID != "" {
 		query += " AND agent_id = ?"
 		args = append(args, agentID)

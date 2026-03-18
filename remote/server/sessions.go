@@ -337,23 +337,30 @@ func (st *SessionTracker) getAvgPrice(start, end time.Time) float64 {
 	return sum / float64(count)
 }
 
+// GetSummariesRange returns per-battery aggregated data for a time range.
+func (st *SessionTracker) GetSummariesRange(agentID string, since, until time.Time) ([]sessiondb.BatterySummary, error) {
+	summaries, err := st.store.GetSummariesRange(agentID, since, until)
+	if err != nil {
+		return nil, err
+	}
+	return st.enrichWithActiveSessions(summaries, agentID), nil
+}
+
 // GetSummaries returns per-battery aggregated data.
 func (st *SessionTracker) GetSummaries(agentID string, hours int) ([]sessiondb.BatterySummary, error) {
 	summaries, err := st.store.GetSummaries(agentID, hours)
 	if err != nil {
 		return nil, err
 	}
+	return st.enrichWithActiveSessions(summaries, agentID), nil
+}
 
-	// Mark active sessions
+// enrichWithActiveSessions marks active charge/discharge flags on summaries
+// and adds entries for batteries that only have active sessions (not yet in DB).
+func (st *SessionTracker) enrichWithActiveSessions(summaries []sessiondb.BatterySummary, agentID string) []sessiondb.BatterySummary {
 	st.mu.Lock()
 	activeByBattery := make(map[string]map[string]bool)
-	for _, sess := range st.active {
-		key := sess.dbID // use battery name from DB record lookup
-		_ = key
-	}
 	for k := range st.active {
-		// Parse key: "agentID:batteryName:type"
-		// Find last two colons
 		parts := splitSessionKey(k)
 		if parts == nil {
 			continue
@@ -375,7 +382,6 @@ func (st *SessionTracker) GetSummaries(agentID string, hours int) ([]sessiondb.B
 		}
 	}
 
-	// Add batteries that only have active sessions (not yet in DB summaries)
 	existing := make(map[string]bool)
 	for _, s := range summaries {
 		existing[s.BatteryName] = true
@@ -390,7 +396,7 @@ func (st *SessionTracker) GetSummaries(agentID string, hours int) ([]sessiondb.B
 		}
 	}
 
-	return summaries, nil
+	return summaries
 }
 
 // GetRecentSessions returns sessions from the last N hours.

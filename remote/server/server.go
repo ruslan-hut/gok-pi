@@ -687,15 +687,37 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	agentID := r.URL.Query().Get("agent_id")
+	sinceStr := r.URL.Query().Get("since")
+	untilStr := r.URL.Query().Get("until")
 	hoursStr := r.URL.Query().Get("hours")
-	hours := 48
-	if hoursStr != "" {
-		if h, err := strconv.Atoi(hoursStr); err == nil && h > 0 {
-			hours = h
-		}
-	}
 
-	summaries, err := s.sessions.GetSummaries(agentID, hours)
+	var summaries []sessiondb.BatterySummary
+	var err error
+
+	if sinceStr != "" {
+		sinceTime, parseErr := time.Parse(time.RFC3339, sinceStr)
+		if parseErr != nil {
+			http.Error(w, "invalid 'since' format, use RFC3339", http.StatusBadRequest)
+			return
+		}
+		var untilTime time.Time
+		if untilStr != "" {
+			untilTime, parseErr = time.Parse(time.RFC3339, untilStr)
+			if parseErr != nil {
+				http.Error(w, "invalid 'until' format, use RFC3339", http.StatusBadRequest)
+				return
+			}
+		}
+		summaries, err = s.sessions.GetSummariesRange(agentID, sinceTime, untilTime)
+	} else {
+		hours := 48
+		if hoursStr != "" {
+			if h, parseErr := strconv.Atoi(hoursStr); parseErr == nil && h > 0 {
+				hours = h
+			}
+		}
+		summaries, err = s.sessions.GetSummaries(agentID, hours)
+	}
 	if err != nil {
 		s.log.With(slog.Any("error", err)).Error("get session summaries")
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -705,7 +727,13 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		summaries = []sessiondb.BatterySummary{}
 	}
 
-	sessions, err := s.sessions.GetRecentSessions(agentID, hours)
+	recentHours := 48
+	if hoursStr != "" {
+		if h, parseErr := strconv.Atoi(hoursStr); parseErr == nil && h > 0 {
+			recentHours = h
+		}
+	}
+	sessions, err := s.sessions.GetRecentSessions(agentID, recentHours)
 	if err != nil {
 		s.log.With(slog.Any("error", err)).Error("get recent sessions")
 		http.Error(w, "internal error", http.StatusInternalServerError)
