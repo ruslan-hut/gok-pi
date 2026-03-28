@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentSummary, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, PricesState, SessionsResponse } from "./types";
+import type { AgentConfig, AgentSummary, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, PriceLimits, PricesState, SessionsResponse } from "./types";
 
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
 const AUTH_EXPIRY_KEY = "gok-pi-auth-expires";
@@ -209,6 +209,22 @@ export async function fetchSessions(opts?: {
     throw new Error(`Failed to load sessions: ${res.statusText}`);
   }
   return (await res.json()) as SessionsResponse;
+}
+
+export async function savePriceLimits(limits: PriceLimits): Promise<PriceLimits> {
+  const token = getAuthToken();
+  const res = await fetch("/api/price-limits", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "X-Auth-Token": token } : {}),
+    },
+    body: JSON.stringify(limits),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to save price limits: ${res.statusText}`);
+  }
+  return (await res.json()) as PriceLimits;
 }
 
 export async function fetchDBStats(): Promise<DBStatsResponse> {

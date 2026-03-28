@@ -137,12 +137,18 @@ export interface DayData {
   stats: PriceStats;
 }
 
+export interface PriceLimits {
+  charge_limit_eur_mwh: number;    // max price to allow charging; 0 = no limit
+  discharge_limit_eur_mwh: number; // min price to allow discharging; 0 = no limit
+}
+
 export interface PricesState {
   today: DayData | null;
   tomorrow: DayData | null;
   last_updated: string;
   last_error?: string;
   next_update: string;
+  price_limits: PriceLimits;
 }
 
 // Dashboard UI types

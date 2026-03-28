@@ -148,3 +148,10 @@ type LogRequest struct {
 	Lines  int    `json:"lines,omitempty"`
 	Stream string `json:"stream,omitempty"` // "agent" or "updater"
 }
+
+// PriceLimits defines absolute price thresholds for auto-schedule filtering.
+// A value of 0 means "no limit" (feature disabled for that direction).
+type PriceLimits struct {
+	ChargeLimitEurMWh    float64 `json:"charge_limit_eur_mwh"`    // max price to allow charging; 0 = no limit
+	DischargeLimitEurMWh float64 `json:"discharge_limit_eur_mwh"` // min price to allow discharging; 0 = no limit
+}

@@ -41,7 +41,7 @@ npm run build    # Production build to dist/
 ### Run Tests
 ```bash
 go test ./...                           # All tests
-go test ./battery/discharger/...        # Specific package
+go test ./battery/controller/...        # Specific package
 go test -run TestName ./package/...     # Single test
 ```
 
@@ -53,14 +53,15 @@ Three main executables:
 - **Agent Updater** (`cmd/agentupdater`) - Auto-updates agent binary by comparing SHA-256 hashes
 
 Key packages:
+- `battery/controller` - Unified charge/discharge control loop, parameterized by direction
 - `battery/driver` - Battery driver interface and registry; drivers self-register via `init()`
 - `battery/driver/sonnen` - Sonnen battery API driver implementation
-- `battery/discharger` - Discharge control with schedule windows and power/SoC limits
-- `battery/charger` - Charge control logic
+- `battery/entity` - Shared domain types (BatteryConfig, Schedule, AgentConfig, SystemStatus) and helpers
 - `internal/remote/wsclient` - Agent-side WebSocket client with reconnection backoff
 - `remote/server` - Control server WebSocket handlers, config store, UI serving
 - `metrics/observers` - Prometheus gauges and telemetry snapshots
 - `internal/config` - YAML config loading via cleanenv, thread-safe updates
+- `internal/lib/atomicfile` - Atomic file writes (write-to-temp-then-rename)
 
 ## Configuration
 

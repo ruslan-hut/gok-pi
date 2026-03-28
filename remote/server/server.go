@@ -59,10 +59,11 @@ type Server struct {
 	uiMu     sync.RWMutex
 	uiClient map[*uiConnection]struct{}
 
-	configs  *ConfigStore
-	auth     *authManager
-	prices   *pricefetcher.Fetcher
-	sessions *SessionTracker
+	configs     *ConfigStore
+	auth        *authManager
+	prices      *pricefetcher.Fetcher
+	sessions    *SessionTracker
+	priceLimits *PriceLimitsStore
 }
 
 func New(cfg Config, log *slog.Logger) *Server {
@@ -103,12 +104,13 @@ func New(cfg Config, log *slog.Logger) *Server {
 				return true
 			},
 		},
-		agents:   make(map[string]*agentConnection),
-		uiClient: make(map[*uiConnection]struct{}),
-		configs:  store,
-		auth:     newAuthManager(cfg.UIUsername, cfg.UIPassword, log),
-		prices:   prices,
-		sessions: sessions,
+		agents:      make(map[string]*agentConnection),
+		uiClient:    make(map[*uiConnection]struct{}),
+		configs:     store,
+		auth:        newAuthManager(cfg.UIUsername, cfg.UIPassword, log),
+		prices:      prices,
+		sessions:    sessions,
+		priceLimits: NewPriceLimitsStore("data/price-limits.json"),
 	}
 }
 
@@ -125,6 +127,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/agents", s.handleAgents)
 	mux.HandleFunc("/api/agents/", s.requireAuthForWrites(s.handleAgentRoutes))
 	mux.HandleFunc("/api/prices", s.handlePrices)
+	mux.HandleFunc("/api/price-limits", s.requireAuthForWrites(s.handlePriceLimits))
 	mux.HandleFunc("/api/sessions", s.handleSessions)
 	mux.HandleFunc("/api/db-stats", s.handleDBStats)
 	mux.HandleFunc("/api/db/records", s.requireAuth(s.handleDBRecords))
@@ -650,10 +653,56 @@ func (s *Server) handlePrices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	state := s.prices.GetState()
+
+	// Wrap the state with price limits for the UI
+	resp := struct {
+		pricefetcher.State
+		PriceLimits PriceLimits `json:"price_limits"`
+	}{
+		State:       state,
+		PriceLimits: s.priceLimits.Get(),
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(state); err != nil {
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		s.log.With(slog.Any("error", err)).Error("encode prices response")
 		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handlePriceLimits(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(s.priceLimits.Get())
+
+	case http.MethodPut:
+		var limits PriceLimits
+		if err := json.NewDecoder(r.Body).Decode(&limits); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if limits.ChargeLimitEurMWh < 0 || limits.DischargeLimitEurMWh < 0 {
+			http.Error(w, "limits cannot be negative", http.StatusBadRequest)
+			return
+		}
+		if err := s.priceLimits.Set(limits); err != nil {
+			s.log.With(slog.Any("error", err)).Error("saving price limits")
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		s.log.Info("price limits updated",
+			slog.Float64("charge_limit", limits.ChargeLimitEurMWh),
+			slog.Float64("discharge_limit", limits.DischargeLimitEurMWh))
+
+		// Trigger auto-schedule recomputation with new limits
+		go s.updateAutoSchedules()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(limits)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -805,9 +854,10 @@ func (s *Server) updateAutoSchedules() {
 		return
 	}
 
+	limits := s.priceLimits.Get()
 	configs := s.configs.snapshot()
 	for agentID, cfg := range configs {
-		autoScheds := s.computeAutoSchedules(cfg, state)
+		autoScheds := s.computeAutoSchedules(cfg, state, limits)
 
 		updated, changed, err := s.configs.UpdateAutoSchedules(agentID, autoScheds)
 		if err != nil {
@@ -835,10 +885,10 @@ func (s *Server) updateAutoSchedules() {
 //  3. Read back today's schedules from DB (with stable IDs)
 //  4. Filter to this agent's enabled AutoSchedule batteries
 //  5. Convert to legacy entity.Schedule with names "auto-{id}-{type}-{battery}"
-func (s *Server) computeAutoSchedules(cfg AgentConfig, state pricefetcher.State) []entity.Schedule {
+func (s *Server) computeAutoSchedules(cfg AgentConfig, state pricefetcher.State, limits PriceLimits) []entity.Schedule {
 	// Fallback: if DB is not available, use in-memory generation
 	if s.sessions == nil {
-		return autoschedule.GenerateSchedules(cfg.Batteries, state.Today, state.Tomorrow)
+		return autoschedule.GenerateSchedules(cfg.Batteries, state.Today, state.Tomorrow, limits.ChargeLimitEurMWh, limits.DischargeLimitEurMWh)
 	}
 
 	store := s.sessions.Store()
@@ -868,7 +918,7 @@ func (s *Server) computeAutoSchedules(cfg AgentConfig, state pricefetcher.State)
 	if err != nil {
 		s.log.Warn("failed to read today's schedules from DB, falling back to in-memory",
 			slog.Any("error", err))
-		return autoschedule.GenerateSchedules(cfg.Batteries, state.Today, state.Tomorrow)
+		return autoschedule.GenerateSchedules(cfg.Batteries, state.Today, state.Tomorrow, limits.ChargeLimitEurMWh, limits.DischargeLimitEurMWh)
 	}
 
 	// Filter to only this agent's enabled AutoSchedule batteries
@@ -885,8 +935,8 @@ func (s *Server) computeAutoSchedules(cfg AgentConfig, state pricefetcher.State)
 		}
 	}
 
-	// Convert to legacy entity.Schedule format for agent consumption
-	return autoschedule.ToLegacySchedules(agentRecords, now)
+	// Convert to legacy entity.Schedule format for agent consumption, applying price limits
+	return autoschedule.ToLegacySchedules(agentRecords, now, limits.ChargeLimitEurMWh, limits.DischargeLimitEurMWh)
 }
 
 // madridNow returns the current time in Europe/Madrid timezone.

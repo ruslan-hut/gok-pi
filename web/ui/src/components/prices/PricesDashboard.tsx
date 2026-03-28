@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchPrices, fetchSessions } from "../../api";
-import type { BatterySummary, DayData, PricesState, ScheduleWindow, SessionsResponse } from "../../types";
+import { fetchPrices, fetchSessions, savePriceLimits } from "../../api";
+import type { BatterySummary, DayData, PriceLimits, PricesState, ScheduleWindow, SessionsResponse } from "../../types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const ACTIVE_POLL_INTERVAL_MS = 30 * 1000; // 30 seconds when sessions are active
@@ -98,9 +98,19 @@ export default function PricesDashboard() {
             </span>
             {loading && <span className="spinner-small" />}
           </div>
-          {state.today && <DayPanel label="Today" data={state.today} />}
+          <PriceLimitsPanel
+            limits={state.price_limits}
+            onSave={(newLimits) => {
+              savePriceLimits(newLimits)
+                .then(() => load())
+                .catch((err) =>
+                  setError(err instanceof Error ? err.message : "Failed to save limits"),
+                );
+            }}
+          />
+          {state.today && <DayPanel label="Today" data={state.today} limits={state.price_limits} />}
           {state.tomorrow && (
-            <DayPanel label="Tomorrow" data={state.tomorrow} />
+            <DayPanel label="Tomorrow" data={state.tomorrow} limits={state.price_limits} />
           )}
           {!state.today && !state.tomorrow && (
             <div className="config-empty">
@@ -120,7 +130,80 @@ export default function PricesDashboard() {
   );
 }
 
-function DayPanel({ label, data }: { label: string; data: DayData }) {
+function PriceLimitsPanel({
+  limits,
+  onSave,
+}: {
+  limits: PriceLimits;
+  onSave: (limits: PriceLimits) => void;
+}) {
+  const [chargeLimit, setChargeLimit] = useState(String(limits.charge_limit_eur_mwh || ""));
+  const [dischargeLimit, setDischargeLimit] = useState(String(limits.discharge_limit_eur_mwh || ""));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setChargeLimit(limits.charge_limit_eur_mwh ? String(limits.charge_limit_eur_mwh) : "");
+    setDischargeLimit(limits.discharge_limit_eur_mwh ? String(limits.discharge_limit_eur_mwh) : "");
+  }, [limits]);
+
+  const handleSave = () => {
+    setSaving(true);
+    onSave({
+      charge_limit_eur_mwh: parseFloat(chargeLimit) || 0,
+      discharge_limit_eur_mwh: parseFloat(dischargeLimit) || 0,
+    });
+    setTimeout(() => setSaving(false), 1000);
+  };
+
+  const hasChanges =
+    (parseFloat(chargeLimit) || 0) !== limits.charge_limit_eur_mwh ||
+    (parseFloat(dischargeLimit) || 0) !== limits.discharge_limit_eur_mwh;
+
+  return (
+    <div className="price-limits-panel">
+      <h4>Price Limits</h4>
+      <div className="price-limits-row">
+        <label className="price-limits-field">
+          <span>Max charge price</span>
+          <div className="price-limits-input-wrap">
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder="No limit"
+              value={chargeLimit}
+              onChange={(e) => setChargeLimit(e.target.value)}
+            />
+            <span className="price-limits-unit">EUR/MWh</span>
+          </div>
+        </label>
+        <label className="price-limits-field">
+          <span>Min discharge price</span>
+          <div className="price-limits-input-wrap">
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder="No limit"
+              value={dischargeLimit}
+              onChange={(e) => setDischargeLimit(e.target.value)}
+            />
+            <span className="price-limits-unit">EUR/MWh</span>
+          </div>
+        </label>
+        <button
+          className="btn btn-primary"
+          onClick={handleSave}
+          disabled={saving || !hasChanges}
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DayPanel({ label, data, limits }: { label: string; data: DayData; limits: PriceLimits }) {
   const chargeHours = new Set<number>();
   const dischargeHours = new Set<number>();
 
@@ -165,6 +248,7 @@ function DayPanel({ label, data }: { label: string; data: DayData }) {
         chargeHours={chargeHours}
         dischargeHours={dischargeHours}
         stats={data.stats}
+        limits={limits}
       />
       <ScheduleTable
         chargeWindows={data.schedule.charge_windows}
@@ -181,11 +265,13 @@ function PriceChart({
   chargeHours,
   dischargeHours,
   stats,
+  limits,
 }: {
   prices: DayData["prices"];
   chargeHours: Set<number>;
   dischargeHours: Set<number>;
   stats: DayData["stats"];
+  limits: PriceLimits;
 }) {
   const width = 720;
   const height = 200;
@@ -275,6 +361,34 @@ function PriceChart({
         strokeWidth="1"
         opacity="0.6"
       />
+
+      {/* Charge price limit line */}
+      {limits.charge_limit_eur_mwh > 0 && (
+        <line
+          x1={padding.left}
+          x2={width - padding.right}
+          y1={yScale(limits.charge_limit_eur_mwh)}
+          y2={yScale(limits.charge_limit_eur_mwh)}
+          style={{ stroke: "var(--color-success)" }}
+          strokeDasharray="6,3"
+          strokeWidth="1.5"
+          opacity="0.8"
+        />
+      )}
+
+      {/* Discharge price limit line */}
+      {limits.discharge_limit_eur_mwh > 0 && (
+        <line
+          x1={padding.left}
+          x2={width - padding.right}
+          y1={yScale(limits.discharge_limit_eur_mwh)}
+          y2={yScale(limits.discharge_limit_eur_mwh)}
+          style={{ stroke: "var(--color-danger)" }}
+          strokeDasharray="6,3"
+          strokeWidth="1.5"
+          opacity="0.8"
+        />
+      )}
 
       {/* Bars */}
       {prices.map((p) => {

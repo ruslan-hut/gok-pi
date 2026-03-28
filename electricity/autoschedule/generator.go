@@ -100,15 +100,23 @@ func BuildComputedSchedules(batteries []entity.BatteryConfig, dayData *pricefetc
 // is the stable database row ID, ensuring no name collisions across days.
 //
 // Expired windows (EndHour already passed for today) are skipped.
-// The "auto-" prefix is preserved so the agent's auto-schedule detection
-// (strings.HasPrefix(name, "auto-")) continues to work unchanged.
-func ToLegacySchedules(records []sessiondb.ComputedSchedule, now time.Time) []entity.Schedule {
+// chargePriceLimit and dischargePriceLimit filter windows by average price (0 = no limit).
+func ToLegacySchedules(records []sessiondb.ComputedSchedule, now time.Time, chargePriceLimit, dischargePriceLimit float64) []entity.Schedule {
 	var out []entity.Schedule
 
 	for _, r := range records {
 		// Skip windows whose end hour has already passed today
 		stopTime := time.Date(now.Year(), now.Month(), now.Day(), r.EndHour, 0, 0, 0, now.Location())
 		if now.After(stopTime) {
+			continue
+		}
+
+		// Apply price limits: skip charge windows that are too expensive
+		if r.Type == "charge" && chargePriceLimit > 0 && r.AvgPrice > chargePriceLimit {
+			continue
+		}
+		// Apply price limits: skip discharge windows where price is too low
+		if r.Type == "discharge" && dischargePriceLimit > 0 && r.AvgPrice < dischargePriceLimit {
 			continue
 		}
 
@@ -131,8 +139,8 @@ func ToLegacySchedules(records []sessiondb.ComputedSchedule, now time.Time) []en
 
 // GenerateSchedules creates charge/discharge schedules from price data (in-memory fallback).
 // Used when the database is unavailable. Names use the old format: "auto-{type}-{battery}-{HH}-{HH}".
-// It deduplicates by schedule name and filters out today's expired windows.
-func GenerateSchedules(batteries []entity.BatteryConfig, today, tomorrow *pricefetcher.DayData) []entity.Schedule {
+// chargePriceLimit and dischargePriceLimit filter windows by average price (0 = no limit).
+func GenerateSchedules(batteries []entity.BatteryConfig, today, tomorrow *pricefetcher.DayData, chargePriceLimit, dischargePriceLimit float64) []entity.Schedule {
 	var schedules []entity.Schedule
 	seen := make(map[string]bool)
 	now := time.Now()
@@ -143,7 +151,8 @@ func GenerateSchedules(batteries []entity.BatteryConfig, today, tomorrow *pricef
 		}
 		// Today's schedules: skip expired windows, dedup by name.
 		if today != nil {
-			for _, s := range windowsToSchedules(bat, today.Schedule) {
+			filtered := applyPriceLimits(today.Schedule, chargePriceLimit, dischargePriceLimit)
+			for _, s := range windowsToSchedules(bat, filtered) {
 				if seen[s.Name] {
 					continue
 				}
@@ -160,7 +169,8 @@ func GenerateSchedules(batteries []entity.BatteryConfig, today, tomorrow *pricef
 		}
 		// Tomorrow's schedules: dedup only (same name as a surviving today window is skipped).
 		if tomorrow != nil {
-			for _, s := range windowsToSchedules(bat, tomorrow.Schedule) {
+			filtered := applyPriceLimits(tomorrow.Schedule, chargePriceLimit, dischargePriceLimit)
+			for _, s := range windowsToSchedules(bat, filtered) {
 				if seen[s.Name] {
 					continue
 				}
@@ -191,6 +201,34 @@ func formatHour(hour int) string {
 	default:
 		return fmt.Sprintf("%02d:00", hour)
 	}
+}
+
+// applyPriceLimits returns a copy of the schedule with windows filtered by price limits.
+func applyPriceLimits(sched scheduler.DaySchedule, chargePriceLimit, dischargePriceLimit float64) scheduler.DaySchedule {
+	return scheduler.DaySchedule{
+		ChargeWindows:    filterWindows(sched.ChargeWindows, chargePriceLimit, true),
+		DischargeWindows: filterWindows(sched.DischargeWindows, dischargePriceLimit, false),
+	}
+}
+
+// filterWindows removes windows that don't meet the price limit.
+// For charge: skip if avgPrice > limit. For discharge: skip if avgPrice < limit.
+// A limit of 0 means no filtering.
+func filterWindows(windows []scheduler.Window, limit float64, isCharge bool) []scheduler.Window {
+	if limit <= 0 {
+		return windows
+	}
+	var out []scheduler.Window
+	for _, w := range windows {
+		if isCharge && w.AvgPrice > limit {
+			continue
+		}
+		if !isCharge && w.AvgPrice < limit {
+			continue
+		}
+		out = append(out, w)
+	}
+	return out
 }
 
 func windowsToSchedules(bat entity.BatteryConfig, sched scheduler.DaySchedule) []entity.Schedule {

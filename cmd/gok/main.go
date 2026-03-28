@@ -3,7 +3,7 @@
 //
 // Startup flow:
 //  1. Load config.yml -> filter enabled batteries and schedules
-//  2. Create a discharger + charger worker pair per battery
+//  2. Create a discharge + charge controller pair per battery (via battery/controller)
 //  3. Start Prometheus metrics server (if enabled)
 //  4. Connect to control server via WebSocket (if remote_control enabled)
 //  5. Enter main loop: poll battery status every 10s, execute schedules, handle commands

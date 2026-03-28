@@ -46,26 +46,30 @@ The GOK-Pi system consists of three main executables and several core components
 
 #### Battery Management (`battery/`)
 
-- **Discharger (`battery/discharger/discharger.go`)** - Core discharge control logic:
-  - Implements scheduled discharge windows with configurable start/stop times
-  - Calculates optimal discharge rates based on remaining capacity and time constraints
+- **Controller (`battery/controller/controller.go`)** - Unified charge/discharge control logic:
+  - Single parameterized controller handles both charge and discharge operations
+  - Direction-specific behavior (schedule filter, SoC stop condition, API calls) injected via `Direction` struct
+  - Implements scheduled time windows with configurable start/stop times
   - Enforces power and SoC limits per schedule
   - Supports manual override mode for remote commands
   - Manages operating mode transitions (auto/manual) with the battery controller
-  - Processes control commands (start/stop discharge, set limits, force mode, update config)
+  - Processes control commands (start/stop, set limits, force mode, update config, reset goal)
 
-- **API Client (`battery/api-client/api-client.go`)** - HTTP client for Sonnen battery API:
+- **Driver (`battery/driver/` + `battery/driver/sonnen/`)** - Battery driver interface and Sonnen HTTP client:
   - Retrieves battery status and system information
   - Controls discharge operations (start/stop with power settings)
   - Manages operating mode (auto/manual)
   - Implements retry logic with exponential backoff
   - Handles authentication via API tokens
 
-- **Entities (`battery/entity/`)** - Data structures:
+- **Entities (`battery/entity/`)** - Shared domain types and helpers:
   - `BatteryConfig` - Configuration for individual battery systems
-  - `Schedule` - Time-based discharge schedules with power and SoC limits
+  - `Schedule` - Time-based charge/discharge schedules with power and SoC limits
+  - `AgentConfig` - Agent configuration exchanged over the WebSocket protocol
   - `SystemStatus` - Real-time battery status from the API
   - `BatteryInfo` - Battery metadata and capabilities
+  - `CloneSchedules()`, `CloneBatteryConfigs()` - Slice copy helpers
+  - `IsAutoSchedule()` - Auto-generated schedule name detection
 
 #### Remote Control (`internal/remote/wsclient/` and `remote/server/`)
 
@@ -129,7 +133,7 @@ The GOK-Pi system consists of three main executables and several core components
 
 3. **Configuration Updates**: UI sends config update → Control server validates and stores → Pushes to connected agent → Agent applies changes and persists to local `config.yml`.
 
-4. **Metrics Collection**: Discharger updates observers → Observers update Prometheus gauges and snapshots → Metrics server exposes `/metrics` endpoint → Telemetry snapshots streamed to control server.
+4. **Metrics Collection**: Controller updates observers → Observers update Prometheus gauges and snapshots → Metrics server exposes `/metrics` endpoint → Telemetry snapshots streamed to control server.
 
 ### Component Interaction
 

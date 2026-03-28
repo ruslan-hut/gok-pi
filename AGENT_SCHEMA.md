@@ -15,13 +15,13 @@ gok-pi/
 │   ├── controlserver/    # Remote control server
 │   └── agentupdater/     # Auto-update utility
 ├── battery/
-│   ├── api-client/       # Battery API HTTP client
-│   ├── charger/          # Charge worker logic
-│   ├── discharger/       # Discharge worker logic
-│   └── entity/           # Data structures
+│   ├── controller/       # Unified charge/discharge control loop
+│   ├── driver/           # Battery driver interface and vendor implementations
+│   └── entity/           # Shared domain types and helpers
 ├── internal/
 │   ├── config/           # Configuration management
 │   ├── lib/
+│   │   ├── atomicfile/   # Atomic file write utility
 │   │   ├── logger/       # Structured logging
 │   │   ├── timer/        # Time utilities
 │   │   └── sl/           # Slog helpers
@@ -44,7 +44,7 @@ gok-pi/
 | Function | Description |
 |----------|-------------|
 | `main()` | Entry point; initializes config, sets up workers and remote control |
-| `startWorker()` | Creates charger/discharger workers for each battery |
+| `startWorker()` | Creates discharge/charge controller workers for each battery |
 | `monitorBattery()` | Continuous 10-second polling of battery status |
 | `handleRemoteCommands()` | Routes commands to appropriate workers |
 | `workerManager.Apply()` | Manages worker lifecycle (create, update, delete) |
@@ -57,8 +57,10 @@ gok-pi/
 
 ---
 
-### battery/api-client
-**Purpose:** HTTP communication with battery equipment (status queries, charge/discharge control).
+### battery/driver (+ battery/driver/sonnen)
+**Purpose:** Battery driver interface and Sonnen REST API implementation.
+
+The `driver.Driver` interface defines operations that all battery vendors must implement. Drivers self-register via `init()` and are resolved by name at runtime.
 
 | Function | Description |
 |----------|-------------|
@@ -74,47 +76,38 @@ gok-pi/
 
 ---
 
-### battery/charger
-**Purpose:** Autonomous charge operation management with schedule awareness.
+### battery/controller
+**Purpose:** Unified charge/discharge control loop parameterized by `Direction`.
 
 | Function | Description |
 |----------|-------------|
-| `New()` | Create new charger worker |
+| `New()` | Create new controller with a given Direction (charge or discharge) |
 | `Run()` | Main worker loop (10s ticker) - process commands, check status, evaluate schedules |
 | `Stop()` | Graceful shutdown via stop channel |
 | `SubmitCommand()` | Queue control command for async processing |
-| `checkTime()` | Evaluate if current time is within active schedule |
-| `runCharge()` | Execute charge operation (switch mode, start charge) |
-| `stopCondition()` | Check if SoC >= SocLimit to stop charging |
-| `processControlCommand()` | Handle remote commands (start/stop/set limits) |
+| `checkTime()` | Evaluate if current time is within active schedule for this direction |
+| `runOperation()` | Execute operation (switch mode, start charge/discharge) |
+| `stopOperation()` | Stop operation and return to auto mode |
+| `processControlCommand()` | Handle remote commands (start/stop/set limits/force mode/update config/reset goal) |
+| `DischargeDirection()` | Returns Direction configured for discharge (SoC <= limit stops) |
+| `ChargeDirection()` | Returns Direction configured for charge (SoC >= limit stops) |
 
-**Control Commands:** `CommandStartCharge`, `CommandStopCharge`, `CommandSetLimits`, `CommandForceMode`, `CommandUpdateConfig`
-
----
-
-### battery/discharger
-**Purpose:** Autonomous discharge operation management (mirror of charger for discharge).
-
-| Function | Description |
-|----------|-------------|
-| `New()` | Create new discharger worker |
-| `Run()` | Main worker loop - process commands, check status, evaluate schedules |
-| `Stop()` | Graceful shutdown |
-| `SubmitCommand()` | Queue control command |
-| `checkTime()` | Evaluate active discharge schedules |
-| `runDischarge()` | Execute discharge operation |
-| `stopCondition()` | Check if SoC <= SocLimit to stop discharging |
+**Control Commands:** `CommandStart`, `CommandStop`, `CommandSetLimits`, `CommandForceMode`, `CommandUpdateConfig`, `CommandResetGoal`
 
 ---
 
 ### battery/entity
-**Purpose:** Data structures for battery configuration and status.
+**Purpose:** Shared domain types and helpers for battery configuration and status.
 
-| Type | Description |
-|------|-------------|
+| Type/Function | Description |
+|---------------|-------------|
 | `BatteryConfig` | Hardware config: name, URL, token, enabled, capacity/power/SoC limits |
 | `Schedule` | Time-based schedule: name, type (charge/discharge), start/stop times, limits, run_once, goal_reached_time |
+| `AgentConfig` | Agent configuration exchanged over the WebSocket protocol |
 | `SystemStatus` | Real-time telemetry: RSOC, USOC, capacity, consumption, power, modes |
+| `CloneSchedules()` | Shallow-copy a schedule slice |
+| `CloneBatteryConfigs()` | Shallow-copy a battery config slice |
+| `IsAutoSchedule()` | Check if a schedule name has the "auto-" prefix |
 
 **Schedule.GoalReachedTime:** For `run_once` schedules, tracks when the SoC goal was reached. The schedule is skipped until `stop_time` passes, then the goal is cleared for the next day.
 
@@ -208,8 +201,8 @@ gok-pi/
 ┌─────────────────────────────────────────────────────────────┐
 │                   WORKER LAYER                              │
 │  Monitor (10s) → API.Status() → Observers.Update()         │
-│  Charger (10s) → Check schedules → StartCharge/StopCharge  │
-│  Discharger (10s) → Check schedules → Start/StopDischarge  │
+│  Charge Controller (10s) → Check schedules → StartCharge/StopCharge     │
+│  Discharge Controller (10s) → Check schedules → StartDischarge/StopDischarge │
 └─────────────────────────┬───────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -245,7 +238,7 @@ gok-pi/
 1. Compare desired vs current battery configs
 2. If URL/token changed: restart workers (new API client)
 3. If only schedules changed: send `CommandUpdateConfig`
-4. If new battery: create charger + discharger workers
+4. If new battery: create charge + discharge controller workers
 
 ### Graceful Shutdown
 1. Context cancellation propagates to all components
