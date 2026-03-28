@@ -204,7 +204,7 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, b
           />
         )}
 
-        {nav.page === "electricity" && <PricesDashboard />}
+        {nav.page === "electricity" && <PricesDashboard readonly={readonly} />}
 
         {nav.page === "database" && !readonly && <DatabaseInspector />}
 

@@ -177,6 +177,13 @@
   color: var(--color-text-dim);
 }
 
+.price-limits-value {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
 .prices-meta {
   display: flex;
   flex-wrap: wrap;

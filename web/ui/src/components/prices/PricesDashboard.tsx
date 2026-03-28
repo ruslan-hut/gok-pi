@@ -16,7 +16,7 @@ function dayBounds(daysAgo: number): { since: string; until: string } {
   return { since, until };
 }
 
-export default function PricesDashboard() {
+export default function PricesDashboard({ readonly }: { readonly?: boolean }) {
   const [state, setState] = useState<PricesState | null>(null);
   const [todaySess, setTodaySess] = useState<SessionsResponse | null>(null);
   const [yesterdaySess, setYesterdaySess] = useState<SessionsResponse | null>(null);
@@ -100,6 +100,7 @@ export default function PricesDashboard() {
           </div>
           <PriceLimitsPanel
             limits={state.price_limits}
+            readonly={readonly}
             onSave={(newLimits) => {
               savePriceLimits(newLimits)
                 .then(() => load())
@@ -132,9 +133,11 @@ export default function PricesDashboard() {
 
 function PriceLimitsPanel({
   limits,
+  readonly,
   onSave,
 }: {
   limits: PriceLimits;
+  readonly?: boolean;
   onSave: (limits: PriceLimits) => void;
 }) {
   const [chargeLimit, setChargeLimit] = useState(String(limits.charge_limit_eur_mwh || ""));
@@ -159,46 +162,61 @@ function PriceLimitsPanel({
     (parseFloat(chargeLimit) || 0) !== limits.charge_limit_eur_mwh ||
     (parseFloat(dischargeLimit) || 0) !== limits.discharge_limit_eur_mwh;
 
+  const fmtLimit = (v: number) => (v > 0 ? `${v} EUR/MWh` : "No limit");
+
   return (
     <div className="price-limits-panel">
       <h4>Price Limits</h4>
-      <div className="price-limits-row">
-        <label className="price-limits-field">
-          <span>Max charge price</span>
-          <div className="price-limits-input-wrap">
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="No limit"
-              value={chargeLimit}
-              onChange={(e) => setChargeLimit(e.target.value)}
-            />
-            <span className="price-limits-unit">EUR/MWh</span>
+      {readonly ? (
+        <div className="price-limits-row">
+          <div className="price-limits-field">
+            <span>Max charge price</span>
+            <span className="price-limits-value">{fmtLimit(limits.charge_limit_eur_mwh)}</span>
           </div>
-        </label>
-        <label className="price-limits-field">
-          <span>Min discharge price</span>
-          <div className="price-limits-input-wrap">
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="No limit"
-              value={dischargeLimit}
-              onChange={(e) => setDischargeLimit(e.target.value)}
-            />
-            <span className="price-limits-unit">EUR/MWh</span>
+          <div className="price-limits-field">
+            <span>Min discharge price</span>
+            <span className="price-limits-value">{fmtLimit(limits.discharge_limit_eur_mwh)}</span>
           </div>
-        </label>
-        <button
-          className="btn btn-primary"
-          onClick={handleSave}
-          disabled={saving || !hasChanges}
-        >
-          {saving ? "Saving..." : "Save"}
-        </button>
-      </div>
+        </div>
+      ) : (
+        <div className="price-limits-row">
+          <label className="price-limits-field">
+            <span>Max charge price</span>
+            <div className="price-limits-input-wrap">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="No limit"
+                value={chargeLimit}
+                onChange={(e) => setChargeLimit(e.target.value)}
+              />
+              <span className="price-limits-unit">EUR/MWh</span>
+            </div>
+          </label>
+          <label className="price-limits-field">
+            <span>Min discharge price</span>
+            <div className="price-limits-input-wrap">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="No limit"
+                value={dischargeLimit}
+                onChange={(e) => setDischargeLimit(e.target.value)}
+              />
+              <span className="price-limits-unit">EUR/MWh</span>
+            </div>
+          </label>
+          <button
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={saving || !hasChanges}
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -362,34 +380,6 @@ function PriceChart({
         opacity="0.6"
       />
 
-      {/* Charge price limit line */}
-      {limits.charge_limit_eur_mwh > 0 && (
-        <line
-          x1={padding.left}
-          x2={width - padding.right}
-          y1={yScale(limits.charge_limit_eur_mwh)}
-          y2={yScale(limits.charge_limit_eur_mwh)}
-          style={{ stroke: "var(--color-success)" }}
-          strokeDasharray="6,3"
-          strokeWidth="1.5"
-          opacity="0.8"
-        />
-      )}
-
-      {/* Discharge price limit line */}
-      {limits.discharge_limit_eur_mwh > 0 && (
-        <line
-          x1={padding.left}
-          x2={width - padding.right}
-          y1={yScale(limits.discharge_limit_eur_mwh)}
-          y2={yScale(limits.discharge_limit_eur_mwh)}
-          style={{ stroke: "var(--color-danger)" }}
-          strokeDasharray="6,3"
-          strokeWidth="1.5"
-          opacity="0.8"
-        />
-      )}
-
       {/* Bars */}
       {prices.map((p) => {
         const x = padding.left + (p.hour / 24) * chartW + 1;
@@ -419,6 +409,34 @@ function PriceChart({
           </g>
         );
       })}
+
+      {/* Charge price limit line (drawn over bars) */}
+      {limits.charge_limit_eur_mwh > 0 && (
+        <line
+          x1={padding.left}
+          x2={width - padding.right}
+          y1={yScale(limits.charge_limit_eur_mwh)}
+          y2={yScale(limits.charge_limit_eur_mwh)}
+          style={{ stroke: "var(--color-success)" }}
+          strokeDasharray="6,3"
+          strokeWidth="1.5"
+          opacity="0.9"
+        />
+      )}
+
+      {/* Discharge price limit line (drawn over bars) */}
+      {limits.discharge_limit_eur_mwh > 0 && (
+        <line
+          x1={padding.left}
+          x2={width - padding.right}
+          y1={yScale(limits.discharge_limit_eur_mwh)}
+          y2={yScale(limits.discharge_limit_eur_mwh)}
+          style={{ stroke: "var(--color-danger)" }}
+          strokeDasharray="6,3"
+          strokeWidth="1.5"
+          opacity="0.9"
+        />
+      )}
 
       {/* X axis labels */}
       {[0, 3, 6, 9, 12, 15, 18, 21].map((h) => (
