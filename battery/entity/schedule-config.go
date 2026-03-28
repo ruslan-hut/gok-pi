@@ -2,6 +2,7 @@ package entity
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -39,6 +40,11 @@ func (s *Schedule) Validate() error {
 		return fmt.Errorf("soc_limit must be between 0 and 100")
 	}
 	return nil
+}
+
+// IsAutoSchedule returns true if the schedule name indicates an auto-generated schedule.
+func IsAutoSchedule(name string) bool {
+	return strings.HasPrefix(name, "auto-")
 }
 
 // ValidateSchedules validates a collection of schedules, checking both individual

@@ -436,29 +436,11 @@ func normalizeOperatingMode(raw string) string {
 
 func splitSessionKey(key string) []string {
 	// key format: "agentID:batteryName:type"
-	// Find last colon for type, then split the rest
-	lastColon := -1
-	for i := len(key) - 1; i >= 0; i-- {
-		if key[i] == ':' {
-			lastColon = i
-			break
-		}
-	}
-	if lastColon < 0 {
+	// Split on first colon (agentID) and last colon (type) to allow colons in batteryName.
+	firstColon := strings.Index(key, ":")
+	lastColon := strings.LastIndex(key, ":")
+	if firstColon < 0 || firstColon == lastColon {
 		return nil
 	}
-	typ := key[lastColon+1:]
-	rest := key[:lastColon]
-
-	firstColon := -1
-	for i := 0; i < len(rest); i++ {
-		if rest[i] == ':' {
-			firstColon = i
-			break
-		}
-	}
-	if firstColon < 0 {
-		return nil
-	}
-	return []string{rest[:firstColon], rest[firstColon+1:], typ}
+	return []string{key[:firstColon], key[firstColon+1 : lastColon], key[lastColon+1:]}
 }

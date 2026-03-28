@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gok-pi/battery/entity"
+	"gok-pi/internal/lib/atomicfile"
 )
 
 var (
@@ -19,16 +20,8 @@ var (
 	ErrInvalidSchedules = errors.New("invalid schedules")
 )
 
-// AgentConfig represents the persisted configuration overrides for a gok-pi agent.
-type AgentConfig struct {
-	DeviceName string                 `json:"device_name,omitempty"`
-	Env        string                 `json:"env,omitempty"`
-	Timezone   string                 `json:"timezone,omitempty"`
-	Revision   int                    `json:"revision"`
-	UpdatedAt  time.Time              `json:"updated_at"`
-	Batteries  []entity.BatteryConfig `json:"batteries"`
-	Schedules  []entity.Schedule      `json:"schedules"`
-}
+// AgentConfig is an alias for entity.AgentConfig to avoid duplicating the struct definition.
+type AgentConfig = entity.AgentConfig
 
 // AgentConfigRequest is the payload accepted by the HTTP API when a config is updated.
 type AgentConfigRequest struct {
@@ -128,8 +121,8 @@ func (cs *ConfigStore) Save(agentID string, req AgentConfigRequest) (AgentConfig
 		Timezone:   req.Timezone,
 		Revision:   1,
 		UpdatedAt:  time.Now().UTC(),
-		Batteries:  cloneBatteryConfigs(req.Batteries),
-		Schedules:  cloneSchedules(req.Schedules),
+		Batteries:  entity.CloneBatteryConfigs(req.Batteries),
+		Schedules:  entity.CloneSchedules(req.Schedules),
 	}
 
 	if exists {
@@ -160,8 +153,8 @@ func (cs *ConfigStore) Seed(agentID string, batteries []entity.BatteryConfig, sc
 		Timezone:   "",
 		Revision:   1,
 		UpdatedAt:  ts.UTC(),
-		Batteries:  cloneBatteryConfigs(batteries),
-		Schedules:  cloneSchedules(schedules),
+		Batteries:  entity.CloneBatteryConfigs(batteries),
+		Schedules:  entity.CloneSchedules(schedules),
 	}
 	if cfg.UpdatedAt.IsZero() {
 		cfg.UpdatedAt = time.Now().UTC()
@@ -205,7 +198,7 @@ func (cs *ConfigStore) UpdateAutoSchedules(agentID string, newAutoSchedules []en
 	seen := make(map[string]bool)
 
 	for _, s := range current.Schedules {
-		if !isAutoScheduleName(s.Name) {
+		if !entity.IsAutoSchedule(s.Name) {
 			// Manual schedule — always keep
 			merged = append(merged, s)
 			continue
@@ -231,7 +224,7 @@ func (cs *ConfigStore) UpdateAutoSchedules(agentID string, newAutoSchedules []en
 	}
 
 	next := cloneAgentConfig(current)
-	next.Schedules = cloneSchedules(merged)
+	next.Schedules = entity.CloneSchedules(merged)
 	next.Revision = current.Revision + 1
 	next.UpdatedAt = time.Now().UTC()
 
@@ -243,10 +236,6 @@ func (cs *ConfigStore) UpdateAutoSchedules(agentID string, newAutoSchedules []en
 	}
 
 	return cloneAgentConfig(next), true, nil
-}
-
-func isAutoScheduleName(name string) bool {
-	return len(name) >= 5 && name[:5] == "auto-"
 }
 
 func schedulesEqual(a, b []entity.Schedule) bool {
@@ -281,31 +270,16 @@ func (cs *ConfigStore) persistLocked() error {
 		return nil
 	}
 
-	dir := filepath.Dir(cs.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cs.path), 0o755); err != nil {
 		return fmt.Errorf("ensure config store dir: %w", err)
 	}
 
-	tmpFile, err := os.CreateTemp(dir, "agent-config-*.json")
+	data, err := json.MarshalIndent(cs.records, "", "  ")
 	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	defer func() {
-		_ = os.Remove(tmpFile.Name())
-	}()
-
-	enc := json.NewEncoder(tmpFile)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(cs.records); err != nil {
-		_ = tmpFile.Close()
 		return fmt.Errorf("encode config snapshot: %w", err)
 	}
 
-	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("close temp file: %w", err)
-	}
-
-	if err := os.Rename(tmpFile.Name(), cs.path); err != nil {
+	if err := atomicfile.Write(cs.path, data, 0o644); err != nil {
 		return fmt.Errorf("persist config snapshot: %w", err)
 	}
 
@@ -319,27 +293,8 @@ func cloneAgentConfig(in AgentConfig) AgentConfig {
 		Timezone:   in.Timezone,
 		Revision:   in.Revision,
 		UpdatedAt:  in.UpdatedAt,
-		Batteries:  cloneBatteryConfigs(in.Batteries),
-		Schedules:  cloneSchedules(in.Schedules),
+		Batteries:  entity.CloneBatteryConfigs(in.Batteries),
+		Schedules:  entity.CloneSchedules(in.Schedules),
 	}
 }
 
-func cloneBatteryConfigs(in []entity.BatteryConfig) []entity.BatteryConfig {
-	if len(in) == 0 {
-		return nil
-	}
-
-	out := make([]entity.BatteryConfig, len(in))
-	copy(out, in)
-	return out
-}
-
-func cloneSchedules(in []entity.Schedule) []entity.Schedule {
-	if len(in) == 0 {
-		return nil
-	}
-
-	out := make([]entity.Schedule, len(in))
-	copy(out, in)
-	return out
-}

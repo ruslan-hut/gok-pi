@@ -51,15 +51,16 @@ func New(name string, cfg entity.BatteryConfig, log *slog.Logger) (Driver, error
 
 	mu.RLock()
 	fn, ok := registry[name]
-	mu.RUnlock()
-
+	var names []string
 	if !ok {
-		names := make([]string, 0, len(registry))
-		mu.RLock()
+		names = make([]string, 0, len(registry))
 		for n := range registry {
 			names = append(names, n)
 		}
-		mu.RUnlock()
+	}
+	mu.RUnlock()
+
+	if !ok {
 		return nil, fmt.Errorf("unknown battery driver %q; available: %v", name, names)
 	}
 

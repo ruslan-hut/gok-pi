@@ -440,46 +440,29 @@ func (s *Server) unregisterUI(client *uiConnection) {
 }
 
 func (s *Server) broadcastTelemetry(agentID string, snapshot TelemetrySnapshot) {
-	payload := struct {
-		Type     string            `json:"type"`
-		AgentID  string            `json:"agent_id"`
-		Snapshot TelemetrySnapshot `json:"snapshot"`
-		SentAt   time.Time         `json:"sent_at"`
-	}{
+	s.broadcastUI(UITelemetryBroadcast{
 		Type:     "agent.telemetry",
 		AgentID:  agentID,
 		Snapshot: snapshot,
 		SentAt:   time.Now().UTC(),
-	}
-	s.broadcastUI(payload)
+	})
 }
 
 func (s *Server) broadcastAgentSnapshot(summary AgentSummary) {
-	payload := struct {
-		Type    string       `json:"type"`
-		Agent   AgentSummary `json:"agent"`
-		SentAt  time.Time    `json:"sent_at"`
-		Message string       `json:"message"`
-	}{
+	s.broadcastUI(UIAgentSummaryBroadcast{
 		Type:    "agent.summary",
 		Agent:   summary,
 		SentAt:  time.Now().UTC(),
 		Message: "state updated",
-	}
-	s.broadcastUI(payload)
+	})
 }
 
 func (s *Server) broadcastAgentRemoved(agentID string) {
-	payload := struct {
-		Type    string    `json:"type"`
-		AgentID string    `json:"agent_id"`
-		SentAt  time.Time `json:"sent_at"`
-	}{
+	s.broadcastUI(UIAgentRemovedBroadcast{
 		Type:    "agent.removed",
 		AgentID: agentID,
 		SentAt:  time.Now().UTC(),
-	}
-	s.broadcastUI(payload)
+	})
 }
 
 func (s *Server) broadcastUI(message interface{}) {

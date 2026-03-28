@@ -16,7 +16,6 @@ package autoschedule
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"gok-pi/battery/entity"
@@ -176,7 +175,7 @@ func GenerateSchedules(batteries []entity.BatteryConfig, today, tomorrow *pricef
 
 // IsAutoSchedule returns true if the schedule name starts with the auto prefix.
 func IsAutoSchedule(name string) bool {
-	return strings.HasPrefix(name, schedulePrefix)
+	return entity.IsAutoSchedule(name)
 }
 
 // formatHour converts an hour (0-24) to a valid HH:MM string for entity.Schedule.

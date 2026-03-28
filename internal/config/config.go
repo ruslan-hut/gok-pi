@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"gok-pi/battery/entity"
+	"gok-pi/internal/lib/atomicfile"
 	"log"
 	"os"
 	"sync"
@@ -234,23 +235,17 @@ func Save() error {
 		fileMode = info.Mode().Perm() // Preserve existing permissions
 	}
 
-	// Write to a temporary file first, then rename for atomicity
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, fileMode); err != nil {
+	if err := atomicfile.Write(path, data, fileMode); err != nil {
 		return fmt.Errorf("write config file: %w", err)
-	}
-
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath) // Clean up temp file on error
-		return fmt.Errorf("rename config file: %w", err)
 	}
 
 	return nil
 }
 
-// UpdateScheduleGoalReached updates the goal reached time for a schedule and persists to config file.
-// The goal state is stored directly in the Schedule.GoalReachedTime field.
-func UpdateScheduleGoalReached(scheduleName string, reachedAt time.Time) error {
+// mutateSchedule finds a schedule by name under the write lock, applies fn, then notifies and saves.
+// The fn receives the index into instance.Schedules so it can modify or splice the slice.
+// Return true from fn to stop iterating.
+func mutateSchedule(scheduleName string, fn func(i int) bool) error {
 	mu.Lock()
 	if instance == nil {
 		mu.Unlock()
@@ -258,58 +253,37 @@ func UpdateScheduleGoalReached(scheduleName string, reachedAt time.Time) error {
 	}
 	for i := range instance.Schedules {
 		if instance.Schedules[i].Name == scheduleName {
-			instance.Schedules[i].GoalReachedTime = &reachedAt
+			fn(i)
 			break
 		}
 	}
 	mu.Unlock()
 
-	// Notify that goal state changed so agent can push updated config to server
 	notifyGoalStateChanged()
-
-	// Save outside the lock to avoid holding it during I/O
 	return Save()
+}
+
+// UpdateScheduleGoalReached updates the goal reached time for a schedule and persists to config file.
+func UpdateScheduleGoalReached(scheduleName string, reachedAt time.Time) error {
+	return mutateSchedule(scheduleName, func(i int) bool {
+		instance.Schedules[i].GoalReachedTime = &reachedAt
+		return true
+	})
 }
 
 // RemoveSchedule removes a schedule by name from the config and persists to config file.
 // Used to clean up expired auto-schedules after their time window ends.
 func RemoveSchedule(scheduleName string) error {
-	mu.Lock()
-	if instance == nil {
-		mu.Unlock()
-		return fmt.Errorf("config not loaded")
-	}
-	for i := range instance.Schedules {
-		if instance.Schedules[i].Name == scheduleName {
-			instance.Schedules = append(instance.Schedules[:i], instance.Schedules[i+1:]...)
-			break
-		}
-	}
-	mu.Unlock()
-
-	notifyGoalStateChanged()
-
-	return Save()
+	return mutateSchedule(scheduleName, func(i int) bool {
+		instance.Schedules = append(instance.Schedules[:i], instance.Schedules[i+1:]...)
+		return true
+	})
 }
 
 // ClearScheduleGoalReached clears the goal reached state for a schedule and persists to config file.
 func ClearScheduleGoalReached(scheduleName string) error {
-	mu.Lock()
-	if instance == nil {
-		mu.Unlock()
-		return fmt.Errorf("config not loaded")
-	}
-	for i := range instance.Schedules {
-		if instance.Schedules[i].Name == scheduleName {
-			instance.Schedules[i].GoalReachedTime = nil
-			break
-		}
-	}
-	mu.Unlock()
-
-	// Notify that goal state changed so agent can push updated config to server
-	notifyGoalStateChanged()
-
-	// Save outside the lock to avoid holding it during I/O
-	return Save()
+	return mutateSchedule(scheduleName, func(i int) bool {
+		instance.Schedules[i].GoalReachedTime = nil
+		return true
+	})
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gok-pi/battery/entity"
+	"gok-pi/metrics/observers"
 )
 
 // HTTP header keys used for agent authentication and identification during WebSocket upgrade.
@@ -32,22 +33,8 @@ type Config struct {
 	UIPassword   string // Optional: password for UI login
 }
 
-type TelemetrySnapshot struct {
-	Name                  string    `json:"name"`
-	RSOC                  float64   `json:"rsoc"`
-	USOC                  float64   `json:"usoc"`
-	RemainingCapacityWh   float64   `json:"remaining_capacity_wh"`
-	ConsumptionW          float64   `json:"consumption_w"`
-	PacTotalW             float64   `json:"pac_total_w"`
-	BatteryDischarging    bool      `json:"battery_discharging"`
-	BatteryDischargingSet bool      `json:"battery_discharging_set"`
-	BatteryCharging       bool      `json:"battery_charging"`
-	BatteryChargingSet    bool      `json:"battery_charging_set"`
-	OperatingMode         string    `json:"operating_mode"`
-	OperatingModeSet      bool      `json:"operating_mode_set"`
-	Status                string    `json:"status"`
-	UpdatedAt             time.Time `json:"updated_at"`
-}
+// TelemetrySnapshot is an alias for observers.Snapshot to avoid duplicating the struct definition.
+type TelemetrySnapshot = observers.Snapshot
 
 type AgentHello struct {
 	Type      string          `json:"type"`
@@ -127,6 +114,26 @@ type AgentConfigSync struct {
 	Type   string              `json:"type"`
 	Config AgentConfigSnapshot `json:"config"`
 	SentAt time.Time           `json:"sent_at"`
+}
+
+type UITelemetryBroadcast struct {
+	Type     string            `json:"type"`
+	AgentID  string            `json:"agent_id"`
+	Snapshot TelemetrySnapshot `json:"snapshot"`
+	SentAt   time.Time         `json:"sent_at"`
+}
+
+type UIAgentSummaryBroadcast struct {
+	Type    string       `json:"type"`
+	Agent   AgentSummary `json:"agent"`
+	SentAt  time.Time    `json:"sent_at"`
+	Message string       `json:"message"`
+}
+
+type UIAgentRemovedBroadcast struct {
+	Type    string    `json:"type"`
+	AgentID string    `json:"agent_id"`
+	SentAt  time.Time `json:"sent_at"`
 }
 
 type AgentLogResponse struct {

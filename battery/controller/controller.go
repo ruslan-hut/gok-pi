@@ -30,7 +30,6 @@ import (
 	"gok-pi/internal/lib/timer"
 	"gok-pi/metrics/observers"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 )
@@ -471,7 +470,7 @@ func (c *Controller) removeExpiredAutoSchedules() {
 	var remaining []entity.Schedule
 
 	for _, s := range c.schedules {
-		if !strings.HasPrefix(s.Name, "auto-") {
+		if !entity.IsAutoSchedule(s.Name) {
 			remaining = append(remaining, s)
 			continue
 		}
@@ -708,7 +707,7 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 			oldScheduleMap[s.Name] = s
 		}
 
-		c.schedules = cloneSchedules(cmd.Config.Schedules)
+		c.schedules = entity.CloneSchedules(cmd.Config.Schedules)
 
 		if c.manualOverride {
 			log.Info("config update received, clearing manual override mode")
@@ -813,14 +812,6 @@ func (c *Controller) GetScheduleType(name string) (string, bool) {
 	return "", false
 }
 
-func cloneSchedules(in []entity.Schedule) []entity.Schedule {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]entity.Schedule, len(in))
-	copy(out, in)
-	return out
-}
 
 // calculateRate sets the operation rate to the power limit from the schedule.
 func (c *Controller) calculateRate() {

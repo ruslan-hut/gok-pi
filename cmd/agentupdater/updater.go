@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"log/slog"
+	"gok-pi/internal/lib/atomicfile"
 )
 
 // Config configures the updater workflow.
@@ -79,7 +80,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 		return fmt.Errorf("install binary: %w", err)
 	}
 
-	if err := atomicWrite(cfg.localVersionPath(), []byte(remoteVersion+"\n"), 0o644); err != nil {
+	if err := atomicfile.Write(cfg.localVersionPath(), []byte(remoteVersion+"\n"), 0o644); err != nil {
 		return fmt.Errorf("write version file: %w", err)
 	}
 
@@ -256,33 +257,6 @@ func installBinary(tempPath, targetPath string) error {
 	return os.Rename(tempPath, targetPath)
 }
 
-func atomicWrite(target string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(target)
-	tempFile, err := os.CreateTemp(dir, "version-*")
-	if err != nil {
-		return err
-	}
-
-	tempName := tempFile.Name()
-	defer os.Remove(tempName)
-
-	if _, err := tempFile.Write(data); err != nil {
-		tempFile.Close()
-		return err
-	}
-
-	if err := tempFile.Close(); err != nil {
-		return err
-	}
-
-	if perm != 0 {
-		if err := os.Chmod(tempName, perm); err != nil {
-			return err
-		}
-	}
-
-	return os.Rename(tempName, target)
-}
 
 func validateHash(hash string) error {
 	if len(hash) != 64 {

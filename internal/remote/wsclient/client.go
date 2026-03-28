@@ -168,8 +168,8 @@ func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedul
 		}
 	}
 	snapshot := configSnapshot{
-		Batteries:           cloneBatteryConfigs(batteries),
-		Schedules:           cloneSchedules(schedules),
+		Batteries:           entity.CloneBatteryConfigs(batteries),
+		Schedules:           entity.CloneSchedules(schedules),
 		ScheduleGoalReached: goalReached,
 	}
 	c.initialConfigMu.Lock()
@@ -456,7 +456,7 @@ func (c *Client) handleConfigPush(raw json.RawMessage) {
 	var payload struct {
 		Type    string      `json:"type"`
 		AgentID string      `json:"agent_id"`
-		Config  AgentConfig `json:"config"`
+		Config  entity.AgentConfig `json:"config"`
 		SentAt  time.Time   `json:"sent_at"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
@@ -593,19 +593,9 @@ func (c *Client) readLogs(stream string, lines int) (string, error) {
 	return strings.Join(allLines[start:], "\n"), nil
 }
 
-type AgentConfig struct {
-	DeviceName string                 `json:"device_name,omitempty"`
-	Env        string                 `json:"env,omitempty"`
-	Timezone   string                 `json:"timezone,omitempty"`
-	Revision   int                    `json:"revision"`
-	UpdatedAt  time.Time              `json:"updated_at"`
-	Batteries  []entity.BatteryConfig `json:"batteries"`
-	Schedules  []entity.Schedule      `json:"schedules"`
-}
-
 type ConfigUpdate struct {
 	AgentID string
-	Config  AgentConfig
+	Config  entity.AgentConfig
 	SentAt  time.Time
 }
 
@@ -621,23 +611,6 @@ type configPayload struct {
 	ScheduleGoalReached map[string]time.Time   `json:"schedule_goal_reached,omitempty"`
 }
 
-func cloneBatteryConfigs(in []entity.BatteryConfig) []entity.BatteryConfig {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]entity.BatteryConfig, len(in))
-	copy(out, in)
-	return out
-}
-
-func cloneSchedules(in []entity.Schedule) []entity.Schedule {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]entity.Schedule, len(in))
-	copy(out, in)
-	return out
-}
 
 func detectVersion() string {
 	info, ok := debug.ReadBuildInfo()

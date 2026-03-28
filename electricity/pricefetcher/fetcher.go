@@ -20,6 +20,7 @@ import (
 
 	"gok-pi/electricity/redata"
 	"gok-pi/electricity/scheduler"
+	"gok-pi/internal/lib/atomicfile"
 )
 
 // DayData holds prices and computed schedule for a single day.
@@ -284,12 +285,7 @@ func (f *Fetcher) saveCache() {
 		return
 	}
 
-	tmp := f.cachePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := atomicfile.Write(f.cachePath, data, 0o644); err != nil {
 		f.log.Warn("failed to write price cache", slog.Any("error", err))
-		return
-	}
-	if err := os.Rename(tmp, f.cachePath); err != nil {
-		f.log.Warn("failed to rename price cache", slog.Any("error", err))
 	}
 }
