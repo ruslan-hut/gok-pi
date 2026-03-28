@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"gok-pi/battery/discharger"
+	"gok-pi/battery/controller"
 	"gok-pi/internal/remote/wsclient"
 )
 
@@ -22,8 +22,8 @@ func TestTranslateCommandStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if control.Type != discharger.CommandStartDischarge {
-		t.Fatalf("expected start discharge, got %s", control.Type)
+	if control.Type != controller.CommandStart {
+		t.Fatalf("expected start, got %s", control.Type)
 	}
 	if control.Power != 750 {
 		t.Fatalf("expected power 750, got %d", control.Power)
@@ -47,7 +47,7 @@ func TestTranslateCommandSetLimits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if control.Type != discharger.CommandSetLimits {
+	if control.Type != controller.CommandSetLimits {
 		t.Fatalf("expected set limits, got %s", control.Type)
 	}
 	if control.Limits == nil {
@@ -75,7 +75,7 @@ func TestTranslateCommandForceMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if control.Mode != discharger.OperatingModeManual {
+	if control.Mode != controller.OperatingModeManual {
 		t.Fatalf("expected manual mode, got %s", control.Mode)
 	}
 }

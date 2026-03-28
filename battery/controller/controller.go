@@ -1,20 +1,26 @@
-// Package charger implements the battery charge control loop.
+// Package controller implements a unified battery control loop for both
+// charge and discharge operations.
 //
-// It mirrors the discharger package but for charging operations. It runs as a
-// long-lived goroutine that polls battery status every 10 seconds, evaluates
-// time-based schedules, and controls charging via the Sonnen API.
+// It runs as a long-lived goroutine that polls battery status every 10 seconds,
+// evaluates time-based schedules, and controls charge/discharge via battery driver API.
 //
 // Core state machine (per tick):
-//  1. Poll battery status from Sonnen API
-//  2. Sync internal state on first poll (handles agent restarts mid-charge)
-//  3. Check if current time falls within any enabled charge schedule (type="charge")
-//  4. If schedule active: apply schedule's power/SoC limits, start charge
-//  5. If no schedule active: restore battery default limits, stop charge
-//  6. If SoC reaches limit: stop charge, mark "goal reached" for run_once schedules
+//  1. Poll battery status from driver API
+//  2. Sync internal state on first poll (handles agent restarts mid-operation)
+//  3. Check if current time falls within any enabled schedule for this direction
+//  4. If schedule active: apply schedule's power/SoC limits, start operation
+//  5. If no schedule active: restore battery default limits, stop operation
+//  6. If SoC reaches limit: stop operation, mark "goal reached" for run_once schedules
 //
-// The charger accepts the same remote command types as the discharger
-// (start, stop, set_limits, force_mode, update_config, reset_goal).
-package charger
+// The controller accepts remote commands (start, stop, set_limits, force_mode,
+// update_config, reset_goal) via a buffered channel from the WebSocket client.
+//
+// Key concepts:
+//   - manualOverride: set by remote start command, bypasses schedule checks
+//   - run_once schedules: operate once per day, then skip until next schedule period
+//   - auto-schedules: generated from electricity prices, prefixed "auto-", auto-removed when expired
+//   - goal callbacks: persist "goal reached" state to config.yml so it survives restarts
+package controller
 
 import (
 	"errors"
@@ -29,21 +35,77 @@ import (
 	"time"
 )
 
-// Client abstracts the Sonnen battery API operations needed for charge control.
-// Implemented by battery/api-client.ApiClient.
+// Client abstracts the shared battery API operations (status and mode switching).
+// Direction-specific operations (start/stop) are provided via the Direction struct.
 type Client interface {
 	Status() (*entity.SystemStatus, error)
-	StartCharge(power int) error
-	StopCharge() error
 	SwitchOperatingModeToManual(currentMode string) error
 	SwitchOperatingModeToAuto(currentMode string) error
+}
+
+// Direction captures the behavioral differences between charge and discharge.
+type Direction struct {
+	// Name is used in log messages ("discharge" or "charge").
+	Name string
+	// Module is the slog module name ("battery.discharge" or "battery.charge").
+	Module string
+	// ScheduleFilter returns true if a schedule type should be handled by this controller.
+	ScheduleFilter func(scheduleType string) bool
+	// GoalReached returns true when SoC has reached the target and the operation should stop.
+	GoalReached func(soc, socLimit float64) bool
+	// IsActive returns true if the battery is currently performing this operation.
+	IsActive func(status *entity.SystemStatus) bool
+	// StartOp starts the operation at the given power rate.
+	StartOp func(power int) error
+	// StopOp stops the operation.
+	StopOp func() error
+	// ObserveState updates the observer with the current operation state.
+	ObserveState func(name string, active bool)
+}
+
+// FullClient extends Client with direction-specific start/stop operations.
+// This is the interface that driver.Driver satisfies.
+type FullClient interface {
+	Client
+	StartDischarge(power int) error
+	StopDischarge() error
+	StartCharge(power int) error
+	StopCharge() error
+}
+
+// DischargeDirection returns a Direction configured for discharge control.
+func DischargeDirection(client FullClient) Direction {
+	return Direction{
+		Name:           "discharge",
+		Module:         "battery.discharge",
+		ScheduleFilter: func(t string) bool { return t == "" || t == "discharge" },
+		GoalReached:    func(soc, limit float64) bool { return soc <= limit },
+		IsActive:       func(s *entity.SystemStatus) bool { return s.BatteryDischarging },
+		StartOp:        client.StartDischarge,
+		StopOp:         client.StopDischarge,
+		ObserveState:   observers.UpdateDischargeState,
+	}
+}
+
+// ChargeDirection returns a Direction configured for charge control.
+func ChargeDirection(client FullClient) Direction {
+	return Direction{
+		Name:           "charge",
+		Module:         "battery.charge",
+		ScheduleFilter: func(t string) bool { return t == "charge" },
+		GoalReached:    func(soc, limit float64) bool { return soc >= limit },
+		IsActive:       func(s *entity.SystemStatus) bool { return s.BatteryCharging },
+		StartOp:        client.StartCharge,
+		StopOp:         client.StopCharge,
+		ObserveState:   observers.UpdateChargeState,
+	}
 }
 
 type CommandType string
 
 const (
-	CommandStartCharge  CommandType = "start_charge"
-	CommandStopCharge   CommandType = "stop_charge"
+	CommandStart        CommandType = "start"
+	CommandStop         CommandType = "stop"
 	CommandSetLimits    CommandType = "set_limits"
 	CommandForceMode    CommandType = "force_mode"
 	CommandUpdateConfig CommandType = "update_config"
@@ -78,9 +140,10 @@ type ConfigUpdate struct {
 	Timezone   *string
 }
 
-var ErrCommandQueueFull = errors.New("charger command queue full")
+var ErrCommandQueueFull = errors.New("controller command queue full")
 
-type Charger struct {
+type Controller struct {
+	dir               Direction
 	name              string
 	schedules         []entity.Schedule
 	capacityLimit     float64 // Capacity limit in Wh calculated based on the SoC limit
@@ -88,13 +151,12 @@ type Charger struct {
 	socLimit          float64 // Current SoC limit (from schedule if active, otherwise from battery config)
 	batteryPowerLimit int     // Default power limit from battery config
 	batterySocLimit   float64 // Default SoC limit from battery config
-	readyToCharge     bool
-	isCharging        bool
+	ready             bool    // Ready to start operation
+	active            bool    // Operation currently running
 	soc               float64 // State of Charge from last status
 	capacity          float64 // Remaining capacity in Wh from last status
-	maxCapacity       float64 // Maximum capacity in Wh (calculated from target SoC)
 	stopTime          time.Time
-	rate              int // Charge rate in W calculated based on the remaining capacity and time
+	rate              int // Operation rate in W calculated based on the remaining capacity and time
 	client            Client
 	status            *entity.SystemStatus
 	log               *slog.Logger
@@ -110,13 +172,14 @@ type Charger struct {
 	firstStatusPoll   bool // True until first successful status poll
 }
 
-func New(name string, client Client, log *slog.Logger) (*Charger, error) {
-	return &Charger{
+func New(name string, client Client, dir Direction, log *slog.Logger) (*Controller, error) {
+	return &Controller{
+		dir:             dir,
 		name:            name,
 		client:          client,
-		log:             log.With(sl.Module("battery.charge")),
+		log:             log.With(sl.Module(dir.Module)),
 		commands:        make(chan ControlCommand, 16),
-		timezone:        time.UTC, // Default to UTC
+		timezone:        time.UTC,
 		stop:            make(chan struct{}),
 		stopped:         make(chan struct{}),
 		firstStatusPoll: true,
@@ -124,18 +187,17 @@ func New(name string, client Client, log *slog.Logger) (*Charger, error) {
 }
 
 // SetGoalCallbacks sets the callbacks for persisting and clearing goal reached state.
-// Goal state is now stored directly in Schedule.GoalReachedTime.
-func (c *Charger) SetGoalCallbacks(updateFn func(string, time.Time) error, clearFn func(string) error) {
+func (c *Controller) SetGoalCallbacks(updateFn func(string, time.Time) error, clearFn func(string) error) {
 	c.updateGoalReached = updateFn
 	c.clearGoalReached = clearFn
 }
 
 // SetRemoveScheduleCallback sets the callback for removing expired auto-schedules from config.
-func (c *Charger) SetRemoveScheduleCallback(fn func(string) error) {
+func (c *Controller) SetRemoveScheduleCallback(fn func(string) error) {
 	c.removeSchedule = fn
 }
 
-func (c *Charger) SetTimezone(timezone string) error {
+func (c *Controller) SetTimezone(timezone string) error {
 	loc, err := timer.LoadLocation(timezone)
 	if err != nil {
 		return fmt.Errorf("invalid timezone %q: %w", timezone, err)
@@ -144,14 +206,13 @@ func (c *Charger) SetTimezone(timezone string) error {
 	return nil
 }
 
-func (c *Charger) SetCapacityLimit(_ int) {
+func (c *Controller) SetCapacityLimit(_ int) {
 	//c.capacityLimit = float64(capacityLimit)
 }
 
-func (c *Charger) SetLimits(powerLimit, socLimit int) {
+func (c *Controller) SetLimits(powerLimit, socLimit int) {
 	c.powerLimit = powerLimit
 	c.socLimit = float64(socLimit)
-	// Store as battery defaults if not already set
 	if c.batteryPowerLimit == 0 && c.batterySocLimit == 0 {
 		c.batteryPowerLimit = powerLimit
 		c.batterySocLimit = float64(socLimit)
@@ -159,21 +220,20 @@ func (c *Charger) SetLimits(powerLimit, socLimit int) {
 }
 
 // SetBatteryDefaults sets the default limits from battery config (used when no schedule is active)
-func (c *Charger) SetBatteryDefaults(powerLimit, socLimit int) {
+func (c *Controller) SetBatteryDefaults(powerLimit, socLimit int) {
 	c.batteryPowerLimit = powerLimit
 	c.batterySocLimit = float64(socLimit)
-	// If no schedule is active, also update current limits
-	if !c.readyToCharge {
+	if !c.ready {
 		c.powerLimit = powerLimit
 		c.socLimit = float64(socLimit)
 	}
 }
 
-func (c *Charger) AddSchedule(schedule entity.Schedule) {
+func (c *Controller) AddSchedule(schedule entity.Schedule) {
 	c.schedules = append(c.schedules, schedule)
 }
 
-func (c *Charger) SubmitCommand(cmd ControlCommand) error {
+func (c *Controller) SubmitCommand(cmd ControlCommand) error {
 	select {
 	case c.commands <- cmd:
 		return nil
@@ -182,12 +242,9 @@ func (c *Charger) SubmitCommand(cmd ControlCommand) error {
 	}
 }
 
-// Run starts the main charge control loop. It polls battery status every 10 seconds
+// Run starts the main control loop. It polls battery status every 10 seconds
 // and processes remote commands. The loop runs until Stop() is called.
-//
-// Each tick: poll status → check schedules → start or stop charge as needed.
-// Commands from the WebSocket client are processed with priority over ticks.
-func (c *Charger) Run() error {
+func (c *Controller) Run() error {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	defer close(c.stopped)
@@ -208,7 +265,6 @@ func (c *Charger) Run() error {
 			observers.UpdateStatus(c.name, "Connected")
 			c.observeStatus(status)
 
-			// Sync internal state with battery on first successful status poll
 			if c.firstStatusPoll {
 				c.syncStateFromBattery(status)
 				c.firstStatusPoll = false
@@ -221,16 +277,16 @@ func (c *Charger) Run() error {
 			}
 
 			if c.manualOverride {
-				c.readyToCharge = true
+				c.ready = true
 			} else {
 				c.checkTime()
 			}
-			if c.readyToCharge {
-				c.runCharge()
+			if c.ready {
+				c.runOperation()
 			} else {
-				err = c.stopCharge()
+				err = c.stopOperation()
 				if err != nil {
-					c.log.With(sl.Err(err)).Error("stopping charge")
+					c.log.With(sl.Err(err)).Error("stopping " + c.dir.Name)
 				}
 			}
 		case <-c.stop:
@@ -239,16 +295,10 @@ func (c *Charger) Run() error {
 	}
 }
 
-// stopCondition checks if the current state of charge (SoC) has reached or exceeded the specified limit.
-func (c *Charger) stopCondition() bool {
-	return c.soc >= c.socLimit
-}
-
-// isTimeToCharge determines whether the current time falls within the specified charge time window.
-func (c *Charger) isTimeToCharge(start, stop string) bool {
+// isTimeToOperate determines whether the current time falls within the specified time window.
+func (c *Controller) isTimeToOperate(start, stop string) bool {
 	now := time.Now().In(c.timezone)
 
-	// Calculate the start and stop times for today
 	startTime, err := timer.ParseTimeInLocation(start, c.timezone)
 	if err != nil {
 		c.log.With(sl.Err(err)).Error("parsing start time")
@@ -262,10 +312,7 @@ func (c *Charger) isTimeToCharge(start, stop string) bool {
 
 	// Handle schedules that span midnight (e.g., 22:00 to 06:00)
 	if startTime.After(stopTime) {
-		// Schedule spans midnight
 		stopTime = stopTime.Add(24 * time.Hour)
-		// If current time is before the original stop time (early morning hours),
-		// the start time should be yesterday, not today
 		originalStopTime := stopTime.Add(-24 * time.Hour)
 		if now.Before(originalStopTime) {
 			startTime = startTime.Add(-24 * time.Hour)
@@ -273,39 +320,34 @@ func (c *Charger) isTimeToCharge(start, stop string) bool {
 	}
 
 	c.stopTime = stopTime
-	// Use !now.Before() to include the exact start time
 	return !now.Before(startTime) && now.Before(stopTime)
 }
 
-// checkTime determines whether the current time falls within the specified charge time window.
-func (c *Charger) checkTime() {
+// checkTime determines whether the current time falls within any enabled schedule.
+func (c *Controller) checkTime() {
 	now := time.Now().In(c.timezone)
 
 	for i := range c.schedules {
 		schedule := &c.schedules[i]
-		if schedule.Enabled && schedule.Type == "charge" {
-			if c.isTimeToCharge(schedule.StartTime, schedule.StopTime) {
+		if schedule.Enabled && c.dir.ScheduleFilter(schedule.Type) {
+			if c.isTimeToOperate(schedule.StartTime, schedule.StopTime) {
 				// Check run_once logic: if enabled and goal was reached, don't run on same day
 				// OR until the schedule period ends (whichever is later)
 				if schedule.RunOnce && schedule.GoalReachedTime != nil {
 					goalTime := *schedule.GoalReachedTime
 					goalDay := goalTime.In(c.timezone)
 
-					// Condition 1: Same calendar day check
 					sameDay := goalDay.Year() == now.Year() && goalDay.YearDay() == now.YearDay()
 
-					// Condition 2: Schedule period ended check
 					stopTime, err := timer.ParseTimeInLocation(schedule.StopTime, c.timezone)
 					if err != nil {
 						c.log.With(sl.Err(err)).Error("parsing stop time for run_once check")
 						continue
 					}
 
-					// Calculate stop time on goal day (when schedule period ends)
 					stopTimeOnGoalDay := time.Date(goalDay.Year(), goalDay.Month(), goalDay.Day(),
 						stopTime.Hour(), stopTime.Minute(), stopTime.Second(), 0, c.timezone)
 
-					// Handle midnight-spanning schedules
 					startTime, _ := timer.ParseTimeInLocation(schedule.StartTime, c.timezone)
 					if startTime.After(stopTime) {
 						stopTimeOnGoalDay = stopTimeOnGoalDay.Add(24 * time.Hour)
@@ -313,18 +355,16 @@ func (c *Charger) checkTime() {
 
 					schedulePeriodEnded := now.After(stopTimeOnGoalDay)
 
-					// Skip if same day OR schedule period hasn't ended (whichever is later)
 					if sameDay || !schedulePeriodEnded {
 						c.log.With(
 							slog.String("schedule", schedule.Name),
 							slog.Time("goal_reached_at", goalTime),
 							slog.Bool("same_day", sameDay),
 							slog.Bool("period_ended", schedulePeriodEnded),
-						).Debug("run_once schedule goal reached, skipping until next period")
+						).Info("run_once schedule goal reached, skipping until next period")
 						continue
 					}
 
-					// Both conditions satisfied: different day AND period ended - clear goal state
 					schedule.GoalReachedTime = nil
 					if c.clearGoalReached != nil {
 						if err := c.clearGoalReached(schedule.Name); err != nil {
@@ -337,22 +377,16 @@ func (c *Charger) checkTime() {
 				}
 
 				oldRate := c.rate
-				// Schedule is active: use schedule limits (they take precedence over battery limits)
 				c.powerLimit = schedule.PowerLimit
 				c.socLimit = float64(schedule.SocLimit)
 				c.calculateRate()
 
-				// Check conditions before setting readyToCharge:
-				// 1. SOC must be below the limit (we have capacity to charge)
-				// 2. Power limit must be valid (> 0)
-				// 3. Rate must be valid (> 0)
 				canStart := true
 				if c.status == nil {
 					canStart = false
-					c.log.Debug("cannot start charge: no battery status available")
-				} else if c.soc >= c.socLimit {
+					c.log.Debug("cannot start " + c.dir.Name + ": no battery status available")
+				} else if c.dir.GoalReached(c.soc, c.socLimit) {
 					canStart = false
-					// For run_once schedules: if battery is already at/past goal, record goal as reached
 					if schedule.RunOnce {
 						goalTime := time.Now()
 						schedule.GoalReachedTime = &goalTime
@@ -371,49 +405,45 @@ func (c *Charger) checkTime() {
 					c.log.With(
 						slog.Float64("usoc", c.soc),
 						slog.Float64("soc_limit", c.socLimit),
-					).Debug("schedule is active but battery already at or above SoC limit, not ready to charge")
+					).Debug("schedule is active but battery already at SoC limit, not ready to " + c.dir.Name)
 				} else if c.powerLimit <= 0 {
 					canStart = false
 					c.log.With(
 						slog.Int("power_limit", c.powerLimit),
-					).Info("schedule is active but power limit is invalid, not ready to charge")
+					).Info("schedule is active but power limit is invalid, not ready to " + c.dir.Name)
 				} else if c.rate <= 0 {
 					canStart = false
 					c.log.With(
 						slog.Int("rate", c.rate),
-					).Info("schedule is active but calculated rate is invalid, not ready to charge")
+					).Info("schedule is active but calculated rate is invalid, not ready to " + c.dir.Name)
 				}
 
-				c.readyToCharge = canStart
+				c.ready = canStart
 
-				// If conditions don't match and battery is in manual mode charging, stop and return to auto mode
-				// OperatingMode "1" = manual, "2" = auto
-				if !canStart && c.status != nil && c.status.OperatingMode == "1" && (c.isCharging || c.status.BatteryCharging) {
+				if !canStart && c.status != nil && c.status.OperatingMode == "1" && (c.active || c.dir.IsActive(c.status)) {
 					c.log.With(
 						slog.String("operating_mode", c.status.OperatingMode),
-						slog.Bool("is_charging", c.isCharging),
-						slog.Bool("battery_charging", c.status.BatteryCharging),
-					).Info("schedule conditions not met, stopping charge and returning to auto mode")
-					if err := c.stopCharge(); err != nil {
-						c.log.With(sl.Err(err)).Error("stopping charge and returning to auto mode")
+						slog.Bool("is_active", c.active),
+						slog.Bool("battery_active", c.dir.IsActive(c.status)),
+					).Info("schedule conditions not met, stopping " + c.dir.Name + " and returning to auto mode")
+					if err := c.stopOperation(); err != nil {
+						c.log.With(sl.Err(err)).Error("stopping " + c.dir.Name + " and returning to auto mode")
 					}
 				} else if !canStart && c.status != nil {
-					// Log why we're not stopping (for debugging)
 					c.log.With(
 						slog.String("operating_mode", c.status.OperatingMode),
-						slog.Bool("is_charging", c.isCharging),
-						slog.Bool("battery_charging", c.status.BatteryCharging),
-					).Debug("schedule conditions not met but not stopping charge (checking why)")
+						slog.Bool("is_active", c.active),
+						slog.Bool("battery_active", c.dir.IsActive(c.status)),
+					).Debug("schedule conditions not met but not stopping " + c.dir.Name + " (checking why)")
 				}
 
-				// If already charging and rate changed, update the ongoing charge
-				if c.isCharging && c.readyToCharge && c.rate > 0 && c.rate != oldRate {
+				if c.active && c.ready && c.rate > 0 && c.rate != oldRate {
 					c.log.With(
 						slog.Int("old_rate", oldRate),
 						slog.Int("new_rate", c.rate),
-					).Info("updating ongoing charge with new rate from schedule")
-					if err := c.client.StartCharge(c.rate); err != nil {
-						c.log.With(sl.Err(err)).Error("updating charge rate")
+					).Info("updating ongoing " + c.dir.Name + " with new rate from schedule")
+					if err := c.dir.StartOp(c.rate); err != nil {
+						c.log.With(sl.Err(err)).Error("updating " + c.dir.Name + " rate")
 					}
 				}
 				return
@@ -422,18 +452,17 @@ func (c *Charger) checkTime() {
 	}
 
 	// No schedule is active: restore battery default limits
-	c.readyToCharge = false
+	c.ready = false
 	if c.batteryPowerLimit > 0 || c.batterySocLimit > 0 {
 		c.powerLimit = c.batteryPowerLimit
 		c.socLimit = c.batterySocLimit
 	}
 
-	// Remove expired auto-schedules (prefixed "auto-") whose time window has passed
 	c.removeExpiredAutoSchedules()
 }
 
 // removeExpiredAutoSchedules removes auto-schedules whose time window has ended.
-func (c *Charger) removeExpiredAutoSchedules() {
+func (c *Controller) removeExpiredAutoSchedules() {
 	if c.removeSchedule == nil {
 		return
 	}
@@ -460,10 +489,8 @@ func (c *Charger) removeExpiredAutoSchedules() {
 
 		expired := false
 		if startTime.Before(stopTime) {
-			// Non-midnight-spanning: expired if now >= stopTime
 			expired = !now.Before(stopTime)
 		} else {
-			// Midnight-spanning (e.g., 22:00-02:00): expired if between stop and start
 			expired = !now.Before(stopTime) && now.Before(startTime)
 		}
 
@@ -481,8 +508,8 @@ func (c *Charger) removeExpiredAutoSchedules() {
 	c.schedules = remaining
 }
 
-// runCharge manages the charge process of the battery based on its current status and predefined limits.
-func (c *Charger) runCharge() {
+// runOperation manages the operation based on current status and limits.
+func (c *Controller) runOperation() {
 	if c.status == nil {
 		return
 	}
@@ -492,31 +519,29 @@ func (c *Charger) runCharge() {
 		slog.Float64("SoC", c.status.RSOC),
 		slog.Int("rate", c.rate),
 		slog.Float64("consumption", c.status.ConsumptionW),
-		slog.Bool("charge", c.status.BatteryCharging),
+		slog.Bool(c.dir.Name, c.dir.IsActive(c.status)),
 	)
 
-	if c.isCharging {
-		if c.stopCondition() {
-			log.Info("battery level reached the limit, stopping charge")
-			// Find the active schedule to check if run_once is enabled
+	if c.active {
+		if c.dir.GoalReached(c.soc, c.socLimit) {
+			log.Info("battery level reached the limit, stopping " + c.dir.Name)
 			var activeSchedule *entity.Schedule
 			for i := range c.schedules {
 				s := &c.schedules[i]
-				if s.Enabled && s.Type == "charge" {
-					if c.isTimeToCharge(s.StartTime, s.StopTime) {
+				if s.Enabled && c.dir.ScheduleFilter(s.Type) {
+					if c.isTimeToOperate(s.StartTime, s.StopTime) {
 						activeSchedule = s
 						break
 					}
 				}
 			}
 
-			err := c.stopCharge()
+			err := c.stopOperation()
 			if err != nil {
-				c.log.With(sl.Err(err)).Error("stopping charge")
+				c.log.With(sl.Err(err)).Error("stopping " + c.dir.Name)
 				return
 			}
 
-			// If run_once is enabled for the active schedule, record goal reached
 			if activeSchedule != nil && activeSchedule.RunOnce {
 				goalTime := time.Now()
 				activeSchedule.GoalReachedTime = &goalTime
@@ -535,17 +560,15 @@ func (c *Charger) runCharge() {
 		return
 	}
 
-	if c.rate == 0 && !c.isCharging {
+	if c.rate == 0 && !c.active {
 		return
 	}
 
-	// Don't start charging if USOC is already at or above the SoC limit
-	// Charge continues while USOC < SoC limit, stops when USOC >= SoC limit
-	if c.soc >= c.socLimit {
+	if c.dir.GoalReached(c.soc, c.socLimit) {
 		log.With(
 			slog.Float64("usoc", c.soc),
 			slog.Float64("soc_limit", c.socLimit),
-		).Info("battery already at or above SoC limit, not starting charge")
+		).Info("battery already at SoC limit, not starting " + c.dir.Name)
 		return
 	}
 
@@ -555,24 +578,21 @@ func (c *Charger) runCharge() {
 		return
 	}
 
-	log.Info("starting charge")
-	err = c.client.StartCharge(c.rate)
+	log.Info("starting " + c.dir.Name)
+	err = c.dir.StartOp(c.rate)
 	if err != nil {
-		c.log.With(sl.Err(err)).Error("starting charge")
+		c.log.With(sl.Err(err)).Error("starting " + c.dir.Name)
 		return
 	}
-	c.isCharging = true
+	c.active = true
 }
 
-// stopCharge stops the current charge activity if it is ongoing.
-// Returns an error if the operation fails at any point.
-func (c *Charger) stopCharge() error {
-	// Check both internal state and actual battery status to handle cases where
-	// internal state is out of sync with actual battery state
-	shouldStop := c.isCharging || (c.status != nil && c.status.BatteryCharging)
+// stopOperation stops the current operation if it is ongoing.
+func (c *Controller) stopOperation() error {
+	shouldStop := c.active || (c.status != nil && c.dir.IsActive(c.status))
 
 	if shouldStop {
-		err := c.client.StopCharge()
+		err := c.dir.StopOp()
 		if err != nil {
 			return err
 		}
@@ -584,23 +604,23 @@ func (c *Charger) stopCharge() error {
 			}
 		}
 
-		c.isCharging = false
+		c.active = false
 	}
 	return nil
 }
 
-func (c *Charger) processControlCommand(cmd ControlCommand) error {
+func (c *Controller) processControlCommand(cmd ControlCommand) error {
 	log := c.log.With(
 		slog.String("command", string(cmd.Type)),
 	)
 
 	switch cmd.Type {
-	case CommandStartCharge:
+	case CommandStart:
 		if cmd.Power > 0 {
 			c.rate = cmd.Power
 		}
 		c.manualOverride = true
-		c.readyToCharge = true
+		c.ready = true
 
 		currentMode := ""
 		if c.status != nil {
@@ -615,22 +635,22 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 			if c.powerLimit > 0 {
 				c.rate = c.powerLimit
 			} else {
-				return fmt.Errorf("no charge rate configured")
+				return fmt.Errorf("no %s rate configured", c.dir.Name)
 			}
 		}
 
-		log.With(slog.Int("rate", c.rate)).Info("starting charge via remote command")
-		if err := c.client.StartCharge(c.rate); err != nil {
-			return fmt.Errorf("starting charge: %w", err)
+		log.With(slog.Int("rate", c.rate)).Info("starting " + c.dir.Name + " via remote command")
+		if err := c.dir.StartOp(c.rate); err != nil {
+			return fmt.Errorf("starting %s: %w", c.dir.Name, err)
 		}
 
-		c.isCharging = true
+		c.active = true
 		return nil
 
-	case CommandStopCharge:
+	case CommandStop:
 		c.manualOverride = false
-		log.Info("stopping charge via remote command")
-		return c.stopCharge()
+		log.Info("stopping " + c.dir.Name + " via remote command")
+		return c.stopOperation()
 
 	case CommandSetLimits:
 		if cmd.Limits == nil {
@@ -645,13 +665,13 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 			log = log.With(slog.Int("soc_limit", *cmd.Limits.SocLimit))
 		}
 		c.calculateRate()
-		log.With(slog.Int("rate", c.rate)).Info("updated charge limits via remote command")
+		log.With(slog.Int("rate", c.rate)).Info("updated " + c.dir.Name + " limits via remote command")
 
 		if c.manualOverride && c.rate > 0 {
-			if err := c.client.StartCharge(c.rate); err != nil {
+			if err := c.dir.StartOp(c.rate); err != nil {
 				return fmt.Errorf("applying updated rate: %w", err)
 			}
-			c.isCharging = true
+			c.active = true
 		}
 		return nil
 
@@ -683,7 +703,6 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 			return fmt.Errorf("missing config payload")
 		}
 
-		// Build map of old schedules to preserve goal state
 		oldScheduleMap := make(map[string]entity.Schedule)
 		for _, s := range c.schedules {
 			oldScheduleMap[s.Name] = s
@@ -691,21 +710,17 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 
 		c.schedules = cloneSchedules(cmd.Config.Schedules)
 
-		// Log if manual override is being cleared
 		if c.manualOverride {
 			log.Info("config update received, clearing manual override mode")
 		}
 		c.manualOverride = false
 
-		// Preserve GoalReachedTime for existing schedules, clear if run_once was disabled
 		for i := range c.schedules {
 			if oldSchedule, exists := oldScheduleMap[c.schedules[i].Name]; exists {
 				if oldSchedule.GoalReachedTime != nil {
 					if c.schedules[i].RunOnce {
-						// Preserve goal state if run_once is still enabled
 						c.schedules[i].GoalReachedTime = oldSchedule.GoalReachedTime
 					} else if c.clearGoalReached != nil {
-						// run_once was disabled, clear persisted goal state
 						if err := c.clearGoalReached(c.schedules[i].Name); err != nil {
 							log.With(sl.Err(err)).Warn("failed to clear goal reached state")
 						}
@@ -714,7 +729,6 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 			}
 		}
 
-		// Update timezone if provided
 		if cmd.Config.Timezone != nil {
 			if err := c.SetTimezone(*cmd.Config.Timezone); err != nil {
 				log.With(sl.Err(err)).Warn("failed to update timezone")
@@ -723,7 +737,6 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 			}
 		}
 
-		// Update battery default limits if provided
 		if cmd.Config.PowerLimit != nil {
 			c.batteryPowerLimit = *cmd.Config.PowerLimit
 			log = log.With(slog.Int("battery_power_limit", c.batteryPowerLimit))
@@ -733,19 +746,16 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 			log = log.With(slog.Int("battery_soc_limit", *cmd.Config.SocLimit))
 		}
 
-		// Check if we should be charging based on updated schedules
-		// This will apply schedule limits if active, or battery defaults if not
 		oldRate := c.rate
 		c.checkTime()
 
-		// If already charging and rate changed, update the ongoing charge
-		if c.isCharging && c.readyToCharge && c.rate > 0 && c.rate != oldRate {
+		if c.active && c.ready && c.rate > 0 && c.rate != oldRate {
 			log.With(
 				slog.Int("old_rate", oldRate),
 				slog.Int("new_rate", c.rate),
-			).Info("updating ongoing charge with new rate from config update")
-			if err := c.client.StartCharge(c.rate); err != nil {
-				return fmt.Errorf("updating charge rate: %w", err)
+			).Info("updating ongoing " + c.dir.Name + " with new rate from config update")
+			if err := c.dir.StartOp(c.rate); err != nil {
+				return fmt.Errorf("updating %s rate: %w", c.dir.Name, err)
 			}
 		}
 
@@ -757,7 +767,6 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 			return fmt.Errorf("missing schedule name for reset_goal command")
 		}
 
-		// Find and clear goal state for the schedule
 		found := false
 		for i := range c.schedules {
 			if c.schedules[i].Name == cmd.ScheduleName {
@@ -770,8 +779,6 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 						}
 					}
 					log.With(slog.String("schedule", cmd.ScheduleName)).Info("goal state cleared via remote command")
-				} else {
-					log.With(slog.String("schedule", cmd.ScheduleName)).Info("no goal state to clear for schedule")
 				}
 				break
 			}
@@ -780,7 +787,6 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 			return fmt.Errorf("schedule %q not found", cmd.ScheduleName)
 		}
 
-		// Re-evaluate schedule to potentially start it immediately
 		c.checkTime()
 		return nil
 
@@ -789,8 +795,8 @@ func (c *Charger) processControlCommand(cmd ControlCommand) error {
 	}
 }
 
-// Stop gracefully terminates the charge worker loop.
-func (c *Charger) Stop() {
+// Stop gracefully terminates the controller loop.
+func (c *Controller) Stop() {
 	c.stopOnce.Do(func() {
 		close(c.stop)
 	})
@@ -798,8 +804,7 @@ func (c *Charger) Stop() {
 }
 
 // GetScheduleType returns the type of a schedule by name.
-// Returns the schedule type ("charge") and true if found, or "", false if not found.
-func (c *Charger) GetScheduleType(name string) (string, bool) {
+func (c *Controller) GetScheduleType(name string) (string, bool) {
 	for _, s := range c.schedules {
 		if s.Name == name {
 			return s.Type, true
@@ -817,15 +822,13 @@ func cloneSchedules(in []entity.Schedule) []entity.Schedule {
 	return out
 }
 
-// calculateRate sets the charge rate to the power limit from the schedule.
-func (c *Charger) calculateRate() {
-	// Always use the power limit from the schedule as the rate
+// calculateRate sets the operation rate to the power limit from the schedule.
+func (c *Controller) calculateRate() {
 	c.rate = c.powerLimit
 }
 
 // observeStatus updates various battery status metrics through external observers.
-// If the status is nil, the method returns immediately.
-func (c *Charger) observeStatus(status *entity.SystemStatus) {
+func (c *Controller) observeStatus(status *entity.SystemStatus) {
 	if status == nil {
 		return
 	}
@@ -840,33 +843,32 @@ func (c *Charger) observeStatus(status *entity.SystemStatus) {
 		observers.UpdateCapacity(c.name, status.RemainingCapacityWh)
 		observers.UpdateConsumption(c.name, status.ConsumptionW)
 		observers.UpdatePac(c.name, status.PacTotalW)
-		observers.UpdateChargeState(c.name, status.BatteryCharging)
+		c.dir.ObserveState(c.name, c.dir.IsActive(status))
 		observers.UpdateOpMode(c.name, status.OperatingMode)
 	}(status)
 }
 
 // syncStateFromBattery synchronizes internal state with actual battery state on startup.
-// This handles cases where the battery is already in a charge state when the agent starts.
-func (c *Charger) syncStateFromBattery(status *entity.SystemStatus) {
+func (c *Controller) syncStateFromBattery(status *entity.SystemStatus) {
 	if status == nil {
 		return
 	}
 
-	// If battery is in manual mode and charging, sync our internal state
+	// If battery is in manual mode and operation is active, sync our internal state
 	// OperatingMode "1" = manual, "2" = auto
-	if status.OperatingMode == "1" && status.BatteryCharging {
-		if !c.isCharging {
+	if status.OperatingMode == "1" && c.dir.IsActive(status) {
+		if !c.active {
 			c.log.With(
 				slog.String("operating_mode", status.OperatingMode),
-				slog.Bool("battery_charging", status.BatteryCharging),
-			).Info("detected battery already charging in manual mode on startup, syncing internal state")
-			c.isCharging = true
+				slog.Bool("battery_active", c.dir.IsActive(status)),
+			).Info("detected battery already " + c.dir.Name + "ing in manual mode on startup, syncing internal state")
+			c.active = true
 		}
 	}
 
-	// If battery is in auto mode but we think we're charging (stale state), clear it
-	if status.OperatingMode == "2" && c.isCharging && !c.manualOverride {
-		c.log.Info("battery in auto mode but internal state shows charging, clearing stale state")
-		c.isCharging = false
+	// If battery is in auto mode but we think we're active (stale state), clear it
+	if status.OperatingMode == "2" && c.active && !c.manualOverride {
+		c.log.Info("battery in auto mode but internal state shows " + c.dir.Name + "ing, clearing stale state")
+		c.active = false
 	}
 }

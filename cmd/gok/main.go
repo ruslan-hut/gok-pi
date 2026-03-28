@@ -2,7 +2,7 @@
 // (typically a Raspberry Pi) near the Sonnen battery system.
 //
 // Startup flow:
-//  1. Load config.yml → filter enabled batteries and schedules
+//  1. Load config.yml -> filter enabled batteries and schedules
 //  2. Create a discharger + charger worker pair per battery
 //  3. Start Prometheus metrics server (if enabled)
 //  4. Connect to control server via WebSocket (if remote_control enabled)
@@ -17,8 +17,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"gok-pi/battery/charger"
-	"gok-pi/battery/discharger"
+	"gok-pi/battery/controller"
 	"gok-pi/battery/driver"
 	_ "gok-pi/battery/driver/sonnen"
 	"gok-pi/battery/entity"
@@ -187,6 +186,17 @@ func main() {
 	lg.Info("gok-pi stopped")
 }
 
+// Wire-format command strings used by the WebSocket protocol.
+const (
+	wireStartDischarge = "start_discharge"
+	wireStopDischarge  = "stop_discharge"
+	wireStartCharge    = "start_charge"
+	wireStopCharge     = "stop_charge"
+	wireSetLimits      = "set_limits"
+	wireForceMode      = "force_mode"
+	wireResetGoal      = "reset_goal"
+)
+
 func handleRemoteCommands(ctx context.Context, commands <-chan wsclient.Command, manager *workerManager, log *slog.Logger) {
 	for {
 		select {
@@ -205,28 +215,28 @@ func handleRemoteCommands(ctx context.Context, commands <-chan wsclient.Command,
 			}
 
 			// Handle reset_goal command specially - needs to route to correct worker based on schedule type
-			if cmd.Command == string(discharger.CommandResetGoal) {
+			if cmd.Command == wireResetGoal {
 				handleResetGoalCommand(cmd, manager, log)
 				continue
 			}
 
 			// Route charge commands to charger, discharge commands to discharger
 			if isChargeCommand(cmd.Command) {
-				chargerWorker, ok := manager.GetCharger(cmd.Target)
+				worker, ok := manager.GetCharger(cmd.Target)
 				if !ok {
 					log.With(slog.String("target", cmd.Target)).Warn("remote charge command for unknown battery")
 					continue
 				}
-				controlCmd, err := translateChargeCommand(cmd)
+				controlCmd, err := translateCommand(cmd)
 				if err != nil {
 					log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate remote charge command")
 					continue
 				}
-				if err := chargerWorker.SubmitCommand(controlCmd); err != nil {
+				if err := worker.SubmitCommand(controlCmd); err != nil {
 					log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit remote charge command")
 				}
 			} else {
-				dischargerWorker, ok := manager.GetDischarger(cmd.Target)
+				worker, ok := manager.GetDischarger(cmd.Target)
 				if !ok {
 					log.With(slog.String("target", cmd.Target)).Warn("remote command for unknown battery")
 					continue
@@ -236,7 +246,7 @@ func handleRemoteCommands(ctx context.Context, commands <-chan wsclient.Command,
 					log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate remote command")
 					continue
 				}
-				if err := dischargerWorker.SubmitCommand(controlCmd); err != nil {
+				if err := worker.SubmitCommand(controlCmd); err != nil {
 					log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit remote command")
 				}
 			}
@@ -272,47 +282,43 @@ func handleResetGoalCommand(cmd wsclient.Command, manager *workerManager, log *s
 		return
 	}
 
+	controlCmd, err := translateCommand(cmd)
+	if err != nil {
+		log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate reset_goal command")
+		return
+	}
+
 	// Route to appropriate worker based on schedule type
 	if scheduleType == "charge" {
-		chargerWorker, ok := manager.GetCharger(cmd.Target)
+		worker, ok := manager.GetCharger(cmd.Target)
 		if !ok {
 			log.With(slog.String("target", cmd.Target)).Warn("reset_goal command: charger worker not found")
 			return
 		}
-		controlCmd, err := translateChargeCommand(cmd)
-		if err != nil {
-			log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate reset_goal command for charger")
-			return
-		}
-		if err := chargerWorker.SubmitCommand(controlCmd); err != nil {
+		if err := worker.SubmitCommand(controlCmd); err != nil {
 			log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit reset_goal command to charger")
 		}
 	} else {
 		// Discharge schedule (type is "" or "discharge")
-		dischargerWorker, ok := manager.GetDischarger(cmd.Target)
+		worker, ok := manager.GetDischarger(cmd.Target)
 		if !ok {
 			log.With(slog.String("target", cmd.Target)).Warn("reset_goal command: discharger worker not found")
 			return
 		}
-		controlCmd, err := translateCommand(cmd)
-		if err != nil {
-			log.With(slog.String("target", cmd.Target), sl.Err(err)).Warn("failed to translate reset_goal command for discharger")
-			return
-		}
-		if err := dischargerWorker.SubmitCommand(controlCmd); err != nil {
+		if err := worker.SubmitCommand(controlCmd); err != nil {
 			log.With(slog.String("target", cmd.Target), sl.Err(err)).Error("failed to submit reset_goal command to discharger")
 		}
 	}
 }
 
 func isChargeCommand(cmd string) bool {
-	return cmd == string(charger.CommandStartCharge) || cmd == string(charger.CommandStopCharge)
+	return cmd == wireStartCharge || cmd == wireStopCharge
 }
 
 type workerEntry struct {
-	dischargerWorker *discharger.Discharge
-	chargerWorker    *charger.Charger
-	config           entity.BatteryConfig
+	discharger *controller.Controller
+	charger    *controller.Controller
+	config     entity.BatteryConfig
 }
 
 type workerManager struct {
@@ -326,7 +332,7 @@ func newWorkerManager() *workerManager {
 	}
 }
 
-func (m *workerManager) GetDischarger(name string) (*discharger.Discharge, bool) {
+func (m *workerManager) GetDischarger(name string) (*controller.Controller, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -334,10 +340,10 @@ func (m *workerManager) GetDischarger(name string) (*discharger.Discharge, bool)
 	if !ok {
 		return nil, false
 	}
-	return entry.dischargerWorker, true
+	return entry.discharger, true
 }
 
-func (m *workerManager) GetCharger(name string) (*charger.Charger, bool) {
+func (m *workerManager) GetCharger(name string) (*controller.Controller, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -345,7 +351,7 @@ func (m *workerManager) GetCharger(name string) (*charger.Charger, bool) {
 	if !ok {
 		return nil, false
 	}
-	return entry.chargerWorker, true
+	return entry.charger, true
 }
 
 // GetScheduleType looks up a schedule by name in the workers for a given battery
@@ -360,15 +366,15 @@ func (m *workerManager) GetScheduleType(batteryName, scheduleName string) (strin
 	}
 
 	// Check charger first (since we need to identify charge schedules specifically)
-	if entry.chargerWorker != nil {
-		if schedType, found := entry.chargerWorker.GetScheduleType(scheduleName); found {
+	if entry.charger != nil {
+		if schedType, found := entry.charger.GetScheduleType(scheduleName); found {
 			return schedType, true
 		}
 	}
 
 	// Check discharger
-	if entry.dischargerWorker != nil {
-		if schedType, found := entry.dischargerWorker.GetScheduleType(scheduleName); found {
+	if entry.discharger != nil {
+		if schedType, found := entry.discharger.GetScheduleType(scheduleName); found {
 			return schedType, true
 		}
 	}
@@ -404,11 +410,11 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 			if battery, exists := allBatteries[name]; exists && !battery.Enabled {
 				observers.UpdateStatus(name, "Disabled")
 			}
-			if removed.dischargerWorker != nil {
-				go removed.dischargerWorker.Stop()
+			if removed.discharger != nil {
+				go removed.discharger.Stop()
 			}
-			if removed.chargerWorker != nil {
-				go removed.chargerWorker.Stop()
+			if removed.charger != nil {
+				go removed.charger.Stop()
 			}
 		}
 	}
@@ -431,11 +437,11 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 					slog.Bool("driver_changed", driverChanged),
 				).Info("restarting workers (connection config changed)")
 				if removed, ok := m.remove(name); ok {
-					if removed.dischargerWorker != nil {
-						removed.dischargerWorker.Stop()
+					if removed.discharger != nil {
+						removed.discharger.Stop()
 					}
-					if removed.chargerWorker != nil {
-						removed.chargerWorker.Stop()
+					if removed.charger != nil {
+						removed.charger.Stop()
 					}
 				}
 			} else if entry.config == cfg {
@@ -444,34 +450,29 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 				if timezone == "" {
 					timezonePtr = nil
 				}
-				if entry.dischargerWorker != nil {
-					_ = entry.dischargerWorker.SubmitCommand(discharger.ControlCommand{
-						Type: discharger.CommandUpdateConfig,
-						Config: &discharger.ConfigUpdate{
-							Schedules: scheduleByBattery[name],
-							Timezone:  timezonePtr,
-						},
-					})
+				configUpdate := controller.ControlCommand{
+					Type: controller.CommandUpdateConfig,
+					Config: &controller.ConfigUpdate{
+						Schedules: scheduleByBattery[name],
+						Timezone:  timezonePtr,
+					},
 				}
-				if entry.chargerWorker != nil {
-					_ = entry.chargerWorker.SubmitCommand(charger.ControlCommand{
-						Type: charger.CommandUpdateConfig,
-						Config: &charger.ConfigUpdate{
-							Schedules: scheduleByBattery[name],
-							Timezone:  timezonePtr,
-						},
-					})
+				if entry.discharger != nil {
+					_ = entry.discharger.SubmitCommand(configUpdate)
+				}
+				if entry.charger != nil {
+					_ = entry.charger.SubmitCommand(configUpdate)
 				}
 				continue
 			} else {
 				// Other config fields changed (not URL/token), restart workers
 				if removed, ok := m.remove(name); ok {
 					log.With(slog.String("battery", name)).Info("restarting workers (config changed)")
-					if removed.dischargerWorker != nil {
-						removed.dischargerWorker.Stop()
+					if removed.discharger != nil {
+						removed.discharger.Stop()
 					}
-					if removed.chargerWorker != nil {
-						removed.chargerWorker.Stop()
+					if removed.charger != nil {
+						removed.charger.Stop()
 					}
 				}
 			}
@@ -522,6 +523,62 @@ func (m *workerManager) remove(name string) (*workerEntry, bool) {
 	return entry, ok
 }
 
+// initController creates and configures a controller for the given direction.
+func initController(battery entity.BatteryConfig, schedules []entity.Schedule, timezone string, dir controller.Direction, client controller.Client, workerLog *slog.Logger) (*controller.Controller, error) {
+	w, err := controller.New(battery.Name, client, dir, workerLog)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, schedule := range schedules {
+		w.AddSchedule(schedule)
+	}
+
+	w.SetCapacityLimit(battery.CapacityLimit)
+	if timezone != "" {
+		if err := w.SetTimezone(timezone); err != nil {
+			workerLog.With(sl.Err(err)).Warn("failed to set timezone for " + dir.Name)
+		}
+	}
+	if battery.PowerLimit > 0 || battery.SocLimit > 0 {
+		powerLimit := battery.PowerLimit
+		socLimit := battery.SocLimit
+		if powerLimit == 0 {
+			powerLimit = 1000
+		}
+		if socLimit == 0 {
+			socLimit = 50
+		}
+		w.SetBatteryDefaults(powerLimit, socLimit)
+	}
+	w.SetGoalCallbacks(config.UpdateScheduleGoalReached, config.ClearScheduleGoalReached)
+	w.SetRemoveScheduleCallback(config.RemoveSchedule)
+	return w, nil
+}
+
+// runController runs the controller in a goroutine with context cancellation support.
+func runController(ctx context.Context, wg *sync.WaitGroup, w *controller.Controller, label string, workerLog *slog.Logger) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		stopCh := make(chan struct{})
+		go func() {
+			select {
+			case <-ctx.Done():
+				w.Stop()
+			case <-stopCh:
+			}
+		}()
+
+		if err := w.Run(); err != nil {
+			workerLog.Error("running "+label+" worker", sl.Err(err))
+		}
+		workerLog.Info(label + " worker stopped")
+		close(stopCh)
+	}()
+}
+
 func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.BatteryConfig, schedules []entity.Schedule, timezone string, log *slog.Logger) (*workerEntry, error) {
 	workerLog := log.With(slog.String("battery", battery.Name))
 	api, err := driver.New(battery.Driver, battery, workerLog)
@@ -534,7 +591,6 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 	}
 
 	// Always create a monitor worker to track battery status and emit data to control server
-	// This ensures enabled batteries are monitored even without schedules
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -566,130 +622,31 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}
 	}
 
-	// Create discharger worker if we have discharge schedules
 	if hasDischargeSchedules {
-		dischargerWorker, err := discharger.New(battery.Name, api, workerLog)
+		w, err := initController(battery, schedules, timezone, controller.DischargeDirection(api), api, workerLog)
 		if err != nil {
 			return nil, fmt.Errorf("creating discharge worker: %w", err)
 		}
-
-		for _, schedule := range schedules {
-			dischargerWorker.AddSchedule(schedule)
-		}
-
-		dischargerWorker.SetCapacityLimit(battery.CapacityLimit)
-		// Set timezone if provided
-		if timezone != "" {
-			if err := dischargerWorker.SetTimezone(timezone); err != nil {
-				workerLog.With(sl.Err(err)).Warn("failed to set timezone for discharger")
-			}
-		}
-		// Initialize battery default limits from battery config (used when no schedule is active)
-		if battery.PowerLimit > 0 || battery.SocLimit > 0 {
-			powerLimit := battery.PowerLimit
-			socLimit := battery.SocLimit
-			if powerLimit == 0 {
-				powerLimit = 1000 // Default if not set
-			}
-			if socLimit == 0 {
-				socLimit = 50 // Default if not set
-			}
-			dischargerWorker.SetBatteryDefaults(powerLimit, socLimit)
-		}
-		// Set goal callbacks for persisting goal reached state
-		dischargerWorker.SetGoalCallbacks(config.UpdateScheduleGoalReached, config.ClearScheduleGoalReached)
-		dischargerWorker.SetRemoveScheduleCallback(config.RemoveSchedule)
-		entry.dischargerWorker = dischargerWorker
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			stopCh := make(chan struct{})
-			go func() {
-				select {
-				case <-ctx.Done():
-					dischargerWorker.Stop()
-				case <-stopCh:
-				}
-			}()
-
-			if err := dischargerWorker.Run(); err != nil {
-				workerLog.Error("running discharge worker", sl.Err(err))
-			}
-			workerLog.Info("discharge worker stopped")
-			close(stopCh)
-		}()
+		entry.discharger = w
+		runController(ctx, wg, w, "discharge", workerLog)
 	}
 
-	// Create charger worker if we have charge schedules
 	if hasChargeSchedules {
-		chargerWorker, err := charger.New(battery.Name, api, workerLog)
+		w, err := initController(battery, schedules, timezone, controller.ChargeDirection(api), api, workerLog)
 		if err != nil {
-			// If discharger was created, we should still return it
-			if entry.dischargerWorker != nil {
-				entry.dischargerWorker.Stop()
+			if entry.discharger != nil {
+				entry.discharger.Stop()
 			}
 			return nil, fmt.Errorf("creating charge worker: %w", err)
 		}
-
-		for _, schedule := range schedules {
-			chargerWorker.AddSchedule(schedule)
-		}
-
-		chargerWorker.SetCapacityLimit(battery.CapacityLimit)
-		// Set timezone if provided
-		if timezone != "" {
-			if err := chargerWorker.SetTimezone(timezone); err != nil {
-				workerLog.With(sl.Err(err)).Warn("failed to set timezone for charger")
-			}
-		}
-		// Initialize battery default limits from battery config (used when no schedule is active)
-		if battery.PowerLimit > 0 || battery.SocLimit > 0 {
-			powerLimit := battery.PowerLimit
-			socLimit := battery.SocLimit
-			if powerLimit == 0 {
-				powerLimit = 1000 // Default if not set
-			}
-			if socLimit == 0 {
-				socLimit = 50 // Default if not set
-			}
-			chargerWorker.SetBatteryDefaults(powerLimit, socLimit)
-		}
-		// Set goal callbacks for persisting goal reached state
-		chargerWorker.SetGoalCallbacks(config.UpdateScheduleGoalReached, config.ClearScheduleGoalReached)
-		chargerWorker.SetRemoveScheduleCallback(config.RemoveSchedule)
-		entry.chargerWorker = chargerWorker
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			stopCh := make(chan struct{})
-			go func() {
-				select {
-				case <-ctx.Done():
-					chargerWorker.Stop()
-				case <-stopCh:
-				}
-			}()
-
-			if err := chargerWorker.Run(); err != nil {
-				workerLog.Error("running charge worker", sl.Err(err))
-			}
-			workerLog.Info("charge worker stopped")
-			close(stopCh)
-		}()
+		entry.charger = w
+		runController(ctx, wg, w, "charge", workerLog)
 	}
-
-	// Initial status is set by monitorBattery function
-	// No need to set it here as monitor starts immediately
 
 	return entry, nil
 }
 
 // monitorBattery continuously monitors battery status and emits data to observers
-// This ensures enabled batteries are always monitored, even without schedules
 func monitorBattery(ctx context.Context, name string, api driver.Driver, log *slog.Logger) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -771,164 +728,83 @@ func groupSchedules(schedules []entity.Schedule) map[string][]entity.Schedule {
 	return result
 }
 
-func translateCommand(cmd wsclient.Command) (discharger.ControlCommand, error) {
+func translateCommand(cmd wsclient.Command) (controller.ControlCommand, error) {
 	switch cmd.Command {
-	case string(discharger.CommandStartDischarge):
+	case wireStartDischarge, wireStartCharge:
 		var payload struct {
 			Power int `json:"power"`
 		}
 		if len(cmd.Payload) > 0 {
 			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-				return discharger.ControlCommand{}, fmt.Errorf("decode start payload: %w", err)
+				return controller.ControlCommand{}, fmt.Errorf("decode start payload: %w", err)
 			}
 		}
-		return discharger.ControlCommand{
-			Type:  discharger.CommandStartDischarge,
+		return controller.ControlCommand{
+			Type:  controller.CommandStart,
 			Power: payload.Power,
 		}, nil
-	case string(discharger.CommandStopDischarge):
-		return discharger.ControlCommand{
-			Type: discharger.CommandStopDischarge,
+	case wireStopDischarge, wireStopCharge:
+		return controller.ControlCommand{
+			Type: controller.CommandStop,
 		}, nil
-	case string(discharger.CommandSetLimits):
+	case wireSetLimits:
 		var payload struct {
 			PowerLimit *int `json:"power_limit"`
 			SocLimit   *int `json:"soc_limit"`
 		}
 		if len(cmd.Payload) > 0 {
 			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-				return discharger.ControlCommand{}, fmt.Errorf("decode limits payload: %w", err)
+				return controller.ControlCommand{}, fmt.Errorf("decode limits payload: %w", err)
 			}
 		}
-		return discharger.ControlCommand{
-			Type: discharger.CommandSetLimits,
-			Limits: &discharger.CommandLimits{
+		return controller.ControlCommand{
+			Type: controller.CommandSetLimits,
+			Limits: &controller.CommandLimits{
 				PowerLimit: payload.PowerLimit,
 				SocLimit:   payload.SocLimit,
 			},
 		}, nil
-	case string(discharger.CommandForceMode):
+	case wireForceMode:
 		var payload struct {
 			Mode string `json:"mode"`
 		}
 		if len(cmd.Payload) > 0 {
 			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-				return discharger.ControlCommand{}, fmt.Errorf("decode force mode payload: %w", err)
+				return controller.ControlCommand{}, fmt.Errorf("decode force mode payload: %w", err)
 			}
 		}
 		mode := strings.ToLower(payload.Mode)
 		switch mode {
 		case "manual":
-			return discharger.ControlCommand{
-				Type: discharger.CommandForceMode,
-				Mode: discharger.OperatingModeManual,
+			return controller.ControlCommand{
+				Type: controller.CommandForceMode,
+				Mode: controller.OperatingModeManual,
 			}, nil
 		case "auto", "":
-			return discharger.ControlCommand{
-				Type: discharger.CommandForceMode,
-				Mode: discharger.OperatingModeAuto,
+			return controller.ControlCommand{
+				Type: controller.CommandForceMode,
+				Mode: controller.OperatingModeAuto,
 			}, nil
 		default:
-			return discharger.ControlCommand{}, fmt.Errorf("unsupported operating mode: %s", mode)
+			return controller.ControlCommand{}, fmt.Errorf("unsupported operating mode: %s", mode)
 		}
-	case string(discharger.CommandResetGoal):
+	case wireResetGoal:
 		var payload struct {
 			ScheduleName string `json:"schedule_name"`
 		}
 		if len(cmd.Payload) > 0 {
 			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-				return discharger.ControlCommand{}, fmt.Errorf("decode reset_goal payload: %w", err)
+				return controller.ControlCommand{}, fmt.Errorf("decode reset_goal payload: %w", err)
 			}
 		}
 		if payload.ScheduleName == "" {
-			return discharger.ControlCommand{}, fmt.Errorf("schedule_name is required for reset_goal command")
+			return controller.ControlCommand{}, fmt.Errorf("schedule_name is required for reset_goal command")
 		}
-		return discharger.ControlCommand{
-			Type:         discharger.CommandResetGoal,
+		return controller.ControlCommand{
+			Type:         controller.CommandResetGoal,
 			ScheduleName: payload.ScheduleName,
 		}, nil
 	default:
-		return discharger.ControlCommand{}, fmt.Errorf("unsupported remote command: %s", cmd.Command)
-	}
-}
-
-func translateChargeCommand(cmd wsclient.Command) (charger.ControlCommand, error) {
-	switch cmd.Command {
-	case string(charger.CommandStartCharge):
-		var payload struct {
-			Power int `json:"power"`
-		}
-		if len(cmd.Payload) > 0 {
-			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-				return charger.ControlCommand{}, fmt.Errorf("decode start payload: %w", err)
-			}
-		}
-		return charger.ControlCommand{
-			Type:  charger.CommandStartCharge,
-			Power: payload.Power,
-		}, nil
-	case string(charger.CommandStopCharge):
-		return charger.ControlCommand{
-			Type: charger.CommandStopCharge,
-		}, nil
-	case string(charger.CommandSetLimits):
-		var payload struct {
-			PowerLimit *int `json:"power_limit"`
-			SocLimit   *int `json:"soc_limit"`
-		}
-		if len(cmd.Payload) > 0 {
-			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-				return charger.ControlCommand{}, fmt.Errorf("decode limits payload: %w", err)
-			}
-		}
-		return charger.ControlCommand{
-			Type: charger.CommandSetLimits,
-			Limits: &charger.CommandLimits{
-				PowerLimit: payload.PowerLimit,
-				SocLimit:   payload.SocLimit,
-			},
-		}, nil
-	case string(charger.CommandForceMode):
-		var payload struct {
-			Mode string `json:"mode"`
-		}
-		if len(cmd.Payload) > 0 {
-			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-				return charger.ControlCommand{}, fmt.Errorf("decode force mode payload: %w", err)
-			}
-		}
-		mode := strings.ToLower(payload.Mode)
-		switch mode {
-		case "manual":
-			return charger.ControlCommand{
-				Type: charger.CommandForceMode,
-				Mode: charger.OperatingModeManual,
-			}, nil
-		case "auto", "":
-			return charger.ControlCommand{
-				Type: charger.CommandForceMode,
-				Mode: charger.OperatingModeAuto,
-			}, nil
-		default:
-			return charger.ControlCommand{}, fmt.Errorf("unsupported operating mode: %s", mode)
-		}
-	case string(charger.CommandResetGoal):
-		var payload struct {
-			ScheduleName string `json:"schedule_name"`
-		}
-		if len(cmd.Payload) > 0 {
-			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-				return charger.ControlCommand{}, fmt.Errorf("decode reset_goal payload: %w", err)
-			}
-		}
-		if payload.ScheduleName == "" {
-			return charger.ControlCommand{}, fmt.Errorf("schedule_name is required for reset_goal command")
-		}
-		return charger.ControlCommand{
-			Type:         charger.CommandResetGoal,
-			ScheduleName: payload.ScheduleName,
-		}, nil
-	default:
-		return charger.ControlCommand{}, fmt.Errorf("unsupported remote command: %s", cmd.Command)
+		return controller.ControlCommand{}, fmt.Errorf("unsupported remote command: %s", cmd.Command)
 	}
 }
