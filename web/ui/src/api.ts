@@ -227,6 +227,10 @@ export async function savePriceLimits(limits: PriceLimits): Promise<PriceLimits>
   return (await res.json()) as PriceLimits;
 }
 
+export function exportPricesURL(start: string, end: string): string {
+  return `/api/prices/export?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+}
+
 export async function fetchDBStats(): Promise<DBStatsResponse> {
   const res = await fetch("/api/db-stats");
   if (!res.ok) {

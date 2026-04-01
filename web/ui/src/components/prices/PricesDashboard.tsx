@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchPrices, fetchSessions, savePriceLimits } from "../../api";
+import { exportPricesURL, fetchPrices, fetchSessions, savePriceLimits } from "../../api";
 import type { BatterySummary, DayData, PriceLimits, PricesState, ScheduleWindow, SessionsResponse } from "../../types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -127,6 +127,7 @@ export default function PricesDashboard({ readonly }: { readonly?: boolean }) {
       {yesterdaySess && yesterdaySess.summaries.length > 0 && (
         <SessionsPanel label="Yesterday" summaries={yesterdaySess.summaries} />
       )}
+      <ExportPricesPanel />
     </div>
   );
 }
@@ -688,6 +689,65 @@ function SessionsPanel({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ExportPricesPanel() {
+  const today = new Date().toISOString().slice(0, 10);
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+
+  const [start, setStart] = useState(weekAgo);
+  const [end, setEnd] = useState(today);
+  const [error, setError] = useState<string>();
+
+  const handleExport = () => {
+    setError(undefined);
+    if (!start || !end) {
+      setError("Select both start and end dates");
+      return;
+    }
+    if (end < start) {
+      setError("End date must be after start date");
+      return;
+    }
+    const s = new Date(start);
+    const e = new Date(end);
+    const diffDays = (e.getTime() - s.getTime()) / 86400000;
+    if (diffDays > 90) {
+      setError("Maximum export range is 90 days");
+      return;
+    }
+    window.location.href = exportPricesURL(start, end);
+  };
+
+  return (
+    <div className="price-export-panel">
+      <h4>Export Prices</h4>
+      <div className="price-export-row">
+        <label className="price-export-field">
+          <span>From</span>
+          <input
+            type="date"
+            value={start}
+            max={today}
+            onChange={(e) => setStart(e.target.value)}
+          />
+        </label>
+        <label className="price-export-field">
+          <span>To</span>
+          <input
+            type="date"
+            value={end}
+            max={today}
+            onChange={(e) => setEnd(e.target.value)}
+          />
+        </label>
+        <button onClick={handleExport}>
+          Download CSV
+        </button>
+      </div>
+      {error && <div className="price-export-error">{error}</div>}
     </div>
   );
 }

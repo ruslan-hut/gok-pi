@@ -63,6 +63,11 @@ func New(log *slog.Logger, cachePath string) *Fetcher {
 	return f
 }
 
+// Client returns the underlying REData API client for direct queries.
+func (f *Fetcher) Client() *redata.Client {
+	return f.client
+}
+
 // GetState returns a snapshot of the current price data.
 func (f *Fetcher) GetState() State {
 	f.mu.RLock()

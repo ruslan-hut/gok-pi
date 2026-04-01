@@ -273,6 +273,50 @@
   color: var(--color-text);
 }
 
+/* Export prices panel */
+.price-export-panel {
+  background: var(--color-bg-overlay);
+  background-image: var(--gradient-surface);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1rem;
+}
+
+.price-export-panel h4 {
+  margin: 0 0 0.5rem 0;
+}
+
+.price-export-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.price-export-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.price-export-field input[type="date"] {
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.85rem;
+}
+
+.price-export-error {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--color-danger);
+}
+
 /* Mobile */
 @media (max-width: 600px) {
   .prices-stats {

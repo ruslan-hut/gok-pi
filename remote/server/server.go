@@ -127,6 +127,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/agents", s.handleAgents)
 	mux.HandleFunc("/api/agents/", s.requireAuthForWrites(s.handleAgentRoutes))
 	mux.HandleFunc("/api/prices", s.handlePrices)
+	mux.HandleFunc("/api/prices/export", s.handlePricesExport)
 	mux.HandleFunc("/api/price-limits", s.requireAuthForWrites(s.handlePriceLimits))
 	mux.HandleFunc("/api/sessions", s.handleSessions)
 	mux.HandleFunc("/api/db-stats", s.handleDBStats)
@@ -667,6 +668,64 @@ func (s *Server) handlePrices(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		s.log.With(slog.Any("error", err)).Error("encode prices response")
 		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handlePricesExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	startStr := r.URL.Query().Get("start")
+	endStr := r.URL.Query().Get("end")
+	if startStr == "" || endStr == "" {
+		http.Error(w, "start and end query parameters required (YYYY-MM-DD)", http.StatusBadRequest)
+		return
+	}
+
+	start, err := time.Parse("2006-01-02", startStr)
+	if err != nil {
+		http.Error(w, "invalid start date, expected YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+	end, err := time.Parse("2006-01-02", endStr)
+	if err != nil {
+		http.Error(w, "invalid end date, expected YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+
+	if end.Before(start) {
+		http.Error(w, "end date must be after start date", http.StatusBadRequest)
+		return
+	}
+	if end.Sub(start) > 90*24*time.Hour {
+		http.Error(w, "maximum export range is 90 days", http.StatusBadRequest)
+		return
+	}
+
+	client := s.prices.Client()
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=prices_%s_%s.csv", startStr, endStr))
+
+	// Write CSV header
+	w.Write([]byte("date,hour,price_eur_mwh\n"))
+
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		prices, err := client.FetchPrices(r.Context(), d)
+		if err != nil {
+			s.log.Warn("export: failed to fetch prices for date",
+				slog.String("date", d.Format("2006-01-02")),
+				slog.Any("error", err))
+			continue
+		}
+		dateStr := d.Format("2006-01-02")
+		for _, p := range prices {
+			line := fmt.Sprintf("%s,%d,%.2f\n", dateStr, p.Hour, p.Price)
+			w.Write([]byte(line))
+		}
 	}
 }
 
