@@ -36,7 +36,7 @@ type dailyView struct {
 	Timezone   string
 	Summaries  []sessiondb.BatterySummary
 	Sessions   []sessiondb.SessionRecord
-	ChartSVG   template.HTML
+	Chart      template.HTML
 }
 
 type rangeTotals struct {
@@ -69,7 +69,7 @@ func RenderDaily(r *DailyReport) (string, string, error) {
 	}
 	subject := fmt.Sprintf("%s — daily battery report (%s)", devLabel, dateStr)
 
-	chart := renderPriceChartSVG(r.Prices, r.ChargeHours, r.DischargeHours, r.Stats, r.PriceLimits)
+	chart := renderPriceChartHTML(r.Prices, r.ChargeHours, r.DischargeHours, r.Stats, r.PriceLimits)
 
 	view := dailyView{
 		Title:      subject,
@@ -79,7 +79,7 @@ func RenderDaily(r *DailyReport) (string, string, error) {
 		Timezone:   r.Timezone,
 		Summaries:  r.Summaries,
 		Sessions:   r.Sessions,
-		ChartSVG:   template.HTML(chart),
+		Chart:      template.HTML(chart),
 	}
 
 	var buf bytes.Buffer

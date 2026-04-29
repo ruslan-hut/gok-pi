@@ -44,7 +44,7 @@ func TestRenderDailyContainsCoreFields(t *testing.T) {
 	if !strings.Contains(subject, "MyHome") || !strings.Contains(subject, "28") {
 		t.Fatalf("subject missing fields: %q", subject)
 	}
-	for _, want := range []string{"agent-xyz", "bat-A", "Daily report", "<svg", "Hourly prices", "1.50"} {
+	for _, want := range []string{"agent-xyz", "bat-A", "Daily report", "<table", "Hourly prices", "1.50", "Avg €", "P20"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("html missing %q\n--- html ---\n%s", want, truncForTest(html, 600))
 		}
@@ -81,14 +81,20 @@ func TestRenderRangeWeekly(t *testing.T) {
 	}
 }
 
-func TestRenderSVGBasics(t *testing.T) {
-	svg := renderPriceChartSVG(makePrices(), map[int]bool{2: true}, map[int]bool{19: true}, makeStats(), PriceLimits{})
-	if !strings.HasPrefix(svg, "<svg") || !strings.HasSuffix(svg, "</svg>") {
-		t.Fatalf("svg envelope wrong: %q", truncForTest(svg, 200))
+func TestRenderChartHTMLBasics(t *testing.T) {
+	html := renderPriceChartHTML(makePrices(), map[int]bool{2: true}, map[int]bool{19: true}, makeStats(), PriceLimits{ChargeLimitEurMWh: 50, DischargeLimitEurMWh: 200})
+	if !strings.Contains(html, "<table") || !strings.Contains(html, "</table>") {
+		t.Fatalf("table envelope missing: %q", truncForTest(html, 200))
 	}
-	// 24 bars expected
-	if c := strings.Count(svg, "<rect"); c < 24 {
-		t.Fatalf("expected at least 24 rect bars, got %d", c)
+	// 24 bar cells expected (one <td valign="bottom"> per hour)
+	if c := strings.Count(html, `valign="bottom"`); c != 24 {
+		t.Fatalf("expected 24 bar cells, got %d", c)
+	}
+	// Charge/discharge colors and limits should appear
+	for _, want := range []string{"#16a34a", "#dc2626", "Limits:", "charge ≤", "discharge ≥"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("html missing %q\n--- html ---\n%s", want, truncForTest(html, 800))
+		}
 	}
 }
 
