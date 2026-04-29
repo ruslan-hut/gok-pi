@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { EmailProviderStatus, EmailReportsConfig } from "../../types";
-import { fetchEmailStatus } from "../../api";
+import { fetchEmailStatus, sendEmailTest } from "../../api";
 
 const DEFAULT: EmailReportsConfig = {
   enabled: false,
@@ -15,16 +15,22 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface Props {
   value: EmailReportsConfig | null | undefined;
+  agentId?: string;
   disabled: boolean;
   readonly?: boolean;
   onChange: (next: EmailReportsConfig | null) => void;
 }
 
-export function EmailReportsForm({ value, disabled, readonly, onChange }: Props) {
+export function EmailReportsForm({ value, agentId, disabled, readonly, onChange }: Props) {
   const cfg = value ?? DEFAULT;
   const [recipientsText, setRecipientsText] = useState<string>(cfg.recipients.join(", "));
   const [recipientError, setRecipientError] = useState<string>("");
   const [status, setStatus] = useState<EmailProviderStatus | null>(null);
+  const [testState, setTestState] = useState<{
+    busy: boolean;
+    message?: string;
+    error?: string;
+  }>({ busy: false });
 
   useEffect(() => {
     fetchEmailStatus().then(setStatus).catch(() => setStatus(null));
@@ -51,6 +57,39 @@ export function EmailReportsForm({ value, disabled, readonly, onChange }: Props)
       setRecipientError("");
     }
     update({ recipients: parts });
+  };
+
+  const parseRecipients = (): string[] =>
+    recipientsText
+      .split(/[,;\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+  const onSendTest = async () => {
+    if (!agentId) return;
+    const parts = parseRecipients();
+    const invalid = parts.filter((p) => !EMAIL_RE.test(p));
+    if (parts.length === 0) {
+      setTestState({ busy: false, error: "Add at least one recipient before testing." });
+      return;
+    }
+    if (invalid.length > 0) {
+      setTestState({ busy: false, error: `Invalid email${invalid.length > 1 ? "s" : ""}: ${invalid.join(", ")}` });
+      return;
+    }
+    setTestState({ busy: true });
+    try {
+      const res = await sendEmailTest(agentId, parts);
+      setTestState({
+        busy: false,
+        message: `Sent test report to ${res.recipients.join(", ")}. Check your inbox.`,
+      });
+    } catch (err) {
+      setTestState({
+        busy: false,
+        error: err instanceof Error ? err.message : "Failed to send test email",
+      });
+    }
   };
 
   return (
@@ -89,13 +128,34 @@ export function EmailReportsForm({ value, disabled, readonly, onChange }: Props)
             id="email-recipients"
             type="text"
             value={recipientsText}
-            disabled={disabled || readonly || !cfg.enabled}
+            disabled={disabled || readonly}
             placeholder="alice@example.com, bob@example.com"
             onChange={(e) => setRecipientsText(e.target.value)}
             onBlur={onRecipientsBlur}
           />
           <small className="form-help-text">Comma-separated list of email addresses.</small>
           {recipientError && <small className="form-error">{recipientError}</small>}
+
+          {agentId && status?.enabled && (
+            <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="button-small"
+                onClick={onSendTest}
+                disabled={disabled || readonly || testState.busy}
+                title="Send a [TEST] daily report for yesterday to the recipients above."
+              >
+                {testState.busy ? "Sending…" : "Send test email"}
+              </button>
+              {testState.message && <small className="form-help-text" style={{ color: "var(--color-success)" }}>{testState.message}</small>}
+              {testState.error && <small className="form-error">{testState.error}</small>}
+            </div>
+          )}
+          {agentId && status && !status.enabled && (
+            <small className="form-help-text" style={{ marginTop: 8 }}>
+              Test sending is unavailable: server email provider is {status.configured ? "configured but inactive" : "not configured"}.
+            </small>
+          )}
         </div>
 
         <div className="form-field">

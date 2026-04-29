@@ -326,6 +326,15 @@ func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(segments) == 2 && segments[1] == "email-test" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleAgentEmailTest(w, r, agentID)
+		return
+	}
+
 	http.Error(w, "not found", http.StatusNotFound)
 }
 
@@ -715,6 +724,71 @@ func (s *Server) versionFilename() string {
 		return "VERSION"
 	}
 	return name
+}
+
+// handleAgentEmailTest sends a one-off "[TEST]" preview of the daily report for
+// yesterday to the given recipients. Useful for verifying Brevo wiring and
+// inbox routing without waiting for the next scheduled send.
+//
+// Request body (optional): {"recipients": ["a@x.y", "b@x.y"]}
+// When recipients is empty, the agent's stored EmailReports.Recipients is used.
+// State (last-sent date) is NOT touched, so the regular morning report still fires.
+func (s *Server) handleAgentEmailTest(w http.ResponseWriter, r *http.Request, agentID string) {
+	if s.emailScheduler == nil {
+		http.Error(w, "email reports not enabled on this server", http.StatusServiceUnavailable)
+		return
+	}
+
+	cfg, ok := s.configs.Get(agentID)
+	if !ok {
+		http.Error(w, "agent config not found; save the configuration first", http.StatusNotFound)
+		return
+	}
+
+	var body struct {
+		Recipients []string `json:"recipients"`
+	}
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid payload", http.StatusBadRequest)
+			return
+		}
+	}
+
+	recipients := body.Recipients
+	if len(recipients) == 0 && cfg.EmailReports != nil {
+		recipients = cfg.EmailReports.Recipients
+	}
+	cleaned := make([]string, 0, len(recipients))
+	for _, addr := range recipients {
+		addr = strings.TrimSpace(addr)
+		if addr != "" {
+			cleaned = append(cleaned, addr)
+		}
+	}
+	if len(cleaned) == 0 {
+		http.Error(w, "no recipients configured", http.StatusBadRequest)
+		return
+	}
+
+	job := email.AgentJob{
+		AgentID:    agentID,
+		DeviceName: cfg.DeviceName,
+		Timezone:   cfg.Timezone,
+		Reports:    email.EmailReportsAdapter(cfg.EmailReports, cleaned),
+	}
+
+	if err := s.emailScheduler.SendTestDaily(r.Context(), job, s.emailPriceLimits()); err != nil {
+		s.log.Error("send test email", slog.String("agent", agentID), slog.Any("error", err))
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"sent":       true,
+		"recipients": cleaned,
+	})
 }
 
 // handleEmailStatus reports whether the email provider is configured and active.

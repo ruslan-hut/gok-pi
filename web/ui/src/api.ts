@@ -240,6 +240,36 @@ export async function fetchEmailStatus(): Promise<EmailProviderStatus> {
   return (await res.json()) as EmailProviderStatus;
 }
 
+export interface EmailTestResponse {
+  sent: boolean;
+  recipients: string[];
+}
+
+export async function sendEmailTest(
+  agentId: string,
+  recipients: string[],
+): Promise<EmailTestResponse> {
+  const res = await fetch(
+    `/api/agents/${encodeURIComponent(agentId)}/email-test`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ recipients }),
+    },
+  );
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("Login required to send test emails.");
+    }
+    const text = await res.text();
+    throw new Error(text || `Failed to send test email: ${res.statusText}`);
+  }
+  return (await res.json()) as EmailTestResponse;
+}
+
 export async function fetchDBStats(): Promise<DBStatsResponse> {
   const res = await fetch("/api/db-stats");
   if (!res.ok) {

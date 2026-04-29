@@ -268,6 +268,7 @@ export function ConfigTab({
           {localConfig && (
             <EmailReportsForm
               value={localConfig.email_reports ?? null}
+              agentId={agentId}
               disabled={saving}
               readonly={readonly}
               onChange={handleEmailReportsChange}

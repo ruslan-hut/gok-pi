@@ -2,7 +2,10 @@ package email
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"gok-pi/battery/entity"
@@ -227,6 +230,61 @@ func (s *Scheduler) maybeSendRange(ctx context.Context, job AgentJob, kind Repor
 		slog.String("start", startISO),
 		slog.Int("recipients", len(job.Reports.Recipients)),
 	)
+}
+
+// SendTestDaily renders and sends a "[TEST]" daily report for yesterday in the
+// agent's local timezone, immediately, without consulting or mutating the
+// last-sent state file. Used by the UI's "Send test email" button.
+func (s *Scheduler) SendTestDaily(ctx context.Context, job AgentJob, limits PriceLimits) error {
+	if s == nil || s.brevo == nil {
+		return errors.New("email scheduler unavailable")
+	}
+	if len(job.Reports.Recipients) == 0 {
+		return errors.New("no recipients")
+	}
+
+	day := LocalDay(job.Timezone, LocalNow(job.Timezone).AddDate(0, 0, -1))
+
+	rep, err := s.builder.BuildDaily(ctx, job.AgentID, job.DeviceName, job.Timezone, day, limits)
+	if err != nil {
+		return fmt.Errorf("build daily: %w", err)
+	}
+
+	subject, html, err := RenderDaily(rep)
+	if err != nil {
+		return fmt.Errorf("render daily: %w", err)
+	}
+	if !strings.HasPrefix(subject, "[TEST] ") {
+		subject = "[TEST] " + subject
+	}
+
+	if err := s.brevo.Send(ctx, job.Reports.Recipients, subject, html); err != nil {
+		return err
+	}
+
+	s.log.Info("test daily email sent",
+		slog.String("agent", job.AgentID),
+		slog.String("date", day.Format("2006-01-02")),
+		slog.Int("recipients", len(job.Reports.Recipients)),
+	)
+	return nil
+}
+
+// EmailReportsAdapter builds a lightweight EmailReportsConfig for the test endpoint
+// from a possibly-nil stored config plus an explicit recipient list. The toggles
+// in the stored config are preserved (or default to daily=true if absent) so the
+// AgentJob value is consistent with how the scheduler treats real jobs.
+func EmailReportsAdapter(stored *entity.EmailReportsConfig, recipients []string) entity.EmailReportsConfig {
+	if stored == nil {
+		return entity.EmailReportsConfig{
+			Enabled:    true,
+			Recipients: recipients,
+			Daily:      true,
+		}
+	}
+	out := *stored
+	out.Recipients = recipients
+	return out
 }
 
 func clampHour(h int) int {
