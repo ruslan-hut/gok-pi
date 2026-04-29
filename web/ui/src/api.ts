@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentSummary, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, PriceLimits, PricesState, SessionsResponse } from "./types";
+import type { AgentConfig, AgentSummary, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, EmailProviderStatus, PriceLimits, PricesState, SessionsResponse } from "./types";
 
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
 const AUTH_EXPIRY_KEY = "gok-pi-auth-expires";
@@ -131,6 +131,7 @@ export interface AgentConfigPayload {
   revision: number;
   batteries: AgentConfig["batteries"];
   schedules: AgentConfig["schedules"];
+  email_reports?: AgentConfig["email_reports"];
 }
 
 export async function updateAgentConfig(
@@ -229,6 +230,14 @@ export async function savePriceLimits(limits: PriceLimits): Promise<PriceLimits>
 
 export function exportPricesURL(start: string, end: string): string {
   return `/api/prices/export?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+}
+
+export async function fetchEmailStatus(): Promise<EmailProviderStatus> {
+  const res = await fetch("/api/email/status");
+  if (!res.ok) {
+    throw new Error(`Failed to load email status: ${res.statusText}`);
+  }
+  return (await res.json()) as EmailProviderStatus;
 }
 
 export async function fetchDBStats(): Promise<DBStatsResponse> {

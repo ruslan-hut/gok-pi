@@ -1,0 +1,54 @@
+{{- /* gotype: gok-pi/remote/server/email.rangeView */ -}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{.Title}}</title>
+</head>
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#0f172a;">
+<div style="max-width:760px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:24px;">
+
+<h1 style="margin:0 0 4px 0;font-size:20px;">{{.Heading}}</h1>
+<div style="color:#475569;font-size:13px;margin-bottom:20px;">{{.SubHeading}}</div>
+
+{{if .Summaries}}
+<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;">
+<thead>
+<tr style="background:#f1f5f9;text-align:left;">
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;">Battery</th>
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">Charge (kWh)</th>
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">Charge cost</th>
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">Discharge (kWh)</th>
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">Discharge income</th>
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">Net</th>
+</tr>
+</thead>
+<tbody>
+{{range .Summaries}}
+<tr>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;">{{.BatteryName}}</td>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">{{kwh .ChargeEnergyWh}}</td>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;color:#dc2626;">{{eur .ChargeCostEur}}</td>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">{{kwh .DischargeEnergyWh}}</td>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;color:#16a34a;">{{eur .DischargeCostEur}}</td>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">{{eur .NetCostEur}}</td>
+</tr>
+{{end}}
+<tr style="background:#f8fafc;">
+<td style="padding:10px;font-weight:600;">Total</td>
+<td style="padding:10px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">{{kwh .Totals.ChargeEnergyWh}}</td>
+<td style="padding:10px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:#dc2626;">{{eur .Totals.ChargeCostEur}}</td>
+<td style="padding:10px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">{{kwh .Totals.DischargeEnergyWh}}</td>
+<td style="padding:10px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:#16a34a;">{{eur .Totals.DischargeCostEur}}</td>
+<td style="padding:10px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;">{{eur .Totals.NetCostEur}}</td>
+</tr>
+</tbody>
+</table>
+{{else}}
+<p style="color:#64748b;font-style:italic;margin:0 0 24px 0;">No sessions recorded in this period.</p>
+{{end}}
+
+<p style="color:#94a3b8;font-size:11px;margin-top:24px;">Agent {{.AgentID}} &middot; Timezone {{.Timezone}} &middot; {{dlocal .Start $.Timezone}} to {{dlocal .EndInclusive $.Timezone}}</p>
+</div>
+</body>
+</html>

@@ -13,3 +13,14 @@ log_file: "/var/log/gok-cs.log"
 # UI basic auth (leave empty to disable)
 ui_username: ""
 ui_password: ""
+
+# Brevo email reports (https://brevo.com). When enabled, the control server
+# emails per-agent daily/weekly/monthly battery reports to recipients
+# configured per-agent in the web UI.
+# Provisioned in CI from GitHub secrets: GOK_BREVO_*.
+email_provider:
+  enabled: false
+  api_key: ""
+  sender_name: "GOK-Pi"
+  sender_email: ""
+email_state: "/var/lib/gok-cs/email-reports-state.json"

@@ -12,6 +12,7 @@ import (
 
 	"gok-pi/battery/entity"
 	"gok-pi/metrics/observers"
+	"gok-pi/remote/server/email"
 )
 
 // HTTP header keys used for agent authentication and identification during WebSocket upgrade.
@@ -23,14 +24,16 @@ const (
 
 // Config holds the control server configuration, typically populated from CLI flags or YAML.
 type Config struct {
-	SharedSecret string // If set, agents must present this secret to connect
-	UIStaticDir  string // Path to React UI build output (web/ui/dist)
-	AgentBinary  string // Optional: explicit agent binary name in downloads dir
-	VersionFile  string // Name of the VERSION manifest file (default: "VERSION")
-	ConfigStore  string // Path to agent-configs.json persistence file
-	SessionDB    string // Path to SQLite session database
-	UIUsername   string // Optional: username for UI login (empty = no auth)
-	UIPassword   string // Optional: password for UI login
+	SharedSecret  string               // If set, agents must present this secret to connect
+	UIStaticDir   string               // Path to React UI build output (web/ui/dist)
+	AgentBinary   string               // Optional: explicit agent binary name in downloads dir
+	VersionFile   string               // Name of the VERSION manifest file (default: "VERSION")
+	ConfigStore   string               // Path to agent-configs.json persistence file
+	SessionDB     string               // Path to SQLite session database
+	UIUsername    string               // Optional: username for UI login (empty = no auth)
+	UIPassword    string               // Optional: password for UI login
+	EmailProvider email.ProviderConfig // Brevo email provider settings
+	EmailState    string               // Path to email-reports-state.json
 }
 
 // TelemetrySnapshot is an alias for observers.Snapshot to avoid duplicating the struct definition.

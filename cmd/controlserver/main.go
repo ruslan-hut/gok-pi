@@ -19,19 +19,22 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 
 	"gok-pi/remote/server"
+	"gok-pi/remote/server/email"
 )
 
 type CSConfig struct {
-	Addr        string `yaml:"addr" env:"CONTROL_ADDR" env-default:":8080"`
-	Secret      string `yaml:"secret" env:"CONTROL_SECRET" env-default:""`
-	Static      string `yaml:"static" env:"CONTROL_STATIC" env-default:""`
-	AgentBinary string `yaml:"agent_binary" env:"GOK_CONTROL_AGENT_BINARY" env-default:""`
-	VersionFile string `yaml:"version_file" env:"GOK_CONTROL_VERSION_FILE" env-default:"VERSION"`
-	ConfigStore string `yaml:"config_store" env-default:"data/agent-configs.json"`
-	SessionDB   string `yaml:"session_db" env-default:"data/sessions.db"`
-	UIUsername  string `yaml:"ui_username" env:"GOK_UI_USERNAME" env-default:""`
-	UIPassword  string `yaml:"ui_password" env:"GOK_UI_PASSWORD" env-default:""`
-	LogFile     string `yaml:"log_file" env:"GOK_CS_LOG_FILE" env-default:""`
+	Addr          string               `yaml:"addr" env:"CONTROL_ADDR" env-default:":8080"`
+	Secret        string               `yaml:"secret" env:"CONTROL_SECRET" env-default:""`
+	Static        string               `yaml:"static" env:"CONTROL_STATIC" env-default:""`
+	AgentBinary   string               `yaml:"agent_binary" env:"GOK_CONTROL_AGENT_BINARY" env-default:""`
+	VersionFile   string               `yaml:"version_file" env:"GOK_CONTROL_VERSION_FILE" env-default:"VERSION"`
+	ConfigStore   string               `yaml:"config_store" env-default:"data/agent-configs.json"`
+	SessionDB     string               `yaml:"session_db" env-default:"data/sessions.db"`
+	UIUsername    string               `yaml:"ui_username" env:"GOK_UI_USERNAME" env-default:""`
+	UIPassword    string               `yaml:"ui_password" env:"GOK_UI_PASSWORD" env-default:""`
+	LogFile       string               `yaml:"log_file" env:"GOK_CS_LOG_FILE" env-default:""`
+	EmailProvider email.ProviderConfig `yaml:"email_provider"`
+	EmailState    string               `yaml:"email_state" env-default:"data/email-reports-state.json"`
 }
 
 func main() {
@@ -67,14 +70,16 @@ func main() {
 	}))
 
 	srv := server.New(server.Config{
-		SharedSecret: strings.TrimSpace(cfg.Secret),
-		UIStaticDir:  strings.TrimSpace(cfg.Static),
-		AgentBinary:  strings.TrimSpace(cfg.AgentBinary),
-		VersionFile:  strings.TrimSpace(cfg.VersionFile),
-		ConfigStore:  strings.TrimSpace(cfg.ConfigStore),
-		SessionDB:    strings.TrimSpace(cfg.SessionDB),
-		UIUsername:   strings.TrimSpace(cfg.UIUsername),
-		UIPassword:   strings.TrimSpace(cfg.UIPassword),
+		SharedSecret:  strings.TrimSpace(cfg.Secret),
+		UIStaticDir:   strings.TrimSpace(cfg.Static),
+		AgentBinary:   strings.TrimSpace(cfg.AgentBinary),
+		VersionFile:   strings.TrimSpace(cfg.VersionFile),
+		ConfigStore:   strings.TrimSpace(cfg.ConfigStore),
+		SessionDB:     strings.TrimSpace(cfg.SessionDB),
+		UIUsername:    strings.TrimSpace(cfg.UIUsername),
+		UIPassword:    strings.TrimSpace(cfg.UIPassword),
+		EmailProvider: cfg.EmailProvider,
+		EmailState:    strings.TrimSpace(cfg.EmailState),
 	}, logger)
 
 	logger.Info("starting control server", slog.String("addr", cfg.Addr))

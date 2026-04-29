@@ -76,20 +76,49 @@ jobs:
           target: "/tmp"
 
       - name: Generate config file
+        env:
+          CONTROL_ADDR: ${{ secrets.CONTROL_ADDR }}
+          CONTROL_SECRET: ${{ secrets.CONTROL_SECRET }}
+          CONTROL_AGENT_BINARY: ${{ secrets.CONTROL_AGENT_BINARY }}
+          GOK_UI_USERNAME: ${{ secrets.GOK_UI_USERNAME }}
+          GOK_UI_PASSWORD: ${{ secrets.GOK_UI_PASSWORD }}
+          GOK_BREVO_ENABLED: ${{ secrets.GOK_BREVO_ENABLED }}
+          GOK_BREVO_API_KEY: ${{ secrets.GOK_BREVO_API_KEY }}
+          GOK_BREVO_SENDER_NAME: ${{ secrets.GOK_BREVO_SENDER_NAME }}
+          GOK_BREVO_SENDER_EMAIL: ${{ secrets.GOK_BREVO_SENDER_EMAIL }}
         run: |
-          cat > gok-cs-config.yml <<CFGEOF
-          addr: "${{ secrets.CONTROL_ADDR }}"
-          secret: "${{ secrets.CONTROL_SECRET }}"
-          static: "${DEPLOY_PATH}/current/app"
-          agent_binary: "${{ secrets.CONTROL_AGENT_BINARY }}"
-          version_file: "VERSION"
-          config_store: "/var/lib/gok-cs/agent-configs.json"
-          session_db: "/var/lib/gok-cs/sessions.db"
-          log_file: "/var/log/gok-cs.log"
-          ui_username: "${{ secrets.GOK_UI_USERNAME }}"
-          ui_password: "${{ secrets.GOK_UI_PASSWORD }}"
-          CFGEOF
-          sed -i 's/^          //' gok-cs-config.yml
+          set -euo pipefail
+          : "${CONTROL_ADDR:=:8080}"
+          : "${GOK_BREVO_ENABLED:=false}"
+          : "${GOK_BREVO_SENDER_NAME:=GOK-Pi}"
+
+          # yq-style YAML scalar quoter: escape backslash and double quote, wrap in "..."
+          quote() {
+            local s=${1//\\/\\\\}
+            s=${s//\"/\\\"}
+            printf '"%s"' "$s"
+          }
+
+          {
+            echo "addr: $(quote "${CONTROL_ADDR}")"
+            echo "secret: $(quote "${CONTROL_SECRET}")"
+            echo "static: $(quote "${DEPLOY_PATH}/current/app")"
+            echo "agent_binary: $(quote "${CONTROL_AGENT_BINARY}")"
+            echo 'version_file: "VERSION"'
+            echo 'config_store: "/var/lib/gok-cs/agent-configs.json"'
+            echo 'session_db: "/var/lib/gok-cs/sessions.db"'
+            echo 'log_file: "/var/log/gok-cs.log"'
+            echo "ui_username: $(quote "${GOK_UI_USERNAME}")"
+            echo "ui_password: $(quote "${GOK_UI_PASSWORD}")"
+            echo ""
+            echo "# Email reports (Brevo). Set GOK_BREVO_* secrets to enable."
+            echo "email_provider:"
+            echo "  enabled: ${GOK_BREVO_ENABLED}"
+            echo "  api_key: $(quote "${GOK_BREVO_API_KEY}")"
+            echo "  sender_name: $(quote "${GOK_BREVO_SENDER_NAME}")"
+            echo "  sender_email: $(quote "${GOK_BREVO_SENDER_EMAIL}")"
+            echo 'email_state: "/var/lib/gok-cs/email-reports-state.json"'
+          } > gok-cs-config.yml
 
       - name: Upload config to remote host
         uses: appleboy/scp-action@v0.1.7

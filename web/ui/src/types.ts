@@ -55,6 +55,15 @@ export interface ScheduleConfig {
   goal_reached_time?: string; // ISO timestamp, set when run_once goal is reached
 }
 
+export interface EmailReportsConfig {
+  enabled: boolean;
+  recipients: string[];
+  daily: boolean;
+  weekly: boolean;
+  monthly: boolean;
+  send_hour: number;
+}
+
 export interface AgentConfig {
   device_name?: string;
   env?: string;
@@ -63,6 +72,13 @@ export interface AgentConfig {
   updated_at: string;
   batteries: BatteryConfig[];
   schedules: ScheduleConfig[];
+  email_reports?: EmailReportsConfig | null;
+}
+
+export interface EmailProviderStatus {
+  enabled: boolean;
+  configured: boolean;
+  sender?: string;
 }
 
 export interface AgentsSnapshotMessage {

@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { DeviceSettings } from "./DeviceSettings";
 import { BatteryConfigForm } from "./BatteryConfigForm";
 import { ScheduleConfigForm } from "./ScheduleConfigForm";
+import { EmailReportsForm } from "./EmailReportsForm";
 import { ConfigActions } from "./ConfigActions";
 import { CopyButton } from "../shared/CopyButton";
 import { Icon } from "../shared/Icon";
 import { formatConfigDraft } from "../../hooks/useConfig";
-import type { AgentConfig, BatteryConfig, ScheduleConfig } from "../../types";
+import type { AgentConfig, BatteryConfig, EmailReportsConfig, ScheduleConfig } from "../../types";
 
 interface ConfigTabProps {
   config: AgentConfig | null;
@@ -62,6 +63,7 @@ export function ConfigTab({
           updated_at: config?.updated_at ?? new Date().toISOString(),
           batteries: Array.isArray(parsed.batteries) ? parsed.batteries : [],
           schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+          email_reports: parsed.email_reports ?? config?.email_reports ?? null,
         });
       } catch {
         // Invalid JSON, keep current state
@@ -134,6 +136,11 @@ export function ConfigTab({
     if (!localConfig) return;
     const newSchedules = localConfig.schedules.filter((_, i) => i !== index);
     handleConfigChange({ ...localConfig, schedules: newSchedules });
+  };
+
+  const handleEmailReportsChange = (next: EmailReportsConfig | null) => {
+    if (!localConfig) return;
+    handleConfigChange({ ...localConfig, email_reports: next });
   };
 
   if (loading) {
@@ -257,6 +264,15 @@ export function ConfigTab({
               </div>
             )}
           </div>
+
+          {localConfig && (
+            <EmailReportsForm
+              value={localConfig.email_reports ?? null}
+              disabled={saving}
+              readonly={readonly}
+              onChange={handleEmailReportsChange}
+            />
+          )}
 
         </div>
       ) : (

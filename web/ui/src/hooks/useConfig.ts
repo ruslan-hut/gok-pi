@@ -10,6 +10,7 @@ export function formatConfigDraft(config: AgentConfig | null): string {
     revision: config?.revision ?? 0,
     batteries: config?.batteries ?? [],
     schedules: config?.schedules ?? [],
+    email_reports: config?.email_reports ?? null,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -131,6 +132,10 @@ export function useConfig({
       const schedules = Array.isArray(parsed.schedules)
         ? parsed.schedules
         : [];
+      const email_reports =
+        parsed.email_reports !== undefined
+          ? parsed.email_reports
+          : agentConfig?.email_reports ?? null;
 
       const updated = await updateAgentConfig(agentId, {
         device_name,
@@ -139,6 +144,7 @@ export function useConfig({
         revision,
         batteries,
         schedules,
+        email_reports,
       });
       setAgentConfig(updated);
       setConfigDraft(formatConfigDraft(updated));

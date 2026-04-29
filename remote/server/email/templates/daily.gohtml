@@ -1,0 +1,85 @@
+{{- /* gotype: gok-pi/remote/server/email.dailyView */ -}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{.Title}}</title>
+</head>
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#0f172a;">
+<div style="max-width:760px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:24px;">
+
+<h1 style="margin:0 0 4px 0;font-size:20px;">{{.Heading}}</h1>
+<div style="color:#475569;font-size:13px;margin-bottom:20px;">{{.SubHeading}}</div>
+
+{{if .Summaries}}
+<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;">
+<thead>
+<tr style="background:#f1f5f9;text-align:left;">
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;">Battery</th>
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">Charge (kWh)</th>
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">Charge cost</th>
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">Discharge (kWh)</th>
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">Discharge income</th>
+<th style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">Net</th>
+</tr>
+</thead>
+<tbody>
+{{range .Summaries}}
+<tr>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;">{{.BatteryName}}</td>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">{{kwh .ChargeEnergyWh}}</td>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;color:#dc2626;">{{eur .ChargeCostEur}}</td>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">{{kwh .DischargeEnergyWh}}</td>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;color:#16a34a;">{{eur .DischargeCostEur}}</td>
+<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">{{eur .NetCostEur}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+{{else}}
+<p style="color:#64748b;font-style:italic;margin:0 0 24px 0;">No charge or discharge sessions recorded for this day.</p>
+{{end}}
+
+{{if .Sessions}}
+<h2 style="margin:0 0 8px 0;font-size:16px;">Sessions</h2>
+<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:24px;">
+<thead>
+<tr style="background:#f1f5f9;text-align:left;">
+<th style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">Battery</th>
+<th style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">Type</th>
+<th style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">Start</th>
+<th style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">End</th>
+<th style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;">kWh</th>
+<th style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;">Avg kW</th>
+<th style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;">€/MWh</th>
+<th style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;">Cost</th>
+</tr>
+</thead>
+<tbody>
+{{range .Sessions}}
+<tr>
+<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;">{{.BatteryName}}</td>
+<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;{{if eq .Type "charge"}}color:#dc2626{{else}}color:#16a34a{{end}}">{{.Type}}</td>
+<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums;">{{tlocal .StartedAt $.Timezone}}</td>
+<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums;">{{endtime .EndedAt $.Timezone}}</td>
+<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">{{kwh .EnergyWh}}</td>
+<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">{{kw .AvgPowerW}}</td>
+<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">{{price .AvgPriceEurMWh}}</td>
+<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">{{eur .CostEur}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+{{end}}
+
+{{if .ChartSVG}}
+<h2 style="margin:0 0 8px 0;font-size:16px;">Hourly prices</h2>
+<div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px;background:#ffffff;">
+{{.ChartSVG}}
+</div>
+{{end}}
+
+<p style="color:#94a3b8;font-size:11px;margin-top:24px;">Agent {{.AgentID}} &middot; Timezone {{.Timezone}}</p>
+</div>
+</body>
+</html>

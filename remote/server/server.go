@@ -42,6 +42,7 @@ import (
 	"gok-pi/battery/entity"
 	"gok-pi/electricity/autoschedule"
 	"gok-pi/electricity/pricefetcher"
+	"gok-pi/remote/server/email"
 	"gok-pi/remote/server/sessiondb"
 
 	"github.com/gorilla/websocket"
@@ -64,6 +65,9 @@ type Server struct {
 	prices      *pricefetcher.Fetcher
 	sessions    *SessionTracker
 	priceLimits *PriceLimitsStore
+
+	emailBrevo     *email.BrevoClient
+	emailScheduler *email.Scheduler
 }
 
 func New(cfg Config, log *slog.Logger) *Server {
@@ -94,7 +98,9 @@ func New(cfg Config, log *slog.Logger) *Server {
 		log.Warn("session tracker disabled: no database available")
 	}
 
-	return &Server{
+	priceLimitsStore := NewPriceLimitsStore("data/price-limits.json")
+
+	srv := &Server{
 		cfg: cfg,
 		log: log,
 		upgrader: websocket.Upgrader{
@@ -110,7 +116,67 @@ func New(cfg Config, log *slog.Logger) *Server {
 		auth:        newAuthManager(cfg.UIUsername, cfg.UIPassword, log),
 		prices:      prices,
 		sessions:    sessions,
-		priceLimits: NewPriceLimitsStore("data/price-limits.json"),
+		priceLimits: priceLimitsStore,
+	}
+
+	if err := cfg.EmailProvider.Validate(); err != nil {
+		log.Warn("email provider misconfigured; email reports disabled", slog.Any("error", err))
+	} else if cfg.EmailProvider.Enabled {
+		srv.emailBrevo = email.NewBrevo(cfg.EmailProvider, log)
+		statePath := cfg.EmailState
+		if statePath == "" {
+			statePath = "data/email-reports-state.json"
+		}
+		sched, err := email.NewScheduler(
+			log,
+			srv.emailBrevo,
+			sessDB,
+			prices,
+			statePath,
+			srv.listEmailJobs,
+			srv.emailPriceLimits,
+		)
+		if err != nil {
+			log.Error("initialize email scheduler", slog.Any("error", err))
+		} else if sched != nil {
+			srv.emailScheduler = sched
+			log.Info("email scheduler initialised",
+				slog.String("sender", cfg.EmailProvider.SenderEmail),
+				slog.String("state_path", statePath),
+			)
+		} else {
+			log.Warn("email scheduler not started: missing dependencies (session DB or brevo client)")
+		}
+	}
+
+	return srv
+}
+
+// listEmailJobs returns the snapshot of agents to evaluate for email dispatch.
+// Implements email.AgentLister.
+func (s *Server) listEmailJobs() []email.AgentJob {
+	configs := s.configs.snapshot()
+	jobs := make([]email.AgentJob, 0, len(configs))
+	for agentID, cfg := range configs {
+		if cfg.EmailReports == nil {
+			continue
+		}
+		jobs = append(jobs, email.AgentJob{
+			AgentID:    agentID,
+			DeviceName: cfg.DeviceName,
+			Timezone:   cfg.Timezone,
+			Reports:    *cfg.EmailReports,
+		})
+	}
+	return jobs
+}
+
+// emailPriceLimits adapts the server PriceLimits type to email.PriceLimits.
+func (s *Server) emailPriceLimits() email.PriceLimits {
+	pl := s.priceLimits.Get()
+	return email.PriceLimits{
+		ChargeLimitEurMWh:    pl.ChargeLimitEurMWh,
+		DischargeLimitEurMWh: pl.DischargeLimitEurMWh,
 	}
 }
 
@@ -119,6 +185,9 @@ func (s *Server) ListenAndServe(addr string) error {
 	go s.prices.Run(ctx)
 	go s.runAutoScheduler(ctx)
 	go s.runSessionCleanup(ctx)
+	if s.emailScheduler != nil {
+		go s.emailScheduler.Run(ctx)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/login", s.handleLogin)
@@ -132,6 +201,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/sessions", s.handleSessions)
 	mux.HandleFunc("/api/db-stats", s.handleDBStats)
 	mux.HandleFunc("/api/db/records", s.requireAuth(s.handleDBRecords))
+	mux.HandleFunc("/api/email/status", s.handleEmailStatus)
 
 	if s.cfg.UIStaticDir != "" {
 		fs := http.FileServer(http.Dir(s.cfg.UIStaticDir))
@@ -645,6 +715,29 @@ func (s *Server) versionFilename() string {
 		return "VERSION"
 	}
 	return name
+}
+
+// handleEmailStatus reports whether the email provider is configured and active.
+// The API key itself is never returned. Used by the UI to show an info badge so
+// admins know whether per-agent email settings will actually fire.
+func (s *Server) handleEmailStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	resp := struct {
+		Enabled    bool   `json:"enabled"`
+		Sender     string `json:"sender,omitempty"`
+		Configured bool   `json:"configured"`
+	}{
+		Enabled:    s.emailScheduler != nil,
+		Sender:     s.cfg.EmailProvider.SenderEmail,
+		Configured: s.cfg.EmailProvider.Enabled,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (s *Server) handlePrices(w http.ResponseWriter, r *http.Request) {

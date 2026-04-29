@@ -59,6 +59,7 @@ Key packages:
 - `battery/entity` - Shared domain types (BatteryConfig, Schedule, AgentConfig, SystemStatus) and helpers
 - `internal/remote/wsclient` - Agent-side WebSocket client with reconnection backoff
 - `remote/server` - Control server WebSocket handlers, config store, UI serving
+- `remote/server/email` - Brevo-backed daily/weekly/monthly email reports built from session DB + price fetcher
 - `metrics/observers` - Prometheus gauges and telemetry snapshots
 - `internal/config` - YAML config loading via cleanenv, thread-safe updates
 - `internal/lib/atomicfile` - Atomic file writes (write-to-temp-then-rename)
@@ -80,6 +81,7 @@ Environment variables override config values via cleanenv tags.
 3. If remote_control enabled: WebSocket streams telemetry to control server, receives commands
 4. Control server aggregates telemetry, broadcasts to web UI clients, routes commands to agents
 5. Config updates from UI persist to agent's local `config.yml` via optimistic locking
+6. Email scheduler (control server) ticks every minute; for each agent with `email_reports.enabled` and a populated recipients list, it dispatches daily / weekly (Mon) / monthly (1st) summaries through Brevo at the agent's configured `send_hour` in the agent timezone. Last-sent date per (agent, kind) is persisted to `data/email-reports-state.json` so reports are not duplicated across restarts. Brevo credentials live in the controlserver config (`email_provider`); per-agent recipients/toggles live in `AgentConfig.email_reports` and are editable from the web UI.
 
 ## Battery Drivers
 

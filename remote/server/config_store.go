@@ -25,12 +25,13 @@ type AgentConfig = entity.AgentConfig
 
 // AgentConfigRequest is the payload accepted by the HTTP API when a config is updated.
 type AgentConfigRequest struct {
-	DeviceName string                 `json:"device_name,omitempty"`
-	Env        string                 `json:"env,omitempty"`
-	Timezone   string                 `json:"timezone,omitempty"`
-	Revision   int                    `json:"revision"`
-	Batteries  []entity.BatteryConfig `json:"batteries"`
-	Schedules  []entity.Schedule      `json:"schedules"`
+	DeviceName   string                     `json:"device_name,omitempty"`
+	Env          string                     `json:"env,omitempty"`
+	Timezone     string                     `json:"timezone,omitempty"`
+	Revision     int                        `json:"revision"`
+	Batteries    []entity.BatteryConfig     `json:"batteries"`
+	Schedules    []entity.Schedule          `json:"schedules"`
+	EmailReports *entity.EmailReportsConfig `json:"email_reports,omitempty"`
 }
 
 type configSnapshot map[string]AgentConfig
@@ -116,13 +117,14 @@ func (cs *ConfigStore) Save(agentID string, req AgentConfigRequest) (AgentConfig
 	}
 
 	next := AgentConfig{
-		DeviceName: req.DeviceName,
-		Env:        req.Env,
-		Timezone:   req.Timezone,
-		Revision:   1,
-		UpdatedAt:  time.Now().UTC(),
-		Batteries:  entity.CloneBatteryConfigs(req.Batteries),
-		Schedules:  entity.CloneSchedules(req.Schedules),
+		DeviceName:   req.DeviceName,
+		Env:          req.Env,
+		Timezone:     req.Timezone,
+		Revision:     1,
+		UpdatedAt:    time.Now().UTC(),
+		Batteries:    entity.CloneBatteryConfigs(req.Batteries),
+		Schedules:    entity.CloneSchedules(req.Schedules),
+		EmailReports: entity.CloneEmailReports(req.EmailReports),
 	}
 
 	if exists {
@@ -288,13 +290,13 @@ func (cs *ConfigStore) persistLocked() error {
 
 func cloneAgentConfig(in AgentConfig) AgentConfig {
 	return AgentConfig{
-		DeviceName: in.DeviceName,
-		Env:        in.Env,
-		Timezone:   in.Timezone,
-		Revision:   in.Revision,
-		UpdatedAt:  in.UpdatedAt,
-		Batteries:  entity.CloneBatteryConfigs(in.Batteries),
-		Schedules:  entity.CloneSchedules(in.Schedules),
+		DeviceName:   in.DeviceName,
+		Env:          in.Env,
+		Timezone:     in.Timezone,
+		Revision:     in.Revision,
+		UpdatedAt:    in.UpdatedAt,
+		Batteries:    entity.CloneBatteryConfigs(in.Batteries),
+		Schedules:    entity.CloneSchedules(in.Schedules),
+		EmailReports: entity.CloneEmailReports(in.EmailReports),
 	}
 }
-

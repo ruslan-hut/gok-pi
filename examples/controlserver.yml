@@ -1,0 +1,33 @@
+---
+# Example control server configuration. Pass to the binary with:
+#   controlserver -config /etc/gok-pi/controlserver.yml
+#
+# Any key may also be overridden by the matching environment variable.
+
+addr: ":8080"
+secret: "<shared-secret-agents-must-present>"
+static: "/opt/gok-pi/current/app"
+config_store: "data/agent-configs.json"
+session_db: "data/sessions.db"
+
+# Optional UI auth — when set, the web UI requires login and writes go through
+# X-Auth-Token. Leave empty to keep auth off (writes are open).
+ui_username: ""
+ui_password: ""
+
+log_file: ""
+
+# Email reports (Brevo). When enabled and at least one agent has email_reports
+# configured (set per-agent from the web UI), the control server sends daily,
+# weekly, or monthly battery activity reports to the configured recipients.
+#
+# Get an API key at https://brevo.com (free tier covers 300 emails/day).
+email_provider:
+  enabled: false
+  api_key: ""               # GOK_BREVO_API_KEY
+  sender_name: "GOK-Pi"     # GOK_BREVO_SENDER_NAME
+  sender_email: ""          # GOK_BREVO_SENDER_EMAIL — must be a verified Brevo sender
+
+# Path for the per-agent last-sent state file. Survives restarts so reports are
+# not duplicated.
+email_state: "data/email-reports-state.json"
