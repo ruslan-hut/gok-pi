@@ -34,6 +34,10 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	// Embed the IANA timezone database so schedule timezones resolve even on
+	// minimal Raspberry Pi images that ship no system zoneinfo (otherwise summer
+	// schedules silently shift by one hour).
+	_ "time/tzdata"
 )
 
 func main() {

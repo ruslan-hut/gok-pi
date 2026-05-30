@@ -27,10 +27,10 @@ func (s *Schedule) Validate() error {
 	if s.Type != "" && s.Type != "discharge" && s.Type != "charge" {
 		return fmt.Errorf("invalid schedule type %q: must be 'discharge' or 'charge'", s.Type)
 	}
-	if _, err := time.Parse("15:04", s.StartTime); err != nil {
+	if !isValidScheduleTime(s.StartTime) {
 		return fmt.Errorf("invalid start_time %q: expected format HH:MM", s.StartTime)
 	}
-	if _, err := time.Parse("15:04", s.StopTime); err != nil {
+	if !isValidScheduleTime(s.StopTime) {
 		return fmt.Errorf("invalid stop_time %q: expected format HH:MM", s.StopTime)
 	}
 	if s.PowerLimit < 0 {
@@ -40,6 +40,16 @@ func (s *Schedule) Validate() error {
 		return fmt.Errorf("soc_limit must be between 0 and 100")
 	}
 	return nil
+}
+
+// isValidScheduleTime reports whether t is a valid HH:MM time, accepting the
+// special "24:00" end-of-day sentinel (midnight at the end of the day).
+func isValidScheduleTime(t string) bool {
+	if t == "24:00" {
+		return true
+	}
+	_, err := time.Parse("15:04", t)
+	return err == nil
 }
 
 // IsAutoSchedule returns true if the schedule name indicates an auto-generated schedule.

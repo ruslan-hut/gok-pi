@@ -61,7 +61,7 @@ func BuildComputedSchedules(batteries []entity.BatteryConfig, dayData *pricefetc
 				PowerLimit:  powerLimit,
 				SocLimit:    100,
 				Low:         dayData.Stats.Low,
-				High:         dayData.Stats.High,
+				High:        dayData.Stats.High,
 				ComputedAt:  now,
 			})
 		}
@@ -86,7 +86,7 @@ func BuildComputedSchedules(batteries []entity.BatteryConfig, dayData *pricefetc
 				PowerLimit:  powerLimit,
 				SocLimit:    socLimit,
 				Low:         dayData.Stats.Low,
-				High:         dayData.Stats.High,
+				High:        dayData.Stats.High,
 				ComputedAt:  now,
 			})
 		}
@@ -188,16 +188,14 @@ func IsAutoSchedule(name string) bool {
 	return entity.IsAutoSchedule(name)
 }
 
-// formatHour converts an hour (0-24) to a valid HH:MM string for entity.Schedule.
-// Edge cases: hour 0 → "00:01" (midnight start), hour 24 → "23:59" (end of day).
-// The entity.Schedule.Validate() requires valid HH:MM format where HH is 00-23,
-// so 24:00 is not representable — we use 23:59 as the closest valid value.
+// formatHour converts an hour (0-24) to an HH:MM string for entity.Schedule.
+// Hour 0 → "00:00" (true midnight start) and hour 24 → "24:00" (end-of-day
+// sentinel) so charge/discharge windows cover their full hour range. The "24:00"
+// sentinel is understood by entity.Schedule.Validate and timer.ParseTimeInLocation.
 func formatHour(hour int) string {
 	switch hour {
-	case 0:
-		return "00:01"
 	case 24:
-		return "23:59"
+		return "24:00"
 	default:
 		return fmt.Sprintf("%02d:00", hour)
 	}

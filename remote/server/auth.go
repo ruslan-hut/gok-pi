@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -68,7 +69,11 @@ func (am *authManager) login(username, password string) (string, time.Time, erro
 		return "", time.Time{}, nil
 	}
 
-	if username != am.username || password != am.password {
+	// Constant-time comparison so response timing cannot be used to recover the
+	// credentials. Both checks always run (no early-out) for the same reason.
+	userOK := subtle.ConstantTimeCompare([]byte(username), []byte(am.username)) == 1
+	passOK := subtle.ConstantTimeCompare([]byte(password), []byte(am.password)) == 1
+	if !userOK || !passOK {
 		return "", time.Time{}, fmt.Errorf("invalid credentials")
 	}
 

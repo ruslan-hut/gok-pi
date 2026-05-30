@@ -35,6 +35,17 @@ const (
 	serverMessageLogRequest = "server.log.request"
 )
 
+// WebSocket liveness tuning. The server pings agents every pingPeriod and requires
+// a pong (or any frame) within pongWait, so a silently-dropped agent connection is
+// detected within ~pongWait instead of lingering until TCP eventually errors.
+// pingPeriod must be < pongWait. writeWait bounds a single write so a black-holed
+// socket cannot block the write loop forever.
+const (
+	pongWait   = 70 * time.Second
+	pingPeriod = 30 * time.Second
+	writeWait  = 10 * time.Second
+)
+
 // agentConnection represents a single connected agent's WebSocket session.
 // It manages the agent's lifecycle: handshake → read/write loops → cleanup.
 // Each agent is identified by its ID (from config.yml device_id or hostname).
@@ -51,11 +62,11 @@ type agentConnection struct {
 	done chan struct{}    // Closed when connection terminates; signals goroutines to exit
 
 	mu                  sync.RWMutex                 // Guards telemetry + scheduleGoalReached
-	telemetry           map[string]TelemetrySnapshot  // Latest telemetry per battery name
-	scheduleGoalReached map[string]time.Time          // Goal reached timestamps per schedule name
+	telemetry           map[string]TelemetrySnapshot // Latest telemetry per battery name
+	scheduleGoalReached map[string]time.Time         // Goal reached timestamps per schedule name
 
-	logRequestsMu sync.RWMutex                        // Guards logRequests map
-	logRequests   map[string]chan AgentLogResponse     // Pending log request-response pairs by request ID
+	logRequestsMu sync.RWMutex                     // Guards logRequests map
+	logRequests   map[string]chan AgentLogResponse // Pending log request-response pairs by request ID
 }
 
 func newAgentConnection(conn *websocket.Conn, r *http.Request, s *Server) *agentConnection {
@@ -123,10 +134,14 @@ func (a *agentConnection) handshake() error {
 		return fmt.Errorf("missing agent id")
 	}
 
-	err = a.conn.SetReadDeadline(time.Time{})
-	if err != nil {
+	// Arm liveness detection for the rest of the connection: require a frame
+	// (telemetry, heartbeat, or pong) within pongWait, refreshed on every pong.
+	if err := a.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
 		return err
 	}
+	a.conn.SetPongHandler(func(string) error {
+		return a.conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
 
 	a.info = hello.Agent
 	a.id = hello.Agent.ID
@@ -142,29 +157,40 @@ func (a *agentConnection) handshake() error {
 }
 
 func (a *agentConnection) readLoop() {
+	// Closing the conn unblocks writeLoop's pending write/ping when read fails.
+	defer func() { _ = a.conn.Close() }()
+	// Refresh the read deadline on every received frame, not only on pongs, so an
+	// agent that keeps sending telemetry but never pongs is still considered alive.
 	for {
-		select {
-		case <-a.done:
+		_, message, err := a.conn.ReadMessage()
+		if err != nil {
+			a.log().With(slog.Any("error", err)).Warn("agent read error")
 			return
-		default:
-			_, message, err := a.conn.ReadMessage()
-			if err != nil {
-				a.log().With(slog.Any("error", err)).Warn("agent read error")
-				return
-			}
-			a.handleMessage(message)
 		}
+		_ = a.conn.SetReadDeadline(time.Now().Add(pongWait))
+		a.handleMessage(message)
 	}
 }
 
 func (a *agentConnection) writeLoop() {
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
+	// Closing the conn unblocks readLoop's pending ReadMessage when a write fails.
+	defer func() { _ = a.conn.Close() }()
+
 	for {
 		select {
 		case <-a.done:
 			return
 		case msg := <-a.send:
+			_ = a.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := a.conn.WriteJSON(msg); err != nil {
 				a.log().With(slog.Any("error", err)).Warn("agent write error")
+				return
+			}
+		case <-ticker.C:
+			if err := a.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait)); err != nil {
+				a.log().With(slog.Any("error", err)).Warn("agent ping failed")
 				return
 			}
 		}
@@ -289,6 +315,8 @@ func (a *agentConnection) sendCommand(req CommandRequest) error {
 	}
 
 	select {
+	case <-a.done:
+		return fmt.Errorf("agent connection closed")
 	case a.send <- command:
 		return nil
 	default:

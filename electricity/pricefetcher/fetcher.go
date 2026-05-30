@@ -161,9 +161,20 @@ func (f *Fetcher) fetchAll(ctx context.Context) {
 	if tomorrowData != nil {
 		f.state.Tomorrow = tomorrowData
 	}
-	// Clear stale tomorrow data if it's now today
+	// Day rollover: yesterday's "tomorrow" is now today. Promote it into Today so a
+	// failed today-fetch does not leave stale (yesterday's) data in place. If we did
+	// fetch fresh today data above, that already won and we just drop the old entry.
 	if f.state.Tomorrow != nil && f.state.Tomorrow.Date == todayStr {
+		if todayData == nil {
+			f.state.Today = f.state.Tomorrow
+		}
 		f.state.Tomorrow = nil
+	}
+	// Drop a stale Today that no longer matches the current date and could not be
+	// refreshed, so consumers never act on yesterday's schedule.
+	if f.state.Today != nil && f.state.Today.Date != todayStr {
+		f.log.Warn("dropping stale today price data", slog.String("had", f.state.Today.Date), slog.String("want", todayStr))
+		f.state.Today = nil
 	}
 	f.state.LastUpdated = time.Now().UTC()
 	f.state.LastError = lastErr
@@ -175,17 +186,36 @@ func (f *Fetcher) fetchAll(ctx context.Context) {
 	}
 }
 
+// minHoursForSchedule is the minimum number of hourly prices required before a
+// day's data is considered complete enough to build a schedule from. A full day
+// has 24 (23 or 25 on DST transition days); a partial publish during the REE
+// publication window must not be treated as a complete day.
+const minHoursForSchedule = 20
+
 func (f *Fetcher) fetchDay(ctx context.Context, date time.Time) (*DayData, error) {
 	prices, err := f.client.FetchPrices(ctx, date)
 	if err != nil {
 		return nil, err
 	}
 
+	// Reject partial days: a truncated price set would produce schedules from an
+	// incomplete distribution (and skew the P20/P80 thresholds).
+	if len(prices) < minHoursForSchedule {
+		return nil, fmt.Errorf("%w: only %d hourly prices for %s", redata.ErrNoData, len(prices), date.Format("2006-01-02"))
+	}
+
+	// Reject wrong-day data: the API echoing a cached/different day must not be
+	// stamped with the requested date and pushed as if it were current.
+	wantDate := date.Format("2006-01-02")
+	if got := prices[0].DateTime.Format("2006-01-02"); got != wantDate {
+		return nil, fmt.Errorf("%w: requested %s but received data for %s", redata.ErrNoData, wantDate, got)
+	}
+
 	sched := scheduler.ComputeSchedule(prices)
 	stats := scheduler.ComputeStats(prices)
 
 	return &DayData{
-		Date:     date.Format("2006-01-02"),
+		Date:     wantDate,
 		Prices:   prices,
 		Schedule: sched,
 		Stats:    stats,

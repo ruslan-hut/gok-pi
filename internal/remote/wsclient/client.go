@@ -52,6 +52,7 @@ const (
 
 	defaultHeartbeatInterval = 30 * time.Second
 	defaultDialTimeout       = 10 * time.Second
+	defaultWriteTimeout      = 10 * time.Second
 )
 
 const (
@@ -116,6 +117,7 @@ type Client struct {
 	agent AgentInfo
 
 	startOnce       sync.Once
+	onConnected     func() // invoked once a connection is fully established (resets backoff)
 	telemetryCh     chan observers.Snapshot
 	commands        chan Command
 	configs         chan ConfigUpdate
@@ -191,7 +193,8 @@ func (c *Client) Run(ctx context.Context) {
 // run is the main reconnection loop. It connects to the control server, serves
 // until the connection drops, then reconnects with exponential backoff.
 // Backoff doubles on each failure (e.g., 5s → 10s → 20s → ... → max) and resets
-// implicitly when a new connection succeeds and then fails again.
+// to the initial value once a connection is successfully established, so a link
+// that flaps and then stabilizes does not stay pinned at the maximum delay.
 func (c *Client) run(ctx context.Context) {
 	defer close(c.commands)
 	defer close(c.configs)
@@ -212,6 +215,7 @@ func (c *Client) run(ctx context.Context) {
 
 	backoff := initialBackoff
 	for {
+		c.onConnected = func() { backoff = initialBackoff }
 		err := c.connectAndServe(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
@@ -288,6 +292,12 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 		return err
 	}
 
+	// Connection is fully established (dialed, hello + initial snapshots sent);
+	// reset the reconnect backoff so the next drop retries quickly.
+	if c.onConnected != nil {
+		c.onConnected()
+	}
+
 	errCh := make(chan error, 2)
 
 	go func() {
@@ -361,13 +371,21 @@ func (c *Client) writeLoop(ctx context.Context, conn *websocket.Conn) error {
 	}
 }
 
+// writeJSON writes a message bounded by defaultWriteTimeout so a stalled socket
+// cannot block the caller indefinitely.
+func (c *Client) writeJSON(ctx context.Context, conn *websocket.Conn, v interface{}) error {
+	wctx, cancel := context.WithTimeout(ctx, defaultWriteTimeout)
+	defer cancel()
+	return wsjson.Write(wctx, conn, v)
+}
+
 func (c *Client) sendHello(ctx context.Context, conn *websocket.Conn) error {
 	msg := helloMessage{
 		Type:      "agent.hello",
 		Timestamp: time.Now().UTC(),
 		Agent:     c.agent,
 	}
-	if err := wsjson.Write(ctx, conn, msg); err != nil {
+	if err := c.writeJSON(ctx, conn, msg); err != nil {
 		return fmt.Errorf("send hello: %w", err)
 	}
 	return nil
@@ -397,7 +415,7 @@ func (c *Client) writeHeartbeat(ctx context.Context, conn *websocket.Conn) error
 		Timestamp: time.Now().UTC(),
 		Agent:     c.agent,
 	}
-	if err := wsjson.Write(ctx, conn, msg); err != nil {
+	if err := c.writeJSON(ctx, conn, msg); err != nil {
 		return fmt.Errorf("send heartbeat: %w", err)
 	}
 	return nil
@@ -410,7 +428,7 @@ func (c *Client) writeTelemetry(ctx context.Context, conn *websocket.Conn, snaps
 		Agent:     c.agent,
 		Snapshot:  snapshot,
 	}
-	if err := wsjson.Write(ctx, conn, msg); err != nil {
+	if err := c.writeJSON(ctx, conn, msg); err != nil {
 		return fmt.Errorf("send telemetry: %w", err)
 	}
 	return nil
@@ -426,7 +444,7 @@ func (c *Client) writeConfigSnapshot(ctx context.Context, conn *websocket.Conn, 
 		Timestamp: time.Now().UTC(),
 		Config:    configPayload(snapshot),
 	}
-	if err := wsjson.Write(ctx, conn, msg); err != nil {
+	if err := c.writeJSON(ctx, conn, msg); err != nil {
 		return fmt.Errorf("send config snapshot: %w", err)
 	}
 	return nil
@@ -454,10 +472,10 @@ func (c *Client) dispatchCommand(msg IncomingMessage) {
 
 func (c *Client) handleConfigPush(raw json.RawMessage) {
 	var payload struct {
-		Type    string      `json:"type"`
-		AgentID string      `json:"agent_id"`
+		Type    string             `json:"type"`
+		AgentID string             `json:"agent_id"`
 		Config  entity.AgentConfig `json:"config"`
-		SentAt  time.Time   `json:"sent_at"`
+		SentAt  time.Time          `json:"sent_at"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		c.log.With(sl.Err(err)).Error("decode config push")
@@ -510,7 +528,7 @@ func (c *Client) handleLogRequest(ctx context.Context, conn *websocket.Conn, raw
 		resp.Logs = logs
 	}
 
-	if err := wsjson.Write(ctx, conn, resp); err != nil {
+	if err := c.writeJSON(ctx, conn, resp); err != nil {
 		c.log.With(sl.Err(err)).Error("send log response")
 	}
 }
@@ -610,7 +628,6 @@ type configPayload struct {
 	Schedules           []entity.Schedule      `json:"schedules"`
 	ScheduleGoalReached map[string]time.Time   `json:"schedule_goal_reached,omitempty"`
 }
-
 
 func detectVersion() string {
 	info, ok := debug.ReadBuildInfo()

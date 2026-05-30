@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchAgentConfig, fetchAgents } from "../api";
+import { fetchAgentConfig, fetchAgents, wsTokenParam } from "../api";
 import type {
   AgentConfig,
   AgentSummary,
@@ -19,7 +19,7 @@ function computeConnectionStatus(agent: AgentSummary): boolean {
 function getWsUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const host = window.location.host;
-  return `${protocol}://${host}/api/ui`;
+  return `${protocol}://${host}/api/ui${wsTokenParam()}`;
 }
 
 interface UseAgentsOptions {

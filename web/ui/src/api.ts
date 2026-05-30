@@ -3,6 +3,13 @@ import type { AgentConfig, AgentSummary, DBRecordsQuery, DBRecordsResponse, DBSt
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
 const AUTH_EXPIRY_KEY = "gok-pi-auth-expires";
 
+// wsTokenParam returns "?token=<token>" for authenticating the UI WebSocket, or
+// "" when no token is stored (server is fail-open when auth is unconfigured).
+export function wsTokenParam(): string {
+  const token = getAuthToken();
+  return token ? `?token=${encodeURIComponent(token)}` : "";
+}
+
 export function getAuthToken(): string | null {
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
   if (!token) return null;
@@ -64,7 +71,7 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 export async function fetchAgents(): Promise<Record<string, AgentSummary>> {
-  const res = await fetch("/api/agents");
+  const res = await fetch("/api/agents", { headers: { ...getAuthHeaders() } });
   if (!res.ok) {
     throw new Error(`Failed to load agents: ${res.statusText}`);
   }
@@ -112,7 +119,7 @@ export async function fetchAgentConfig(
   const res = await fetch(
     `/api/agents/${encodeURIComponent(agentId)}/config`,
     {
-      headers: { "Accept": "application/json" },
+      headers: { "Accept": "application/json", ...getAuthHeaders() },
     },
   );
   if (res.status === 404) {
@@ -177,7 +184,7 @@ export async function fetchAgentLogs(
   }
 
   const url = `/api/agents/${encodeURIComponent(agentId)}/logs${params.toString() ? `?${params.toString()}` : ""}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: { ...getAuthHeaders() } });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || "Failed to fetch logs");

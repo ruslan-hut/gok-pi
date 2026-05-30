@@ -53,10 +53,10 @@ type Stats struct {
 	MinPrice            float64 `json:"min_price_eur_mwh"`
 	MaxPrice            float64 `json:"max_price_eur_mwh"`
 	AvgPrice            float64 `json:"avg_price_eur_mwh"`
-	Low                 float64 `json:"low_eur_mwh"`             // low percentile threshold — charge below this
-	High                float64 `json:"high_eur_mwh"`            // high percentile threshold — discharge above this
-	ChargePercentile    int     `json:"charge_percentile"`       // e.g. 20 (means P20)
-	DischargePercentile int     `json:"discharge_percentile"`    // e.g. 80 (means P80)
+	Low                 float64 `json:"low_eur_mwh"`          // low percentile threshold — charge below this
+	High                float64 `json:"high_eur_mwh"`         // high percentile threshold — discharge above this
+	ChargePercentile    int     `json:"charge_percentile"`    // e.g. 20 (means P20)
+	DischargePercentile int     `json:"discharge_percentile"` // e.g. 80 (means P80)
 }
 
 // ComputeSchedule analyzes hourly prices using a P20/P80 percentile strategy.
@@ -113,6 +113,17 @@ func ComputeSchedule(prices []redata.HourlyPrice) DaySchedule {
 	for _, p := range prices {
 		if p.Price >= high {
 			dischargeSet[p.Hour] = true
+		}
+	}
+
+	// On flat/degenerate days the P20 and P80 thresholds can coincide (or nearly),
+	// so an hour may satisfy both price ≤ low and price ≥ high. Emitting both would
+	// produce a conflicting charge and discharge window for the same hour, so drop
+	// any overlap from both sets rather than act on an ambiguous signal.
+	for h := range chargeSet {
+		if dischargeSet[h] {
+			delete(chargeSet, h)
+			delete(dischargeSet, h)
 		}
 	}
 

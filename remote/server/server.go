@@ -25,6 +25,7 @@ package server
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -192,9 +193,12 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/login", s.handleLogin)
 	mux.HandleFunc("/api/agent", s.handleAgentWS)
-	mux.HandleFunc("/api/ui", s.handleUIWS)
-	mux.HandleFunc("/api/agents", s.handleAgents)
-	mux.HandleFunc("/api/agents/", s.requireAuthForWrites(s.handleAgentRoutes))
+	mux.HandleFunc("/api/ui", s.requireAuthWS(s.handleUIWS))
+	mux.HandleFunc("/api/agents", s.requireAuth(s.handleAgents))
+	// requireAuth (not requireAuthForWrites): GET config and GET logs expose agent
+	// configuration and log contents, so reads must be authenticated too. When no
+	// UI credentials are configured, validateToken is fail-open so this is a no-op.
+	mux.HandleFunc("/api/agents/", s.requireAuth(s.handleAgentRoutes))
 	mux.HandleFunc("/api/prices", s.handlePrices)
 	mux.HandleFunc("/api/prices/export", s.handlePricesExport)
 	mux.HandleFunc("/api/price-limits", s.requireAuthForWrites(s.handlePriceLimits))
@@ -237,7 +241,7 @@ func (s *Server) withLogging(next http.Handler) http.Handler {
 func (s *Server) handleAgentWS(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.SharedSecret != "" {
 		token := r.Header.Get(headerSharedSecret)
-		if token != s.cfg.SharedSecret {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.SharedSecret)) != 1 {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
