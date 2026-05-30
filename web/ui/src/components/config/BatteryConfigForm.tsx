@@ -202,7 +202,9 @@ export function BatteryConfigForm({
             </div>
           </div>
           <small className="form-help-text">
-            Used when no schedule is active
+            {battery.auto_schedule
+              ? "Power and SoC limits for auto-generated schedule windows, and when no schedule is active"
+              : "Used when no schedule is active"}
           </small>
           {!readonly && (
             <button
