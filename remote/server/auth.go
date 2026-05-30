@@ -184,20 +184,6 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) requireAuthWS(next func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		token := r.URL.Query().Get("token")
-		if token == "" {
-			token = r.Header.Get(headerAuthToken)
-		}
-		if !s.auth.validateToken(token) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next(w, r)
-	}
-}
-
 func (s *Server) requireAuthForWrites(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
