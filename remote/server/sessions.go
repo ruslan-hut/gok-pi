@@ -314,20 +314,20 @@ func (st *SessionTracker) getAvgPrice(start, end time.Time) float64 {
 		return 0
 	}
 
-	startHour := start.Hour()
-	endHour := end.Hour()
-	if end.Minute() > 0 || end.Second() > 0 {
-		endHour++
-	}
-	if endHour > 24 {
-		endHour = 24
+	// Prices are indexed by hour-of-day from today's data (a known limitation for
+	// sessions that started before today). Walking the window hour-by-hour by
+	// timestamp maps clock hours correctly even when the session crosses midnight
+	// (23 → 0 → 1), instead of collapsing to a single hour.
+	priceByHour := make(map[int]float64, len(state.Today.Prices))
+	for _, p := range state.Today.Prices {
+		priceByHour[p.Hour] = p.Price
 	}
 
 	var sum float64
 	var count int
-	for _, p := range state.Today.Prices {
-		if p.Hour >= startHour && p.Hour < endHour {
-			sum += p.Price
+	for t := start.Truncate(time.Hour); !t.After(end); t = t.Add(time.Hour) {
+		if price, ok := priceByHour[t.Hour()]; ok {
+			sum += price
 			count++
 		}
 	}

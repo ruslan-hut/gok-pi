@@ -41,6 +41,29 @@ const (
 
 var httpClient = &http.Client{}
 
+// httpStatusError carries an HTTP status code so the retry loop can distinguish a
+// retryable failure (5xx / 429) from a terminal one (other 4xx, e.g. bad token/URL).
+type httpStatusError struct {
+	code int
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("received status code: %d", e.code)
+}
+
+// retryable reports whether an error from doRequest is worth retrying. Network and
+// timeout errors are retryable; HTTP 4xx (except 429 Too Many Requests) are terminal.
+func retryable(err error) bool {
+	var se *httpStatusError
+	if errors.As(err, &se) {
+		if se.code == http.StatusTooManyRequests {
+			return true
+		}
+		return se.code < 400 || se.code >= 500
+	}
+	return true
+}
+
 type Driver struct {
 	url   string
 	token string
@@ -149,17 +172,24 @@ func (c *Driver) requestWithRetry(method string, data interface{}, params ...str
 		}
 	}
 
+	var lastErr error
 	for i := 0; i < maxRetry; i++ {
 		responseBody, err := c.doRequest(method, reqPath, bytes.NewReader(body))
 		if err == nil {
 			return responseBody, nil
 		}
-		log.With(
-			slog.Int("attempt", i+1),
-		).Debug("retrying request")
-		time.Sleep(time.Duration((i+1)*retryStep) * time.Second)
+		lastErr = err
+		if !retryable(err) {
+			log.With(sl.Err(err)).Debug("not retrying non-retryable request")
+			return nil, err
+		}
+		// Don't sleep after the final attempt.
+		if i < maxRetry-1 {
+			log.With(slog.Int("attempt", i+1)).Debug("retrying request")
+			time.Sleep(time.Duration((i+1)*retryStep) * time.Second)
+		}
 	}
-	return nil, fmt.Errorf("request failed after %d retries", maxRetry)
+	return nil, fmt.Errorf("request failed after %d retries: %w", maxRetry, lastErr)
 }
 
 func (c *Driver) doRequest(method, url string, reader io.Reader) ([]byte, error) {
@@ -202,7 +232,7 @@ func (c *Driver) doRequest(method, url string, reader io.Reader) ([]byte, error)
 
 	log = log.With(slog.Int("status", resp.StatusCode))
 	if resp.StatusCode >= 400 {
-		err = fmt.Errorf("received status code: %d", resp.StatusCode)
+		err = &httpStatusError{code: resp.StatusCode}
 		return nil, err
 	}
 

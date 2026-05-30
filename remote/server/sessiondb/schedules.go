@@ -1,6 +1,8 @@
 package sessiondb
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -36,9 +38,18 @@ func migrateSchedules(db *sqlx.DB) error {
 	// Computed schedules are ephemeral (recomputed daily), so data loss is acceptable.
 	var colName string
 	err := db.QueryRow(`SELECT name FROM pragma_table_info('computed_schedules') WHERE name = 'low'`).Scan(&colName)
-	if err != nil {
-		// Column 'low' doesn't exist — drop old table so it gets recreated with new schema.
-		db.Exec(`DROP TABLE IF EXISTS computed_schedules`)
+	switch {
+	case err == nil:
+		// Column 'low' exists: already the current schema, nothing to migrate.
+	case errors.Is(err, sql.ErrNoRows):
+		// Column 'low' is absent (old schema, or table doesn't exist yet): drop so
+		// it gets recreated below. Schedules are ephemeral, so data loss is fine.
+		if _, derr := db.Exec(`DROP TABLE IF EXISTS computed_schedules`); derr != nil {
+			return fmt.Errorf("drop old computed_schedules table: %w", derr)
+		}
+	default:
+		// A genuine DB error: surface it rather than silently dropping the table.
+		return fmt.Errorf("probe computed_schedules schema: %w", err)
 	}
 
 	_, err = db.Exec(`

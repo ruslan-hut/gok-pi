@@ -85,11 +85,19 @@ func updateSnapshot(name string, apply func(*Snapshot)) {
 	notifyListeners(copy)
 }
 
+// notifyListeners sends a snapshot copy to all registered listeners. Listeners are
+// copied under the lock and invoked after releasing it, so a slow listener (one does
+// network I/O) cannot stall every metric update, and a listener that re-enters
+// RegisterListener cannot deadlock.
 func notifyListeners(snapshot Snapshot) {
 	listenerMu.RLock()
-	defer listenerMu.RUnlock()
-
+	fns := make([]Listener, 0, len(listeners))
 	for _, listener := range listeners {
+		fns = append(fns, listener)
+	}
+	listenerMu.RUnlock()
+
+	for _, listener := range fns {
 		listener(snapshot)
 	}
 }

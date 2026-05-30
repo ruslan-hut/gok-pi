@@ -33,6 +33,9 @@ func (s *Schedule) Validate() error {
 	if !isValidScheduleTime(s.StopTime) {
 		return fmt.Errorf("invalid stop_time %q: expected format HH:MM", s.StopTime)
 	}
+	if s.StartTime == s.StopTime {
+		return fmt.Errorf("start_time and stop_time must differ (zero-length window %q)", s.StartTime)
+	}
 	if s.PowerLimit < 0 {
 		return fmt.Errorf("power_limit cannot be negative")
 	}

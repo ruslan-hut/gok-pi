@@ -33,11 +33,13 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"gok-pi/battery/entity"
@@ -182,7 +184,8 @@ func (s *Server) emailPriceLimits() email.PriceLimits {
 }
 
 func (s *Server) ListenAndServe(addr string) error {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	go s.prices.Run(ctx)
 	go s.runAutoScheduler(ctx)
 	go s.runSessionCleanup(ctx)
@@ -223,8 +226,39 @@ func (s *Server) ListenAndServe(addr string) error {
 		}
 	}
 
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           s.withLogging(mux),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	// Graceful shutdown: on SIGINT/SIGTERM, stop background goroutines, drain the
+	// HTTP server, and close the session DB so SQLite checkpoints its WAL cleanly.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		sig := <-sigCh
+		s.log.Info("shutting down control server", slog.String("signal", sig.String()))
+		cancel()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			s.log.With(slog.Any("error", err)).Warn("http server shutdown")
+		}
+		if s.sessions != nil {
+			if store := s.sessions.Store(); store != nil {
+				if err := store.Close(); err != nil {
+					s.log.With(slog.Any("error", err)).Warn("closing session DB")
+				}
+			}
+		}
+	}()
+
 	s.log.Info("control server listening", slog.String("addr", addr))
-	return http.ListenAndServe(addr, s.withLogging(mux))
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) withLogging(next http.Handler) http.Handler {

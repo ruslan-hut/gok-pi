@@ -89,8 +89,12 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 	// Restart agent service if enabled
 	if cfg.RestartEnabled && cfg.RestartService != "" {
 		if err := restartService(ctx, cfg.RestartService, log); err != nil {
-			// Log error but don't fail the update - the binary is already installed
-			log.Warn("failed to restart agent service after update", slog.String("service", cfg.RestartService), slog.Any("error", err))
+			// The new binary + VERSION are already on disk, so the next run will see
+			// VERSION==remote and do nothing — the device keeps running the OLD process
+			// until something restarts it. Surface this loudly (ERROR, not Warn) so the
+			// drift is visible; intentionally non-fatal since the install itself succeeded.
+			log.Error("agent updated on disk but service restart FAILED; device runs stale code until restarted",
+				slog.String("service", cfg.RestartService), slog.Any("error", err))
 		} else {
 			log.Info("agent service restarted successfully", slog.String("service", cfg.RestartService))
 		}
@@ -222,6 +226,13 @@ func downloadBinary(ctx context.Context, client *http.Client, binaryURL, agentRo
 		return "", err
 	}
 
+	// Flush to disk before the caller renames this file over the live binary, so a
+	// crash cannot leave a torn (partially written) binary in place.
+	if err = tempFile.Sync(); err != nil {
+		tempFile.Close()
+		return "", err
+	}
+
 	if err = tempFile.Close(); err != nil {
 		return "", err
 	}
@@ -256,7 +267,6 @@ func verifySHA256(path, expected string) error {
 func installBinary(tempPath, targetPath string) error {
 	return os.Rename(tempPath, targetPath)
 }
-
 
 func validateHash(hash string) error {
 	if len(hash) != 64 {
