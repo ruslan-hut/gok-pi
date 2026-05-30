@@ -196,12 +196,14 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/login", s.handleLogin)
 	mux.HandleFunc("/api/agent", s.handleAgentWS)
-	mux.HandleFunc("/api/ui", s.requireAuthWS(s.handleUIWS))
-	mux.HandleFunc("/api/agents", s.requireAuth(s.handleAgents))
-	// requireAuth (not requireAuthForWrites): GET config and GET logs expose agent
-	// configuration and log contents, so reads must be authenticated too. When no
-	// UI credentials are configured, validateToken is fail-open so this is a no-op.
-	mux.HandleFunc("/api/agents/", s.requireAuth(s.handleAgentRoutes))
+	// The UI supports a read-only public mode (overview, telemetry, prices) that
+	// works without login, so the telemetry WebSocket and agent list stay public.
+	mux.HandleFunc("/api/ui", s.handleUIWS)
+	mux.HandleFunc("/api/agents", s.handleAgents)
+	// requireAuthForWrites: GETs (agent list, config view, logs) are readable in the
+	// public read-only mode; only mutating methods (commands, config PUT, email-test)
+	// require a valid token.
+	mux.HandleFunc("/api/agents/", s.requireAuthForWrites(s.handleAgentRoutes))
 	mux.HandleFunc("/api/prices", s.handlePrices)
 	mux.HandleFunc("/api/prices/export", s.handlePricesExport)
 	mux.HandleFunc("/api/price-limits", s.requireAuthForWrites(s.handlePriceLimits))
