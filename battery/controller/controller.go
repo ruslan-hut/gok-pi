@@ -157,6 +157,7 @@ type Controller struct {
 	stopTime          time.Time
 	rate              int // Operation rate in W calculated based on the remaining capacity and time
 	client            Client
+	mode              *ModeCoordinator // shared with the opposite-direction controller for this battery
 	status            *entity.SystemStatus
 	log               *slog.Logger
 	commands          chan ControlCommand
@@ -183,6 +184,40 @@ func New(name string, client Client, dir Direction, log *slog.Logger) (*Controll
 		stopped:         make(chan struct{}),
 		firstStatusPoll: true,
 	}, nil
+}
+
+// SetModeCoordinator sets the shared operating-mode coordinator. Both the charge and
+// discharge controllers for a battery must be given the same coordinator instance.
+func (c *Controller) SetModeCoordinator(m *ModeCoordinator) {
+	c.mode = m
+}
+
+// switchToManual switches the battery to manual mode through the coordinator (if set),
+// so the opposite-direction controller does not switch it back to auto underneath us.
+func (c *Controller) switchToManual() error {
+	currentMode := ""
+	if c.status != nil {
+		currentMode = c.status.OperatingMode
+	}
+	fn := func() error { return c.client.SwitchOperatingModeToManual(currentMode) }
+	if c.mode != nil {
+		return c.mode.AcquireManual(c.dir.Name, fn)
+	}
+	return fn()
+}
+
+// switchToAuto releases this direction's manual ownership and switches the battery
+// back to auto only when no other direction is still operating.
+func (c *Controller) switchToAuto() error {
+	currentMode := ""
+	if c.status != nil {
+		currentMode = c.status.OperatingMode
+	}
+	fn := func() error { return c.client.SwitchOperatingModeToAuto(currentMode) }
+	if c.mode != nil {
+		return c.mode.ReleaseToAuto(c.dir.Name, fn)
+	}
+	return fn()
 }
 
 // SetGoalCallbacks sets the callbacks for persisting and clearing goal reached state.
@@ -320,6 +355,18 @@ func (c *Controller) isTimeToOperate(start, stop string) bool {
 
 	c.stopTime = stopTime
 	return !now.Before(startTime) && now.Before(stopTime)
+}
+
+// hasActiveSchedule reports whether any enabled schedule for this direction is
+// currently within its operating window.
+func (c *Controller) hasActiveSchedule() bool {
+	for i := range c.schedules {
+		s := &c.schedules[i]
+		if s.Enabled && c.dir.ScheduleFilter(s.Type) && c.isTimeToOperate(s.StartTime, s.StopTime) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkTime determines whether the current time falls within any enabled schedule.
@@ -571,7 +618,7 @@ func (c *Controller) runOperation() {
 		return
 	}
 
-	err := c.client.SwitchOperatingModeToManual(c.status.OperatingMode)
+	err := c.switchToManual()
 	if err != nil {
 		c.log.With(sl.Err(err)).Error("switching operating mode")
 		return
@@ -597,7 +644,7 @@ func (c *Controller) stopOperation() error {
 		}
 
 		if c.status != nil {
-			err = c.client.SwitchOperatingModeToAuto(c.status.OperatingMode)
+			err = c.switchToAuto()
 			if err != nil {
 				return err
 			}
@@ -615,27 +662,36 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 
 	switch cmd.Type {
 	case CommandStart:
+		rate := c.rate
 		if cmd.Power > 0 {
-			c.rate = cmd.Power
+			rate = cmd.Power
 		}
-		c.manualOverride = true
-		c.ready = true
-
-		currentMode := ""
-		if c.status != nil {
-			currentMode = c.status.OperatingMode
-		}
-
-		if err := c.client.SwitchOperatingModeToManual(currentMode); err != nil {
-			return fmt.Errorf("switching to manual mode: %w", err)
-		}
-
-		if c.rate <= 0 {
+		if rate <= 0 {
 			if c.powerLimit > 0 {
-				c.rate = c.powerLimit
+				rate = c.powerLimit
 			} else {
 				return fmt.Errorf("no %s rate configured", c.dir.Name)
 			}
+		}
+		if rate < 0 {
+			rate = 0
+		}
+		if rate <= 0 {
+			return fmt.Errorf("invalid %s rate", c.dir.Name)
+		}
+
+		// Honor the SoC limit even for manual starts so a remote command cannot
+		// over-charge or over-discharge the battery past its configured boundary.
+		if c.status != nil && c.dir.GoalReached(c.soc, c.socLimit) {
+			return fmt.Errorf("battery already at SoC limit (%.0f%%); not starting %s", c.socLimit, c.dir.Name)
+		}
+
+		c.rate = rate
+		c.manualOverride = true
+		c.ready = true
+
+		if err := c.switchToManual(); err != nil {
+			return fmt.Errorf("switching to manual mode: %w", err)
 		}
 
 		log.With(slog.Int("rate", c.rate)).Info("starting " + c.dir.Name + " via remote command")
@@ -675,21 +731,17 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 		return nil
 
 	case CommandForceMode:
-		currentMode := ""
-		if c.status != nil {
-			currentMode = c.status.OperatingMode
-		}
 		switch cmd.Mode {
 		case OperatingModeManual:
 			c.manualOverride = true
-			if err := c.client.SwitchOperatingModeToManual(currentMode); err != nil {
+			if err := c.switchToManual(); err != nil {
 				return fmt.Errorf("forcing manual mode: %w", err)
 			}
 			log.Info("forced manual mode via remote command")
 			return nil
 		case OperatingModeAuto:
 			c.manualOverride = false
-			if err := c.client.SwitchOperatingModeToAuto(currentMode); err != nil {
+			if err := c.switchToAuto(); err != nil {
 				return fmt.Errorf("forcing auto mode: %w", err)
 			}
 			log.Info("forced auto mode via remote command")
@@ -812,10 +864,13 @@ func (c *Controller) GetScheduleType(name string) (string, bool) {
 	return "", false
 }
 
-
-// calculateRate sets the operation rate to the power limit from the schedule.
+// calculateRate sets the operation rate to the power limit from the schedule,
+// clamped to a non-negative value so an invalid limit never reaches the hardware.
 func (c *Controller) calculateRate() {
 	c.rate = c.powerLimit
+	if c.rate < 0 {
+		c.rate = 0
+	}
 }
 
 // observeStatus updates various battery status metrics through external observers.
@@ -854,6 +909,21 @@ func (c *Controller) syncStateFromBattery(status *entity.SystemStatus) {
 				slog.Bool("battery_active", c.dir.IsActive(status)),
 			).Info("detected battery already " + c.dir.Name + "ing in manual mode on startup, syncing internal state")
 			c.active = true
+		}
+
+		// Register the adopted operation with the coordinator so the opposite
+		// direction will not switch the battery back to auto underneath us.
+		if c.mode != nil {
+			c.mode.MarkActive(c.dir.Name)
+		}
+
+		// If no schedule currently justifies this operation, it was started manually
+		// (e.g. a remote start command before this agent restarted). Preserve it as a
+		// manual override; otherwise the next tick would stop it and return to auto.
+		if !c.manualOverride && !c.hasActiveSchedule() {
+			c.log.Info("detected manual " + c.dir.Name + " with no active schedule on startup, preserving manual override")
+			c.manualOverride = true
+			c.ready = true
 		}
 	}
 

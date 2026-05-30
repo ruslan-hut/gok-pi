@@ -25,6 +25,13 @@ func Write(target string, data []byte, perm os.FileMode) error {
 		return err
 	}
 
+	// Flush file contents to disk before the rename so a power loss cannot leave
+	// a renamed-but-empty target (a real risk on the Raspberry Pi deployment).
+	if err := tmpFile.Sync(); err != nil {
+		tmpFile.Close()
+		return err
+	}
+
 	if err := tmpFile.Close(); err != nil {
 		return err
 	}
@@ -35,5 +42,24 @@ func Write(target string, data []byte, perm os.FileMode) error {
 		}
 	}
 
-	return os.Rename(tmpName, target)
+	if err := os.Rename(tmpName, target); err != nil {
+		return err
+	}
+
+	// Persist the directory entry so the rename itself survives a power loss.
+	return fsyncDir(dir)
+}
+
+// fsyncDir flushes a directory entry to disk. A failure to open the directory is
+// ignored (some filesystems do not permit it); a sync failure is returned.
+func fsyncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return nil
+	}
+	defer d.Close()
+	if err := d.Sync(); err != nil {
+		return err
+	}
+	return nil
 }

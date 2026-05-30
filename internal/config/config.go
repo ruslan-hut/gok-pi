@@ -58,6 +58,7 @@ var instance *Config
 var instancePath string
 var once sync.Once
 var mu sync.RWMutex
+var saveMu sync.Mutex // serializes marshal+write so concurrent Save() callers cannot race the rename
 var goalStateChangedCallback func()
 var goalStateCallbackMu sync.RWMutex
 
@@ -208,7 +209,14 @@ func UpdateFromRemoteConfig(deviceName string, env string, timezone string, batt
 // Preserves existing file permissions if the file exists, otherwise uses 0600 (rw-------)
 // for security since config files may contain sensitive data like tokens and secrets.
 func Save() error {
-	// Copy the config and path while holding the lock, then release it before I/O
+	// Serialize the whole marshal+write so two concurrent savers cannot interleave
+	// their os.Rename calls (last-writer-wins would drop an update).
+	saveMu.Lock()
+	defer saveMu.Unlock()
+
+	// Deep-copy the config while holding the lock, then release it before I/O.
+	// A plain struct copy would alias the slice backing arrays, letting an in-place
+	// mutation (e.g. UpdateScheduleGoalReached / RemoveSchedule) race yaml.Marshal.
 	mu.RLock()
 	if instance == nil {
 		mu.RUnlock()
@@ -219,8 +227,10 @@ func Save() error {
 		return fmt.Errorf("config path not set")
 	}
 
-	// Create a copy of the config to marshal outside the lock
 	cfgCopy := *instance
+	cfgCopy.Batteries = entity.CloneBatteryConfigs(instance.Batteries)
+	cfgCopy.Schedules = entity.CloneSchedules(instance.Schedules)
+	cfgCopy.ChargeSchedules = entity.CloneSchedules(instance.ChargeSchedules)
 	path := instancePath
 	mu.RUnlock()
 

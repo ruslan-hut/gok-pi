@@ -524,11 +524,12 @@ func (m *workerManager) remove(name string) (*workerEntry, bool) {
 }
 
 // initController creates and configures a controller for the given direction.
-func initController(battery entity.BatteryConfig, schedules []entity.Schedule, timezone string, dir controller.Direction, client controller.Client, workerLog *slog.Logger) (*controller.Controller, error) {
+func initController(battery entity.BatteryConfig, schedules []entity.Schedule, timezone string, dir controller.Direction, client controller.Client, mode *controller.ModeCoordinator, workerLog *slog.Logger) (*controller.Controller, error) {
 	w, err := controller.New(battery.Name, client, dir, workerLog)
 	if err != nil {
 		return nil, err
 	}
+	w.SetModeCoordinator(mode)
 
 	for _, schedule := range schedules {
 		w.AddSchedule(schedule)
@@ -622,8 +623,12 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		}
 	}
 
+	// Both directions share one mode coordinator so they never fight over the
+	// battery's operating mode (auto only when neither direction is active).
+	mode := controller.NewModeCoordinator()
+
 	if hasDischargeSchedules {
-		w, err := initController(battery, schedules, timezone, controller.DischargeDirection(api), api, workerLog)
+		w, err := initController(battery, schedules, timezone, controller.DischargeDirection(api), api, mode, workerLog)
 		if err != nil {
 			return nil, fmt.Errorf("creating discharge worker: %w", err)
 		}
@@ -632,7 +637,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 	}
 
 	if hasChargeSchedules {
-		w, err := initController(battery, schedules, timezone, controller.ChargeDirection(api), api, workerLog)
+		w, err := initController(battery, schedules, timezone, controller.ChargeDirection(api), api, mode, workerLog)
 		if err != nil {
 			if entry.discharger != nil {
 				entry.discharger.Stop()
