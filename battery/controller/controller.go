@@ -1,11 +1,12 @@
 // Package controller implements a unified battery control loop for both
 // charge and discharge operations.
 //
-// It runs as a long-lived goroutine that polls battery status every 10 seconds,
+// It runs as a long-lived goroutine that reacts to battery status readings delivered
+// by a shared StatusPoller (one poll per battery, fanned out to both directions),
 // evaluates time-based schedules, and controls charge/discharge via battery driver API.
 //
-// Core state machine (per tick):
-//  1. Poll battery status from driver API
+// Core state machine (per status reading):
+//  1. Receive battery status from the shared StatusPoller
 //  2. Sync internal state on first poll (handles agent restarts mid-operation)
 //  3. Check if current time falls within any enabled schedule for this direction
 //  4. If schedule active: apply schedule's power/SoC limits, start operation
@@ -28,7 +29,6 @@ import (
 	"gok-pi/battery/entity"
 	"gok-pi/internal/lib/sl"
 	"gok-pi/internal/lib/timer"
-	"gok-pi/metrics/observers"
 	"log/slog"
 	"sync"
 	"time"
@@ -58,8 +58,6 @@ type Direction struct {
 	StartOp func(power int) error
 	// StopOp stops the operation.
 	StopOp func() error
-	// ObserveState updates the observer with the current operation state.
-	ObserveState func(name string, active bool)
 }
 
 // FullClient extends Client with direction-specific start/stop operations.
@@ -82,7 +80,6 @@ func DischargeDirection(client FullClient) Direction {
 		IsActive:       func(s *entity.SystemStatus) bool { return s.BatteryDischarging },
 		StartOp:        client.StartDischarge,
 		StopOp:         client.StopDischarge,
-		ObserveState:   observers.UpdateDischargeState,
 	}
 }
 
@@ -96,7 +93,6 @@ func ChargeDirection(client FullClient) Direction {
 		IsActive:       func(s *entity.SystemStatus) bool { return s.BatteryCharging },
 		StartOp:        client.StartCharge,
 		StopOp:         client.StopCharge,
-		ObserveState:   observers.UpdateChargeState,
 	}
 }
 
@@ -169,7 +165,8 @@ type Controller struct {
 	stop              chan struct{}
 	stopped           chan struct{}
 	stopOnce          sync.Once
-	firstStatusPoll   bool // True until first successful status poll
+	firstStatusPoll   bool                        // True until first successful status poll
+	statusFeed        <-chan *entity.SystemStatus // Shared status readings from the battery's StatusPoller
 }
 
 func New(name string, client Client, dir Direction, log *slog.Logger) (*Controller, error) {
@@ -190,6 +187,13 @@ func New(name string, client Client, dir Direction, log *slog.Logger) (*Controll
 // discharge controllers for a battery must be given the same coordinator instance.
 func (c *Controller) SetModeCoordinator(m *ModeCoordinator) {
 	c.mode = m
+}
+
+// SetStatusFeed wires the controller to a StatusPoller subscription. The controller no
+// longer polls the battery itself; it reacts to readings delivered on this channel, so
+// all controllers and the monitor for a battery share a single status request per tick.
+func (c *Controller) SetStatusFeed(feed <-chan *entity.SystemStatus) {
+	c.statusFeed = feed
 }
 
 // switchToManual switches the battery to manual mode through the coordinator (if set),
@@ -276,11 +280,10 @@ func (c *Controller) SubmitCommand(cmd ControlCommand) error {
 	}
 }
 
-// Run starts the main control loop. It polls battery status every 10 seconds
-// and processes remote commands. The loop runs until Stop() is called.
+// Run starts the main control loop. It reacts to battery status readings delivered by
+// the shared StatusPoller (set via SetStatusFeed) and processes remote commands. The
+// loop runs until Stop() is called.
 func (c *Controller) Run() error {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
 	defer close(c.stopped)
 
 	for {
@@ -289,14 +292,7 @@ func (c *Controller) Run() error {
 			if err := c.processControlCommand(cmd); err != nil {
 				c.log.With(sl.Err(err)).Error("processing remote command")
 			}
-		case <-ticker.C:
-			status, err := c.client.Status()
-			if err != nil {
-				c.log.With(sl.Err(err)).Error("checking battery status")
-				observers.UpdateStatus(c.name, "Disconnected")
-				continue
-			}
-			observers.UpdateStatus(c.name, "Connected")
+		case status := <-c.statusFeed:
 			c.observeStatus(status)
 
 			if c.firstStatusPoll {
@@ -318,8 +314,7 @@ func (c *Controller) Run() error {
 			if c.ready {
 				c.runOperation()
 			} else {
-				err = c.stopOperation()
-				if err != nil {
+				if err := c.stopOperation(); err != nil {
 					c.log.With(sl.Err(err)).Error("stopping " + c.dir.Name)
 				}
 			}
@@ -873,7 +868,9 @@ func (c *Controller) calculateRate() {
 	}
 }
 
-// observeStatus updates various battery status metrics through external observers.
+// observeStatus records the latest reading into the controller's internal state used by
+// the operation logic. Battery-level and direction gauges are emitted by the shared
+// StatusPoller, so the controller no longer writes them here.
 func (c *Controller) observeStatus(status *entity.SystemStatus) {
 	if status == nil {
 		return
@@ -882,16 +879,6 @@ func (c *Controller) observeStatus(status *entity.SystemStatus) {
 	c.status = status
 	c.soc = status.USOC
 	c.capacity = status.RemainingCapacityWh
-
-	go func(status *entity.SystemStatus) {
-		observers.UpdateSoC(c.name, status.RSOC)
-		observers.UpdateUSoC(c.name, status.USOC)
-		observers.UpdateCapacity(c.name, status.RemainingCapacityWh)
-		observers.UpdateConsumption(c.name, status.ConsumptionW)
-		observers.UpdatePac(c.name, status.PacTotalW)
-		c.dir.ObserveState(c.name, c.dir.IsActive(status))
-		observers.UpdateOpMode(c.name, status.OperatingMode)
-	}(status)
 }
 
 // syncStateFromBattery synchronizes internal state with actual battery state on startup.

@@ -98,4 +98,4 @@ The driver options in the UI must match the registered driver names in the backe
 
 ## Development Notes
 
-- Do not run build checks (`go build`, `go test`) automatically after making changes - the user will verify manually
+- Always run `go build ./...` after making changes to verify the code compiles before reporting completion

@@ -205,8 +205,12 @@ func (c *Driver) doRequest(method, url string, reader io.Reader) ([]byte, error)
 	t1 := time.Now()
 	defer func() {
 		log = log.With(slog.Float64("duration", time.Since(t1).Seconds()))
+		// A single attempt failing is not yet a real failure: the retry loop in
+		// requestWithRetry may still recover, and the caller logs the final
+		// outcome at ERROR. Logging every attempt at ERROR amplifies a brief
+		// battery hiccup into dozens of lines, so per-attempt outcomes stay at DEBUG.
 		if err != nil {
-			log.Error("api request", sl.Err(err))
+			log.Debug("api request", sl.Err(err))
 		} else {
 			log.Debug("api request")
 		}

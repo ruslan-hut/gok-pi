@@ -32,7 +32,43 @@ var (
 	listenerMu sync.RWMutex
 	listeners  = make(map[int64]Listener)
 	nextID     int64
+
+	// connFailMu guards connFailed, the set of batteries currently in a logged
+	// failure state. Several pollers (the discharge/charge controllers and the
+	// standalone monitor) poll the same battery on independent tickers, so this
+	// is keyed by battery name and shared across all of them.
+	connFailMu sync.Mutex
+	connFailed = make(map[string]bool)
 )
+
+// ConnectionFailed records a battery poll failure and reports whether this is a
+// new failure, i.e. a transition from healthy to failed. It returns true exactly
+// once per outage — for the first poller to observe it — and false while the
+// battery stays continuously unreachable. Callers use the return value to log a
+// connection error once per outage instead of once per poll per poller.
+func ConnectionFailed(name string) bool {
+	connFailMu.Lock()
+	defer connFailMu.Unlock()
+	if connFailed[name] {
+		return false
+	}
+	connFailed[name] = true
+	return true
+}
+
+// ConnectionRecovered clears the failure state for a battery and reports whether
+// it was previously marked failed, i.e. whether this is a genuine recovery
+// transition. It returns true exactly once per recovery, for the first poller to
+// observe the battery responding again.
+func ConnectionRecovered(name string) bool {
+	connFailMu.Lock()
+	defer connFailMu.Unlock()
+	if !connFailed[name] {
+		return false
+	}
+	delete(connFailed, name)
+	return true
+}
 
 func RegisterListener(listener Listener) (cancel func()) {
 	id := atomic.AddInt64(&nextID, 1)

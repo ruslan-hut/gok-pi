@@ -33,7 +33,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 	// Embed the IANA timezone database so schedule timezones resolve even on
 	// minimal Raspberry Pi images that ship no system zoneinfo (otherwise summer
 	// schedules silently shift by one hour).
@@ -595,12 +594,11 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		config: battery,
 	}
 
-	// Always create a monitor worker to track battery status and emit data to control server
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		monitorBattery(ctx, battery.Name, api, workerLog)
-	}()
+	// A single status poller polls the battery once per tick and fans the reading out
+	// to every controller, so the discharge/charge controllers and the status monitor
+	// share one request instead of each polling the battery independently. The poller is
+	// always started (even with no schedules) so the control server still gets telemetry.
+	poller := controller.NewStatusPoller(battery.Name, api, workerLog)
 
 	// Validate and filter schedules
 	var validSchedules []entity.Schedule
@@ -636,6 +634,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		if err != nil {
 			return nil, fmt.Errorf("creating discharge worker: %w", err)
 		}
+		w.SetStatusFeed(poller.Subscribe())
 		entry.discharger = w
 		runController(ctx, wg, w, "discharge", workerLog)
 	}
@@ -648,55 +647,19 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 			}
 			return nil, fmt.Errorf("creating charge worker: %w", err)
 		}
+		w.SetStatusFeed(poller.Subscribe())
 		entry.charger = w
 		runController(ctx, wg, w, "charge", workerLog)
 	}
 
-	return entry, nil
-}
-
-// monitorBattery continuously monitors battery status and emits data to observers
-func monitorBattery(ctx context.Context, name string, api driver.Driver, log *slog.Logger) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	// Set initial status
-	observers.UpdateStatus(name, "Disconnected")
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("battery monitor stopped")
-			return
-		case <-ticker.C:
-			status, err := api.Status()
-			if err != nil {
-				log.With(sl.Err(err)).Error("checking battery status")
-				observers.UpdateStatus(name, "Disconnected")
-				continue
-			}
-			observers.UpdateStatus(name, "Connected")
-			observeBatteryStatus(name, status)
-		}
-	}
-}
-
-// observeBatteryStatus updates observers with battery status data
-func observeBatteryStatus(name string, status *entity.SystemStatus) {
-	if status == nil {
-		return
-	}
-
+	// Start polling only after subscribers are registered (Subscribe must precede Run).
+	wg.Add(1)
 	go func() {
-		observers.UpdateSoC(name, status.RSOC)
-		observers.UpdateUSoC(name, status.USOC)
-		observers.UpdateCapacity(name, status.RemainingCapacityWh)
-		observers.UpdateConsumption(name, status.ConsumptionW)
-		observers.UpdatePac(name, status.PacTotalW)
-		observers.UpdateDischargeState(name, status.BatteryDischarging)
-		observers.UpdateChargeState(name, status.BatteryCharging)
-		observers.UpdateOpMode(name, status.OperatingMode)
+		defer wg.Done()
+		poller.Run(ctx)
 	}()
+
+	return entry, nil
 }
 
 func filterEnabledBatteries(batteries []entity.BatteryConfig) []entity.BatteryConfig {
