@@ -184,3 +184,39 @@ func TestOnAgentConfigSyncSeedsStore(t *testing.T) {
 		t.Fatalf("expected original capacity limit preserved, got %d", cfg2.Batteries[0].CapacityLimit)
 	}
 }
+
+// TestUnregisterAgentIdentityCheck guards against the orphaned-registry race: when
+// an agent reconnects before the server detects the old socket is dead, the stale
+// connection's cleanup must not evict the live replacement registered under the
+// same ID. Regression test for agents going invisible until a server restart.
+func TestUnregisterAgentIdentityCheck(t *testing.T) {
+	srv := New(Config{}, testLogger())
+	const id = "agent-1"
+
+	connA := &agentConnection{id: id, s: srv}
+	connB := &agentConnection{id: id, s: srv}
+
+	// connA was registered, then connB reconnected and replaced it in the registry.
+	srv.agentsMu.Lock()
+	srv.agents[id] = connA
+	srv.agents[id] = connB
+	srv.agentsMu.Unlock()
+
+	// Stale connA's deferred cleanup must NOT evict the live connB.
+	srv.unregisterAgent(connA)
+	srv.agentsMu.RLock()
+	got := srv.agents[id]
+	srv.agentsMu.RUnlock()
+	if got != connB {
+		t.Fatalf("stale connection cleanup evicted the live connection: registry has %p, want connB %p", got, connB)
+	}
+
+	// connB's own cleanup removes it.
+	srv.unregisterAgent(connB)
+	srv.agentsMu.RLock()
+	_, present := srv.agents[id]
+	srv.agentsMu.RUnlock()
+	if present {
+		t.Fatalf("expected agent removed from registry after its own cleanup")
+	}
+}

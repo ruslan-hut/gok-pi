@@ -89,7 +89,7 @@ func (a *agentConnection) run() {
 		_ = a.conn.Close()
 		close(a.done)
 		if a.id != "" {
-			a.s.unregisterAgent(a.id)
+			a.s.unregisterAgent(a)
 		}
 	}()
 

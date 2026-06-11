@@ -367,6 +367,18 @@ func (c *Client) writeLoop(ctx context.Context, conn *websocket.Conn) error {
 			if err := c.writeHeartbeat(ctx, conn); err != nil {
 				return err
 			}
+			// Actively probe the link. Without this, a half-open connection (the
+			// server is gone but no FIN/RST reached us) is only detected when the OS
+			// TCP stack finally gives up — up to ~15 minutes — during which the agent
+			// believes it is connected and never reconnects. An explicit ping with a
+			// bounded wait surfaces a dead path within one interval and drops out of
+			// the write loop so run() can reconnect.
+			pingCtx, cancel := context.WithTimeout(ctx, defaultWriteTimeout)
+			err := conn.Ping(pingCtx)
+			cancel()
+			if err != nil {
+				return fmt.Errorf("ping: %w", err)
+			}
 		}
 	}
 }

@@ -474,8 +474,19 @@ func (s *Server) handleAgentConfigPut(w http.ResponseWriter, r *http.Request, ag
 
 func (s *Server) registerAgent(ac *agentConnection) {
 	s.agentsMu.Lock()
+	old := s.agents[ac.id]
 	s.agents[ac.id] = ac
 	s.agentsMu.Unlock()
+
+	// If a previous connection for this agent ID is still registered, the agent
+	// reconnected before the server detected the old socket was dead (e.g. a
+	// half-open link where we wait out pongWait). Force the stale connection closed
+	// so its goroutines exit promptly. Its cleanup will no-op against the registry
+	// thanks to the identity check in unregisterAgent, so it cannot evict this one.
+	if old != nil && old != ac {
+		s.log.With(slog.String("agent", ac.id)).Info("replacing stale agent connection")
+		_ = old.conn.Close()
+	}
 
 	s.broadcastAgentSnapshot(ac.summary())
 
@@ -489,12 +500,20 @@ func (s *Server) registerAgent(ac *agentConnection) {
 	}
 }
 
-func (s *Server) unregisterAgent(id string) {
+func (s *Server) unregisterAgent(ac *agentConnection) {
 	s.agentsMu.Lock()
-	delete(s.agents, id)
+	// Only remove the entry if it still points to THIS connection. A reconnect may
+	// have already replaced it with a newer connection under the same ID; deleting
+	// blindly would orphan that live connection (gone from the UI, commands fail
+	// with "agent not connected") until its socket dies or the server restarts.
+	if current, ok := s.agents[ac.id]; !ok || current != ac {
+		s.agentsMu.Unlock()
+		return
+	}
+	delete(s.agents, ac.id)
 	s.agentsMu.Unlock()
 
-	s.broadcastAgentRemoved(id)
+	s.broadcastAgentRemoved(ac.id)
 }
 
 func (s *Server) snapshotAgents() []AgentSummary {
