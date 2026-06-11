@@ -70,7 +70,7 @@ func (c *uiConnection) writeLoop() {
 			return
 		case msg := <-c.send:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteJSON(msg); err != nil {
+			if err := c.writeMessage(msg); err != nil {
 				c.log().With(slog.Any("error", err)).Warn("ui write error")
 				return
 			}
@@ -83,6 +83,8 @@ func (c *uiConnection) writeLoop() {
 	}
 }
 
+// sendJSON enqueues a per-client value that the write loop will JSON-encode.
+// Used for messages unique to one client (e.g. the initial snapshot).
 func (c *uiConnection) sendJSON(v interface{}) {
 	select {
 	case c.send <- v:
@@ -90,6 +92,26 @@ func (c *uiConnection) sendJSON(v interface{}) {
 		c.log().Warn("closing ui connection; buffer full")
 		c.close()
 	}
+}
+
+// sendBytes enqueues a pre-marshaled broadcast payload shared by all UI clients
+// (serialized once in Server.broadcastUI) so the write loop can send it verbatim.
+func (c *uiConnection) sendBytes(b []byte) {
+	select {
+	case c.send <- b:
+	default:
+		c.log().Warn("closing ui connection; buffer full")
+		c.close()
+	}
+}
+
+// writeMessage sends either a pre-marshaled broadcast payload ([]byte) or a
+// per-client value still needing JSON encoding.
+func (c *uiConnection) writeMessage(msg interface{}) error {
+	if b, ok := msg.([]byte); ok {
+		return c.conn.WriteMessage(websocket.TextMessage, b)
+	}
+	return c.conn.WriteJSON(msg)
 }
 
 func (c *uiConnection) close() {

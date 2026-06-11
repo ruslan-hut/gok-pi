@@ -244,8 +244,14 @@ func (a *agentConnection) updateTelemetry(msg AgentTelemetry) {
 	a.telemetry[msg.Snapshot.Name] = msg.Snapshot
 	a.lastSeen = msg.Timestamp
 	a.mu.Unlock()
+	// Broadcast only the per-battery delta. We deliberately do NOT also broadcast a
+	// full agent summary here: the summary would re-serialize and fan out the entire
+	// telemetry + goalReached map to every UI client on every ~10s frame, which is the
+	// same data the delta already carries. last_seen / connected status stay fresh via
+	// the 30s heartbeat summary (offline grace in the UI is 2 minutes), and goalReached
+	// changes are pushed via the config-sync path. a.lastSeen is still updated above so
+	// REST snapshots and the next heartbeat report an accurate timestamp.
 	a.s.onTelemetry(a.id, msg.Snapshot)
-	a.s.onAgentSummary(a.id)
 }
 
 func (a *agentConnection) updateHeartbeat(msg AgentHeartbeat) {

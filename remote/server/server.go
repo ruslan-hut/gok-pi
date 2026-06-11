@@ -589,11 +589,20 @@ func (s *Server) broadcastAgentRemoved(agentID string) {
 }
 
 func (s *Server) broadcastUI(message interface{}) {
+	// Marshal once and fan the bytes out to every UI client, instead of having each
+	// client's write loop re-encode the identical payload via WriteJSON. With U clients
+	// this turns U JSON serializations per broadcast into one.
+	data, err := json.Marshal(message)
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("marshal ui broadcast")
+		return
+	}
+
 	s.uiMu.RLock()
 	defer s.uiMu.RUnlock()
 
 	for client := range s.uiClient {
-		client.sendJSON(message)
+		client.sendBytes(data)
 	}
 }
 
