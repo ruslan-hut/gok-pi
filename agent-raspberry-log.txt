@@ -1,0 +1,500 @@
+time=2026-06-02T03:31:11.256+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.030692726 error="received status code: 502"
+time=2026-06-02T03:31:23.277+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.016480089 error="received status code: 502"
+time=2026-06-02T03:31:23.277+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-02T03:31:23.289+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.011599877 error="received status code: 502"
+time=2026-06-02T03:31:26.306+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015045701 error="received status code: 502"
+time=2026-06-02T03:31:32.326+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.019292142 error="received status code: 502"
+time=2026-06-02T03:31:41.349+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.018627651 error="received status code: 502"
+time=2026-06-02T03:31:53.371+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.016869361 error="received status code: 502"
+time=2026-06-02T03:31:53.371+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-02T03:31:53.382+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.010581928 error="received status code: 502"
+time=2026-06-02T03:31:56.405+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.021250708 error="received status code: 502"
+time=2026-06-02T03:32:02.426+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.020042465 error="received status code: 502"
+time=2026-06-02T03:32:11.452+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.021858532 error="received status code: 500"
+time=2026-06-02T05:02:53.212+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="read message: failed to read JSON message: failed to get reader: failed to read frame header: EOF"
+time=2026-06-02T05:02:58.483+01:00 level=INFO msg="applying remote configuration" revision=305 sent_at=2026-06-02T04:02:58.466Z
+time=2026-06-02T05:02:58.492+01:00 level=INFO msg="persisted remote configuration to local config file" revision=305
+time=2026-06-02T21:41:33.212+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="read message: failed to read JSON message: failed to get reader: use of closed network connection"
+time=2026-06-02T21:41:38.483+01:00 level=INFO msg="applying remote configuration" revision=306 sent_at=2026-06-02T20:41:38.469Z
+time=2026-06-02T21:41:38.492+01:00 level=INFO msg="persisted remote configuration to local config file" revision=306
+time=2026-06-02T22:00:48.148+01:00 level=INFO msg="applying remote configuration" revision=307 sent_at=2026-06-02T21:00:48.089Z
+time=2026-06-02T22:00:48.155+01:00 level=INFO msg="persisted remote configuration to local config file" revision=307
+time=2026-06-02T23:00:48.154+01:00 level=INFO msg="applying remote configuration" revision=308 sent_at=2026-06-02T22:00:48.079Z
+time=2026-06-02T23:00:48.163+01:00 level=INFO msg="persisted remote configuration to local config file" revision=308
+time=2026-06-03T03:30:23.197+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=0.008124315 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: connection refused"
+time=2026-06-03T03:30:26.205+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=0.007768486 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: connection refused"
+time=2026-06-03T03:30:37.210+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004200249 error="request timeout"
+time=2026-06-03T03:30:51.215+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004126088 error="request timeout"
+time=2026-06-03T03:31:03.230+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.014297693 error="received status code: 502"
+time=2026-06-03T03:31:03.230+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-03T03:31:03.243+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.013065173 error="received status code: 502"
+time=2026-06-03T03:31:06.260+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.014134417 error="received status code: 502"
+time=2026-06-03T03:31:12.281+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.017331874 error="received status code: 502"
+time=2026-06-03T03:31:22.374+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=1.089001559 error="received status code: 500"
+time=2026-06-03T03:31:34.405+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.02337342 error="received status code: 500"
+time=2026-06-03T03:31:34.405+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 500"
+time=2026-06-03T03:31:34.419+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.013322558 error="received status code: 500"
+time=2026-06-03T03:31:37.441+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.01978347 error="received status code: 500"
+time=2026-06-03T09:00:48.206+01:00 level=INFO msg="applying remote configuration" revision=309 sent_at=2026-06-03T08:00:48.086Z
+time=2026-06-03T09:00:48.215+01:00 level=INFO msg="persisted remote configuration to local config file" revision=309
+time=2026-06-03T17:00:48.132+01:00 level=INFO msg="applying remote configuration" revision=310 sent_at=2026-06-03T16:00:48.088Z
+time=2026-06-03T17:00:48.162+01:00 level=INFO msg="persisted remote configuration to local config file" revision=310
+time=2026-06-03T22:04:48.193+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.000732807 error="request timeout"
+time=2026-06-03T23:00:48.150+01:00 level=INFO msg="applying remote configuration" revision=311 sent_at=2026-06-03T22:00:48.085Z
+time=2026-06-03T23:00:48.160+01:00 level=INFO msg="persisted remote configuration to local config file" revision=311
+time=2026-06-04T00:00:48.094+01:00 level=INFO msg="applying remote configuration" revision=312 sent_at=2026-06-03T23:00:48.071Z
+time=2026-06-04T00:00:48.103+01:00 level=INFO msg="persisted remote configuration to local config file" revision=312
+time=2026-06-04T03:30:23.201+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=0.009586495 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: connection refused"
+time=2026-06-04T03:30:26.212+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=0.009178982 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: connection refused"
+time=2026-06-04T03:30:37.218+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004148863 error="request timeout"
+time=2026-06-04T03:30:51.222+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004166693 error="request timeout"
+time=2026-06-04T03:31:03.245+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.021662343 error="received status code: 502"
+time=2026-06-04T03:31:03.245+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-04T03:31:03.255+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.009672252 error="received status code: 502"
+time=2026-06-04T03:31:06.272+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.014505999 error="received status code: 502"
+time=2026-06-04T03:31:12.290+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.016762912 error="received status code: 502"
+time=2026-06-04T03:31:21.310+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.019158711 error="received status code: 502"
+time=2026-06-04T03:31:33.339+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.021914942 error="received status code: 500"
+time=2026-06-04T03:31:33.339+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 500"
+time=2026-06-04T03:31:33.355+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.015835268 error="received status code: 500"
+time=2026-06-04T03:31:36.376+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.020393154 error="received status code: 500"
+time=2026-06-04T06:42:59.237+01:00 level=INFO msg="starting gok-pi" config=/etc/conf/gok-pi.yml env=prod device_id=fa5af85824c2464a
+time=2026-06-04T06:42:59.238+01:00 level=INFO msg="loaded batteries config" batteries=1
+time=2026-06-04T06:42:59.238+01:00 level=INFO msg="loaded schedules" schedules=2
+time=2026-06-04T06:42:59.238+01:00 level=INFO msg="creating sonnen api client" battery=BAT-001 url=http://192.168.68.107/api/v2 token=bde6b***
+time=2026-06-04T06:42:59.239+01:00 level=INFO msg="starting remote control client" url=wss://bat.wattbrews.es/api/agent
+time=2026-06-04T06:42:59.239+01:00 level=INFO msg="agent running with remote control enabled; waiting for context cancellation"
+time=2026-06-04T06:42:59.244+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="dial websocket: failed to WebSocket dial: failed to send handshake request: Get \"https://bat.wattbrews.es/api/agent\": dial tcp: lookup bat.wattbrews.es on 192.168.68.1:53: dial udp 192.168.68.1:53: connect: network is unreachable"
+time=2026-06-04T06:43:04.245+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="dial websocket: failed to WebSocket dial: failed to send handshake request: Get \"https://bat.wattbrews.es/api/agent\": dial tcp: lookup bat.wattbrews.es on 192.168.68.1:53: dial udp 192.168.68.1:53: connect: network is unreachable"
+time=2026-06-04T06:43:09.893+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=8894 SoC=56 rate=2000 consumption=265 discharge=false
+time=2026-06-04T06:43:14.486+01:00 level=INFO msg="applying remote configuration" revision=312 sent_at=2026-06-04T05:45:00.151Z
+time=2026-06-04T06:43:14.487+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-04T06:43:14.487+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-04T06:43:14.494+01:00 level=INFO msg="persisted remote configuration to local config file" revision=312
+time=2026-06-04T07:00:04.953+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-284641-discharge-BAT-001
+time=2026-06-04T07:18:59.927+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.000637303 error="request timeout"
+time=2026-06-04T07:19:29.935+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004565905 error="request timeout"
+time=2026-06-04T08:19:44.941+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="read message: failed to read JSON message: failed to get reader: failed to read frame header: EOF"
+time=2026-06-04T08:19:50.066+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="dial websocket: failed to WebSocket dial: failed to send handshake request: Get \"https://bat.wattbrews.es/api/agent\": dial tcp 136.144.220.120:443: connect: connection refused"
+time=2026-06-04T08:20:07.434+01:00 level=INFO msg="applying remote configuration" revision=313 sent_at=2026-06-04T07:20:07.656Z
+time=2026-06-04T08:20:07.434+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-04T08:20:07.434+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-04T08:20:07.456+01:00 level=INFO msg="persisted remote configuration to local config file" revision=313
+time=2026-06-04T19:00:05.497+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=14475 SoC=98 rate=2000 consumption=1111 discharge=false
+time=2026-06-04T21:00:04.969+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-284642-discharge-BAT-001
+time=2026-06-04T21:00:05.565+01:00 level=INFO msg="applying remote configuration" revision=314 sent_at=2026-06-04T20:00:05.543Z
+time=2026-06-04T21:00:05.566+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-04T21:00:05.566+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-04T21:00:05.574+01:00 level=INFO msg="persisted remote configuration to local config file" revision=314
+time=2026-06-04T23:00:05.643+01:00 level=INFO msg="applying remote configuration" revision=315 sent_at=2026-06-04T22:00:05.615Z
+time=2026-06-04T23:00:05.645+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-04T23:00:05.645+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-04T23:00:05.652+01:00 level=INFO msg="persisted remote configuration to local config file" revision=315
+time=2026-06-05T03:30:24.940+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=0.008801764 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: connection refused"
+time=2026-06-05T03:30:24.940+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=0.008281105 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: connection refused"
+time=2026-06-05T03:30:32.942+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.000114469 error="request timeout"
+time=2026-06-05T03:30:32.943+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.000584166 error="request timeout"
+time=2026-06-05T03:30:43.948+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004780646 error="request timeout"
+time=2026-06-05T03:30:43.948+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004737128 error="request timeout"
+time=2026-06-05T03:30:53.015+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.065814494 error="received status code: 502"
+time=2026-06-05T03:30:53.018+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.069437147 error="received status code: 502"
+time=2026-06-05T03:31:05.045+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.029115606 error="received status code: 502"
+time=2026-06-05T03:31:05.046+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 502"
+time=2026-06-05T03:31:05.046+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.026379701 error="received status code: 502"
+time=2026-06-05T03:31:05.046+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-05T03:31:05.062+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.016425286 error="received status code: 502"
+time=2026-06-05T03:31:05.068+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.021706749 error="received status code: 502"
+time=2026-06-05T03:31:08.081+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.017179757 error="received status code: 502"
+time=2026-06-05T03:31:08.081+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.012877133 error="received status code: 502"
+time=2026-06-05T03:31:14.102+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.017321885 error="received status code: 502"
+time=2026-06-05T03:31:14.102+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.017554123 error="received status code: 502"
+time=2026-06-05T03:31:23.129+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.024156603 error="received status code: 500"
+time=2026-06-05T03:31:23.132+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.026598736 error="received status code: 500"
+time=2026-06-05T03:31:35.160+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.0238872 error="received status code: 500"
+time=2026-06-05T03:31:35.160+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 500"
+time=2026-06-05T03:31:35.165+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.029055386 error="received status code: 500"
+time=2026-06-05T03:31:35.166+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 500"
+time=2026-06-05T03:31:35.183+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.022242316 error="received status code: 500"
+time=2026-06-05T03:31:35.187+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.021625602 error="received status code: 500"
+time=2026-06-05T08:35:19.931+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.00430683 error="request timeout"
+time=2026-06-05T08:35:19.931+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004325978 error="request timeout"
+time=2026-06-05T08:35:27.937+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004212612 error="request timeout"
+time=2026-06-05T08:35:27.937+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004166687 error="request timeout"
+time=2026-06-05T08:35:38.943+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.000177847 error="request timeout"
+time=2026-06-05T08:35:38.943+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.000842208 error="request timeout"
+time=2026-06-05T08:35:52.949+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.000485545 error="request timeout"
+time=2026-06-05T08:35:52.949+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.000511026 error="request timeout"
+time=2026-06-05T19:00:05.498+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=14729 SoC=99 rate=2000 consumption=560 discharge=true
+time=2026-06-05T23:00:05.653+01:00 level=INFO msg="applying remote configuration" revision=316 sent_at=2026-06-05T22:00:05.620Z
+time=2026-06-05T23:00:05.654+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-05T23:00:05.654+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-05T23:00:05.670+01:00 level=INFO msg="persisted remote configuration to local config file" revision=316
+time=2026-06-05T23:00:15.479+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=5947 SoC=37 rate=2000 consumption=254 discharge=false
+time=2026-06-06T00:00:04.947+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-295420-discharge-BAT-001
+time=2026-06-06T00:00:05.604+01:00 level=INFO msg="applying remote configuration" revision=317 sent_at=2026-06-05T23:00:05.584Z
+time=2026-06-06T00:00:05.604+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-06T00:00:05.604+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-06T00:00:05.614+01:00 level=INFO msg="persisted remote configuration to local config file" revision=317
+time=2026-06-06T03:30:29.931+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004116881 error="request timeout"
+time=2026-06-06T03:30:29.931+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.005066588 error="request timeout"
+time=2026-06-06T03:30:37.932+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.00016518 error="request timeout"
+time=2026-06-06T03:30:37.932+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.000198901 error="request timeout"
+time=2026-06-06T03:30:48.936+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.003989739 error="request timeout"
+time=2026-06-06T03:30:48.936+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004146811 error="request timeout"
+time=2026-06-06T03:30:57.951+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.011623205 error="received status code: 502"
+time=2026-06-06T03:30:57.951+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.011776184 error="received status code: 502"
+time=2026-06-06T03:31:09.967+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.013855856 error="received status code: 502"
+time=2026-06-06T03:31:09.967+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.014068297 error="received status code: 502"
+time=2026-06-06T03:31:09.967+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-06T03:31:09.967+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 502"
+time=2026-06-06T03:31:09.978+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.010966049 error="received status code: 502"
+time=2026-06-06T03:31:09.979+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.011423246 error="received status code: 502"
+time=2026-06-06T03:31:12.994+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015265741 error="received status code: 502"
+time=2026-06-06T03:31:12.994+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015582051 error="received status code: 502"
+time=2026-06-06T03:31:19.124+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.128608252 error="received status code: 500"
+time=2026-06-06T03:31:19.144+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.148903006 error="received status code: 500"
+time=2026-06-06T03:31:28.148+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.020085684 error="received status code: 500"
+time=2026-06-06T03:31:28.176+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.03164241 error="received status code: 500"
+time=2026-06-06T05:00:05.552+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=3464 SoC=21 rate=2000 consumption=114 discharge=false
+time=2026-06-06T05:19:54.950+01:00 level=INFO msg="schedule conditions not met, stopping discharge and returning to auto mode" battery=BAT-001 mod=battery.discharge operating_mode=1 is_active=true battery_active=true
+time=2026-06-06T07:00:04.953+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-295421-discharge-BAT-001
+time=2026-06-06T07:00:05.593+01:00 level=INFO msg="applying remote configuration" revision=318 sent_at=2026-06-06T06:00:05.566Z
+time=2026-06-06T07:00:05.595+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-06T07:00:05.595+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-06T07:00:05.602+01:00 level=INFO msg="persisted remote configuration to local config file" revision=318
+time=2026-06-06T11:00:04.978+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-295417-charge-BAT-001
+time=2026-06-06T11:00:05.608+01:00 level=INFO msg="applying remote configuration" revision=319 sent_at=2026-06-06T10:00:05.573Z
+time=2026-06-06T11:00:05.609+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-06T11:00:05.609+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-06T11:00:05.617+01:00 level=INFO msg="persisted remote configuration to local config file" revision=319
+time=2026-06-06T14:00:04.966+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-295418-charge-BAT-001
+time=2026-06-06T14:00:05.606+01:00 level=INFO msg="applying remote configuration" revision=320 sent_at=2026-06-06T13:00:05.572Z
+time=2026-06-06T14:00:05.606+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-06T14:00:05.606+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-06T14:00:05.614+01:00 level=INFO msg="persisted remote configuration to local config file" revision=320
+time=2026-06-06T18:00:04.949+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-295419-charge-BAT-001
+time=2026-06-06T18:00:05.589+01:00 level=INFO msg="applying remote configuration" revision=321 sent_at=2026-06-06T17:00:05.567Z
+time=2026-06-06T18:00:05.590+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-06T18:00:05.590+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-06T18:00:05.598+01:00 level=INFO msg="persisted remote configuration to local config file" revision=321
+time=2026-06-06T20:00:05.471+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=14859 SoC=100 rate=2000 consumption=611 discharge=false
+time=2026-06-06T21:00:04.969+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-295422-discharge-BAT-001
+time=2026-06-06T21:00:05.594+01:00 level=INFO msg="applying remote configuration" revision=322 sent_at=2026-06-06T20:00:05.571Z
+time=2026-06-06T21:00:05.595+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-06T21:00:05.595+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-06T21:00:05.602+01:00 level=INFO msg="persisted remote configuration to local config file" revision=322
+time=2026-06-06T23:00:05.636+01:00 level=INFO msg="applying remote configuration" revision=323 sent_at=2026-06-06T22:00:05.587Z
+time=2026-06-06T23:00:05.636+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-06T23:00:05.637+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-06T23:00:05.644+01:00 level=INFO msg="persisted remote configuration to local config file" revision=323
+time=2026-06-07T03:30:29.935+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.00469625 error="request timeout"
+time=2026-06-07T03:30:29.935+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.005074541 error="request timeout"
+time=2026-06-07T03:30:37.936+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.001023612 error="request timeout"
+time=2026-06-07T03:30:37.936+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.000948761 error="request timeout"
+time=2026-06-07T03:30:48.946+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004224766 error="request timeout"
+time=2026-06-07T03:30:48.946+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004216045 error="request timeout"
+time=2026-06-07T03:30:57.960+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.011121181 error="received status code: 502"
+time=2026-06-07T03:30:57.960+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.011258512 error="received status code: 502"
+time=2026-06-07T03:31:09.977+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015217532 error="received status code: 502"
+time=2026-06-07T03:31:09.977+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 502"
+time=2026-06-07T03:31:09.977+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015387659 error="received status code: 502"
+time=2026-06-07T03:31:09.977+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-07T03:31:09.993+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015250087 error="received status code: 502"
+time=2026-06-07T03:31:09.994+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.016120354 error="received status code: 502"
+time=2026-06-07T03:31:13.009+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015668323 error="received status code: 502"
+time=2026-06-07T03:31:13.010+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015449178 error="received status code: 502"
+time=2026-06-07T03:31:19.026+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.01573347 error="received status code: 502"
+time=2026-06-07T03:31:19.026+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.016721308 error="received status code: 502"
+time=2026-06-07T03:31:28.042+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.011892541 error="received status code: 502"
+time=2026-06-07T03:31:28.043+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.012984525 error="received status code: 502"
+time=2026-06-07T03:31:40.074+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.030837114 error="received status code: 500"
+time=2026-06-07T03:31:40.074+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 500"
+time=2026-06-07T03:31:40.077+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.032481703 error="received status code: 500"
+time=2026-06-07T03:31:40.077+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 500"
+time=2026-06-07T03:31:40.112+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.037500894 error="received status code: 500"
+time=2026-06-07T03:31:40.113+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.035512032 error="received status code: 500"
+time=2026-06-07T03:31:43.242+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.129412281 error="received status code: 500"
+time=2026-06-07T03:31:43.269+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.15524376 error="received status code: 500"
+time=2026-06-07T03:31:49.262+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.019187663 error="received status code: 500"
+time=2026-06-07T03:31:49.281+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.012428719 error="received status code: 500"
+time=2026-06-07T05:00:05.510+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=13417 SoC=91 rate=2000 consumption=184 discharge=false
+time=2026-06-07T06:00:04.965+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-302882-discharge-BAT-001
+time=2026-06-07T06:00:05.638+01:00 level=INFO msg="applying remote configuration" revision=324 sent_at=2026-06-07T05:00:05.612Z
+time=2026-06-07T06:00:05.638+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-07T06:00:05.639+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-07T06:00:05.647+01:00 level=INFO msg="persisted remote configuration to local config file" revision=324
+time=2026-06-07T08:46:24.954+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="read message: failed to read JSON message: failed to get reader: failed to read frame header: EOF"
+time=2026-06-07T15:00:04.946+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-302881-charge-BAT-001
+time=2026-06-07T15:01:35.005+01:00 level=INFO msg="applying remote configuration" revision=325 sent_at=2026-06-07T14:01:34.989Z
+time=2026-06-07T15:01:35.007+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-07T15:01:35.007+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-07T15:01:35.016+01:00 level=INFO msg="persisted remote configuration to local config file" revision=325
+time=2026-06-07T16:26:34.956+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="read message: failed to read JSON message: failed to get reader: failed to read frame header: EOF"
+time=2026-06-07T20:00:05.473+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=14999 SoC=100 rate=2000 consumption=163 discharge=false
+time=2026-06-07T23:01:35.027+01:00 level=INFO msg="applying remote configuration" revision=326 sent_at=2026-06-07T22:01:35.009Z
+time=2026-06-07T23:01:35.028+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-07T23:01:35.028+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-07T23:01:35.038+01:00 level=INFO msg="persisted remote configuration to local config file" revision=326
+time=2026-06-08T03:30:54.939+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=0.007942245 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: connection refused"
+time=2026-06-08T03:30:54.939+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=0.008691398 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: connection refused"
+time=2026-06-08T03:31:02.946+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004669178 error="request timeout"
+time=2026-06-08T03:31:02.946+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004963672 error="request timeout"
+time=2026-06-08T03:31:13.956+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004404255 error="request timeout"
+time=2026-06-08T03:31:13.956+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004436865 error="request timeout"
+time=2026-06-08T03:31:22.988+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.031008906 error="received status code: 502"
+time=2026-06-08T03:31:22.989+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.031653394 error="received status code: 502"
+time=2026-06-08T03:31:35.003+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.013300373 error="received status code: 502"
+time=2026-06-08T03:31:35.004+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-08T03:31:35.004+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.013705681 error="received status code: 502"
+time=2026-06-08T03:31:35.004+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 502"
+time=2026-06-08T03:31:35.014+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.010267594 error="received status code: 502"
+time=2026-06-08T03:31:35.015+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.010483091 error="received status code: 502"
+time=2026-06-08T03:31:38.032+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.014998714 error="received status code: 502"
+time=2026-06-08T03:31:38.033+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015058176 error="received status code: 502"
+time=2026-06-08T03:31:44.048+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015348967 error="received status code: 502"
+time=2026-06-08T03:31:44.048+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015375634 error="received status code: 502"
+time=2026-06-08T03:31:53.072+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.01909492 error="received status code: 500"
+time=2026-06-08T03:31:53.075+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.022100256 error="received status code: 500"
+time=2026-06-08T03:32:05.100+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.021246291 error="received status code: 500"
+time=2026-06-08T03:32:05.101+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 500"
+time=2026-06-08T03:32:05.103+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.024177017 error="received status code: 500"
+time=2026-06-08T03:32:05.103+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 500"
+time=2026-06-08T03:32:05.123+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.021802059 error="received status code: 500"
+time=2026-06-08T03:32:05.142+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.038221139 error="received status code: 500"
+time=2026-06-08T03:32:08.143+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.017510209 error="received status code: 500"
+time=2026-06-08T03:32:08.157+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.014752721 error="received status code: 500"
+time=2026-06-08T17:00:04.948+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-307517-charge-BAT-001
+time=2026-06-08T18:00:05.507+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=13096 SoC=86 rate=2000 consumption=352 discharge=false
+time=2026-06-08T22:00:04.946+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-307518-discharge-BAT-001
+time=2026-06-09T03:30:29.936+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004721798 error="request timeout"
+time=2026-06-09T03:30:29.936+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004736743 error="request timeout"
+time=2026-06-09T03:30:37.943+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004223364 error="request timeout"
+time=2026-06-09T03:30:37.943+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004249623 error="request timeout"
+time=2026-06-09T03:30:48.953+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004229831 error="request timeout"
+time=2026-06-09T03:30:48.953+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004506808 error="request timeout"
+time=2026-06-09T03:30:57.969+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.013720712 error="received status code: 502"
+time=2026-06-09T03:30:57.969+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.013377586 error="received status code: 502"
+time=2026-06-09T03:31:09.991+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015085786 error="received status code: 502"
+time=2026-06-09T03:31:09.991+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015036453 error="received status code: 502"
+time=2026-06-09T03:31:09.991+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-09T03:31:09.992+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 502"
+time=2026-06-09T03:31:10.003+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.011538499 error="received status code: 502"
+time=2026-06-09T03:31:10.004+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.012296933 error="received status code: 502"
+time=2026-06-09T03:31:13.022+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015474892 error="received status code: 502"
+time=2026-06-09T03:31:13.023+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.016555044 error="received status code: 502"
+time=2026-06-09T03:31:19.044+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.020671898 error="received status code: 500"
+time=2026-06-09T03:31:19.047+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.023997726 error="received status code: 500"
+time=2026-06-09T03:31:28.077+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.028855607 error="received status code: 500"
+time=2026-06-09T03:31:28.080+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.03187255 error="received status code: 500"
+time=2026-06-10T03:30:29.931+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.005077326 error="request timeout"
+time=2026-06-10T03:30:29.931+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004092524 error="request timeout"
+time=2026-06-10T03:30:37.936+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.0041942 error="request timeout"
+time=2026-06-10T03:30:37.936+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004243995 error="request timeout"
+time=2026-06-10T03:30:47.509+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=3.568088501 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: no route to host"
+time=2026-06-10T03:30:47.509+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=3.568149371 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: no route to host"
+time=2026-06-10T03:30:56.526+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.013261907 error="received status code: 502"
+time=2026-06-10T03:30:56.528+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.014581241 error="received status code: 502"
+time=2026-06-10T03:31:08.548+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.015090011 error="received status code: 502"
+time=2026-06-10T03:31:08.548+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-10T03:31:08.549+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.016004368 error="received status code: 502"
+time=2026-06-10T03:31:08.549+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 502"
+time=2026-06-10T03:31:08.558+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.01009147 error="received status code: 502"
+time=2026-06-10T03:31:08.559+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.00965705 error="received status code: 502"
+time=2026-06-10T03:31:11.577+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.016208366 error="received status code: 502"
+time=2026-06-10T03:31:11.578+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.016166329 error="received status code: 502"
+time=2026-06-10T03:31:17.602+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.024674136 error="received status code: 502"
+time=2026-06-10T03:31:17.604+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.025360349 error="received status code: 502"
+time=2026-06-10T03:31:26.646+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.04315947 error="received status code: 500"
+time=2026-06-10T03:31:26.653+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.048896501 error="received status code: 500"
+time=2026-06-10T14:44:49.510+01:00 level=INFO msg="starting gok-pi" config=/etc/conf/gok-pi.yml env=prod device_id=fa5af85824c2464a
+time=2026-06-10T14:44:49.511+01:00 level=INFO msg="loaded batteries config" batteries=1
+time=2026-06-10T14:44:49.511+01:00 level=INFO msg="loaded schedules" schedules=0
+time=2026-06-10T14:44:49.511+01:00 level=INFO msg="creating sonnen api client" battery=BAT-001 url=http://192.168.68.107/api/v2 token=bde6b***
+time=2026-06-10T14:44:49.511+01:00 level=INFO msg="starting remote control client" url=wss://bat.wattbrews.es/api/agent
+time=2026-06-10T14:44:49.512+01:00 level=INFO msg="agent running with remote control enabled; waiting for context cancellation"
+time=2026-06-10T14:44:49.519+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="dial websocket: failed to WebSocket dial: failed to send handshake request: Get \"https://bat.wattbrews.es/api/agent\": dial tcp: lookup bat.wattbrews.es on 192.168.68.1:53: dial udp 192.168.68.1:53: connect: network is unreachable"
+time=2026-06-10T14:44:54.520+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="dial websocket: failed to WebSocket dial: failed to send handshake request: Get \"https://bat.wattbrews.es/api/agent\": dial tcp: lookup bat.wattbrews.es on 192.168.68.1:53: dial udp 192.168.68.1:53: connect: network is unreachable"
+time=2026-06-10T14:45:06.006+01:00 level=INFO msg="applying remote configuration" revision=331 sent_at=2026-06-10T13:49:44.121Z
+time=2026-06-10T14:45:06.015+01:00 level=INFO msg="persisted remote configuration to local config file" revision=331
+time=2026-06-10T14:56:31.086+01:00 level=INFO msg="received signal, shutting down" signal=terminated
+time=2026-06-10T14:56:31.086+01:00 level=INFO msg="battery monitor stopped" battery=BAT-001
+time=2026-06-10T14:56:31.090+01:00 level=INFO msg="gok-pi stopped"
+time=2026-06-10T14:56:52.034+01:00 level=INFO msg="starting gok-pi" config=/etc/conf/gok-pi.yml env=prod device_id=fa5af85824c2464a
+time=2026-06-10T14:56:52.035+01:00 level=INFO msg="loaded batteries config" batteries=1
+time=2026-06-10T14:56:52.035+01:00 level=INFO msg="loaded schedules" schedules=1
+time=2026-06-10T14:56:52.036+01:00 level=INFO msg="creating sonnen api client" battery=BAT-001 url=http://192.168.68.107/api/v2 token=bde6b***
+time=2026-06-10T14:56:52.036+01:00 level=INFO msg="starting remote control client" url=wss://bat.wattbrews.es/api/agent
+time=2026-06-10T14:56:52.037+01:00 level=INFO msg="agent running with remote control enabled; waiting for context cancellation"
+time=2026-06-10T14:56:52.043+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="dial websocket: failed to WebSocket dial: failed to send handshake request: Get \"https://bat.wattbrews.es/api/agent\": dial tcp: lookup bat.wattbrews.es on [::1]:53: read udp [::1]:38539->[::1]:53: read: connection refused"
+time=2026-06-10T14:56:57.738+01:00 level=INFO msg="applying remote configuration" revision=331 sent_at=2026-06-10T13:57:10.568Z
+time=2026-06-10T14:56:57.739+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-10T14:56:57.739+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-10T14:56:57.800+01:00 level=INFO msg="persisted remote configuration to local config file" revision=331
+time=2026-06-10T14:58:54.911+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="read message: failed to read JSON message: failed to get reader: failed to read frame header: EOF"
+time=2026-06-10T14:58:59.964+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="dial websocket: failed to WebSocket dial: failed to send handshake request: Get \"https://bat.wattbrews.es/api/agent\": dial tcp 136.144.220.120:443: connect: connection refused"
+time=2026-06-10T15:05:14.604+01:00 level=INFO msg="received signal, shutting down" signal=terminated
+time=2026-06-10T15:05:14.605+01:00 level=INFO msg="battery monitor stopped" battery=BAT-001
+time=2026-06-10T15:05:14.605+01:00 level=INFO msg="discharge worker stopped" battery=BAT-001
+time=2026-06-10T15:05:14.605+01:00 level=INFO msg="gok-pi stopped"
+time=2026-06-10T15:05:14.675+01:00 level=INFO msg="starting gok-pi" config=/etc/conf/gok-pi.yml env=prod device_id=fa5af85824c2464a
+time=2026-06-10T15:05:14.675+01:00 level=INFO msg="loaded batteries config" batteries=1
+time=2026-06-10T15:05:14.675+01:00 level=INFO msg="loaded schedules" schedules=1
+time=2026-06-10T15:05:14.676+01:00 level=INFO msg="creating sonnen api client" battery=BAT-001 url=http://192.168.68.107/api/v2 token=bde6b***
+time=2026-06-10T15:05:14.676+01:00 level=INFO msg="starting remote control client" url=wss://bat.wattbrews.es/api/agent
+time=2026-06-10T15:05:14.676+01:00 level=INFO msg="agent running with remote control enabled; waiting for context cancellation"
+time=2026-06-10T15:05:14.953+01:00 level=INFO msg="applying remote configuration" revision=331 sent_at=2026-06-10T14:05:14.925Z
+time=2026-06-10T15:05:14.954+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-10T15:05:14.954+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-10T15:05:14.973+01:00 level=INFO msg="persisted remote configuration to local config file" revision=331
+time=2026-06-10T18:00:05.241+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=14177 SoC=94 rate=2000 consumption=192 discharge=false
+time=2026-06-10T22:00:04.698+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-315582-discharge-BAT-001
+time=2026-06-10T22:01:17.469+01:00 level=INFO msg="applying remote configuration" revision=332 sent_at=2026-06-10T21:01:17.424Z
+time=2026-06-10T22:01:17.470+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-10T22:01:17.470+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-10T22:01:17.479+01:00 level=INFO msg="persisted remote configuration to local config file" revision=332
+time=2026-06-10T23:01:17.578+01:00 level=INFO msg="applying remote configuration" revision=333 sent_at=2026-06-10T22:01:17.454Z
+time=2026-06-10T23:01:17.578+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-10T23:01:17.578+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-10T23:01:17.586+01:00 level=INFO msg="persisted remote configuration to local config file" revision=333
+time=2026-06-11T03:30:24.689+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=0.009485473 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: connection refused"
+time=2026-06-11T03:30:24.689+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=0.009526046 error="Get \"http://192.168.68.107/api/v2/status\": dial tcp 192.168.68.107:80: connect: connection refused"
+time=2026-06-11T03:30:32.696+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004201757 error="request timeout"
+time=2026-06-11T03:30:32.696+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.00417387 error="request timeout"
+time=2026-06-11T03:30:43.707+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004145847 error="request timeout"
+time=2026-06-11T03:30:43.707+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET duration=5.004184698 error="request timeout"
+time=2026-06-11T03:30:53.811+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=1.102282986 error="received status code: 502"
+time=2026-06-11T03:30:53.811+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=1.102385836 error="received status code: 502"
+time=2026-06-11T03:31:05.834+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.014057621 error="received status code: 502"
+time=2026-06-11T03:31:05.834+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-11T03:31:05.834+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.014342191 error="received status code: 502"
+time=2026-06-11T03:31:05.834+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 502"
+time=2026-06-11T03:31:05.844+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.010157352 error="received status code: 502"
+time=2026-06-11T03:31:05.845+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.010188185 error="received status code: 502"
+time=2026-06-11T03:31:08.860+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.013450557 error="received status code: 502"
+time=2026-06-11T03:31:08.865+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.018008224 error="received status code: 502"
+time=2026-06-11T03:31:14.879+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.012867308 error="received status code: 502"
+time=2026-06-11T03:31:14.879+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=502 duration=0.018172277 error="received status code: 502"
+time=2026-06-11T03:31:23.905+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.021893679 error="received status code: 500"
+time=2026-06-11T03:31:23.909+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.025845319 error="received status code: 500"
+time=2026-06-11T03:31:35.931+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.018845786 error="received status code: 500"
+time=2026-06-11T03:31:35.931+01:00 level=ERROR msg="checking battery status" battery=BAT-001 mod=battery.discharge error="request failed after 5 retries: received status code: 500"
+time=2026-06-11T03:31:35.934+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.021576407 error="received status code: 500"
+time=2026-06-11T03:31:35.934+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 500"
+time=2026-06-11T03:31:35.953+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.021320782 error="received status code: 500"
+time=2026-06-11T03:31:35.956+01:00 level=ERROR msg="api request" battery=BAT-001 mod=sonnen url=http://192.168.68.107/api/v2/status token=bde6b*** method=GET status=500 duration=0.021488872 error="received status code: 500"
+time=2026-06-11T13:44:05.892+01:00 level=INFO msg="received signal, shutting down" signal=terminated
+time=2026-06-11T13:44:05.892+01:00 level=INFO msg="discharge worker stopped" battery=BAT-001
+time=2026-06-11T13:44:05.892+01:00 level=INFO msg="gok-pi stopped"
+time=2026-06-11T13:44:05.892+01:00 level=INFO msg="battery monitor stopped" battery=BAT-001
+time=2026-06-11T13:44:05.937+01:00 level=INFO msg="starting gok-pi" config=/etc/conf/gok-pi.yml env=prod device_id=fa5af85824c2464a
+time=2026-06-11T13:44:05.937+01:00 level=INFO msg="loaded batteries config" batteries=1
+time=2026-06-11T13:44:05.937+01:00 level=INFO msg="loaded schedules" schedules=1
+time=2026-06-11T13:44:05.938+01:00 level=INFO msg="creating sonnen api client" battery=BAT-001 url=http://192.168.68.107/api/v2 token=bde6b***
+time=2026-06-11T13:44:05.938+01:00 level=INFO msg="starting remote control client" url=wss://bat.wattbrews.es/api/agent
+time=2026-06-11T13:44:05.938+01:00 level=INFO msg="agent running with remote control enabled; waiting for context cancellation"
+time=2026-06-11T13:44:06.144+01:00 level=INFO msg="applying remote configuration" revision=333 sent_at=2026-06-11T12:44:06.115Z
+time=2026-06-11T13:44:06.145+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-11T13:44:06.145+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-11T13:44:06.159+01:00 level=INFO msg="persisted remote configuration to local config file" revision=333
+time=2026-06-11T13:57:55.960+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="read message: failed to read JSON message: failed to get reader: failed to read frame header: EOF"
+time=2026-06-11T14:14:15.788+01:00 level=INFO msg="received signal, shutting down" signal=terminated
+time=2026-06-11T14:14:15.788+01:00 level=INFO msg="battery status poller stopped" battery=BAT-001
+time=2026-06-11T14:14:15.788+01:00 level=INFO msg="gok-pi stopped"
+time=2026-06-11T14:14:15.853+01:00 level=INFO msg="starting gok-pi" config=/etc/conf/gok-pi.yml env=prod device_id=fa5af85824c2464a
+time=2026-06-11T14:14:15.853+01:00 level=INFO msg="loaded batteries config" batteries=1
+time=2026-06-11T14:14:15.853+01:00 level=INFO msg="loaded schedules" schedules=1
+time=2026-06-11T14:14:15.854+01:00 level=INFO msg="creating sonnen api client" battery=BAT-001 url=http://192.168.68.107/api/v2 token=bde6b***
+time=2026-06-11T14:14:15.854+01:00 level=INFO msg="starting remote control client" url=wss://bat.wattbrews.es/api/agent
+time=2026-06-11T14:14:15.854+01:00 level=INFO msg="agent running with remote control enabled; waiting for context cancellation"
+time=2026-06-11T14:14:16.060+01:00 level=INFO msg="applying remote configuration" revision=333 sent_at=2026-06-11T13:14:16.033Z
+time=2026-06-11T14:14:16.060+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-11T14:14:16.060+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-11T14:14:16.073+01:00 level=INFO msg="persisted remote configuration to local config file" revision=333
+time=2026-06-11T15:04:45.879+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="read message: failed to read JSON message: failed to get reader: failed to read frame header: EOF"
+time=2026-06-11T15:17:21.107+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="read message: failed to read JSON message: failed to get reader: failed to read frame header: EOF"
+time=2026-06-11T15:45:06.289+01:00 level=INFO msg="received signal, shutting down" signal=terminated
+time=2026-06-11T15:45:06.289+01:00 level=INFO msg="battery status poller stopped" battery=BAT-001
+time=2026-06-11T15:45:06.289+01:00 level=INFO msg="gok-pi stopped"
+time=2026-06-11T15:45:06.338+01:00 level=INFO msg="starting gok-pi" config=/etc/conf/gok-pi.yml env=prod device_id=fa5af85824c2464a
+time=2026-06-11T15:45:06.338+01:00 level=INFO msg="loaded batteries config" batteries=1
+time=2026-06-11T15:45:06.338+01:00 level=INFO msg="loaded schedules" schedules=1
+time=2026-06-11T15:45:06.338+01:00 level=INFO msg="creating sonnen api client" battery=BAT-001 url=http://192.168.68.107/api/v2 token=bde6b***
+time=2026-06-11T15:45:06.338+01:00 level=INFO msg="starting remote control client" url=wss://bat.wattbrews.es/api/agent
+time=2026-06-11T15:45:06.339+01:00 level=INFO msg="agent running with remote control enabled; waiting for context cancellation"
+time=2026-06-11T15:45:06.549+01:00 level=INFO msg="applying remote configuration" revision=333 sent_at=2026-06-11T14:45:06.523Z
+time=2026-06-11T15:45:06.550+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-11T15:45:06.550+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-11T15:45:06.575+01:00 level=INFO msg="persisted remote configuration to local config file" revision=333
+time=2026-06-11T18:00:06.895+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=15111 SoC=100 rate=2000 consumption=183 discharge=false
+time=2026-06-11T22:00:06.361+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-319626-discharge-BAT-001
+time=2026-06-11T22:02:19.637+01:00 level=INFO msg="applying remote configuration" revision=334 sent_at=2026-06-11T21:02:19.580Z
+time=2026-06-11T22:02:19.637+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-11T22:02:19.637+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-11T22:02:19.647+01:00 level=INFO msg="persisted remote configuration to local config file" revision=334
+time=2026-06-11T23:02:19.638+01:00 level=INFO msg="applying remote configuration" revision=335 sent_at=2026-06-11T22:02:19.589Z
+time=2026-06-11T23:02:19.638+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-11T23:02:19.638+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-11T23:02:19.648+01:00 level=INFO msg="persisted remote configuration to local config file" revision=335
+time=2026-06-12T03:31:10.521+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-12T03:31:40.620+01:00 level=INFO msg="battery status recovered" battery=BAT-001
+time=2026-06-12T19:00:06.979+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=14886 SoC=100 rate=2000 consumption=340 discharge=false
+time=2026-06-12T23:02:19.646+01:00 level=INFO msg="applying remote configuration" revision=336 sent_at=2026-06-12T22:02:19.606Z
+time=2026-06-12T23:02:19.646+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-12T23:02:19.646+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-12T23:02:19.723+01:00 level=INFO msg="persisted remote configuration to local config file" revision=336
+time=2026-06-12T23:02:26.895+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=6067 SoC=37 rate=2000 consumption=157 discharge=false
+time=2026-06-13T00:00:06.358+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-327585-discharge-BAT-001
+time=2026-06-13T00:02:19.647+01:00 level=INFO msg="applying remote configuration" revision=337 sent_at=2026-06-12T23:02:19.583Z
+time=2026-06-13T00:02:19.648+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-13T00:02:19.648+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-13T00:02:19.672+01:00 level=INFO msg="persisted remote configuration to local config file" revision=337
+time=2026-06-13T03:31:10.523+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-13T03:32:11.631+01:00 level=INFO msg="battery status recovered" battery=BAT-001
+time=2026-06-13T11:00:06.364+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-327583-charge-BAT-001
+time=2026-06-13T11:02:19.697+01:00 level=INFO msg="applying remote configuration" revision=338 sent_at=2026-06-13T10:02:19.582Z
+time=2026-06-13T11:02:19.698+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-13T11:02:19.698+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-13T11:02:19.707+01:00 level=INFO msg="persisted remote configuration to local config file" revision=338
+time=2026-06-13T14:00:06.366+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-327584-charge-BAT-001
+time=2026-06-13T14:02:19.710+01:00 level=INFO msg="applying remote configuration" revision=339 sent_at=2026-06-13T13:02:19.603Z
+time=2026-06-13T14:02:19.710+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-13T14:02:19.710+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-13T14:02:19.722+01:00 level=INFO msg="persisted remote configuration to local config file" revision=339
+time=2026-06-13T20:00:06.927+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=15326 SoC=100 rate=2000 consumption=113 discharge=false
+time=2026-06-13T23:02:19.646+01:00 level=INFO msg="applying remote configuration" revision=340 sent_at=2026-06-13T22:02:19.595Z
+time=2026-06-13T23:02:19.647+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-13T23:02:19.647+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-13T23:02:19.655+01:00 level=INFO msg="persisted remote configuration to local config file" revision=340
+time=2026-06-13T23:02:26.902+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=8289 SoC=52 rate=2000 consumption=443 discharge=false
+time=2026-06-14T00:00:06.353+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-332769-discharge-BAT-001
+time=2026-06-14T00:02:19.595+01:00 level=INFO msg="applying remote configuration" revision=341 sent_at=2026-06-13T23:02:19.576Z
+time=2026-06-14T00:02:19.596+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-14T00:02:19.596+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-14T00:02:19.605+01:00 level=INFO msg="persisted remote configuration to local config file" revision=341
+time=2026-06-14T03:31:06.431+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-14T03:31:36.587+01:00 level=INFO msg="battery status recovered" battery=BAT-001
+time=2026-06-14T15:00:06.375+01:00 level=INFO msg="removing expired auto-schedule" battery=BAT-001 mod=battery.discharge schedule=auto-332768-charge-BAT-001
+time=2026-06-14T20:00:06.914+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=14646 SoC=99 rate=2000 consumption=557 discharge=false
+time=2026-06-15T03:31:11.402+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-15T03:31:41.510+01:00 level=INFO msg="battery status recovered" battery=BAT-001
+time=2026-06-15T20:00:06.913+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=14102 SoC=95 rate=2000 consumption=5262 discharge=false
+time=2026-06-16T03:31:26.439+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-16T03:31:59.600+01:00 level=INFO msg="battery status recovered" battery=BAT-001
+time=2026-06-16T20:00:06.914+01:00 level=INFO msg="starting discharge" battery=BAT-001 mod=battery.discharge operating_mode=2 "remaining capacity"=15198 SoC=100 rate=2000 consumption=231 discharge=false
+time=2026-06-17T03:31:11.395+01:00 level=ERROR msg="checking battery status" battery=BAT-001 error="request failed after 5 retries: received status code: 502"
+time=2026-06-17T03:31:41.488+01:00 level=INFO msg="battery status recovered" battery=BAT-001
+time=2026-06-17T10:10:29.782+01:00 level=INFO msg="received signal, shutting down" signal=terminated
+time=2026-06-17T10:10:29.782+01:00 level=INFO msg="discharge worker stopped" battery=BAT-001
+time=2026-06-17T10:10:29.782+01:00 level=INFO msg="battery status poller stopped" battery=BAT-001
+time=2026-06-17T10:10:29.782+01:00 level=INFO msg="gok-pi stopped"
+time=2026-06-17T10:10:43.600+01:00 level=INFO msg="starting gok-pi" config=/etc/conf/gok-pi.yml env=prod device_id=fa5af85824c2464a
+time=2026-06-17T10:10:43.601+01:00 level=INFO msg="loaded batteries config" batteries=1
+time=2026-06-17T10:10:43.601+01:00 level=INFO msg="loaded schedules" schedules=1
+time=2026-06-17T10:10:43.601+01:00 level=INFO msg="creating sonnen api client" battery=BAT-001 url=http://192.168.68.107/api/v2 token=bde6b***
+time=2026-06-17T10:10:43.602+01:00 level=INFO msg="starting remote control client" url=wss://bat.wattbrews.es/api/agent
+time=2026-06-17T10:10:43.602+01:00 level=INFO msg="agent running with remote control enabled; waiting for context cancellation"
+time=2026-06-17T10:10:43.611+01:00 level=ERROR msg="websocket connection ended" mod=remote.wsclient error="dial websocket: failed to WebSocket dial: failed to send handshake request: Get \"https://bat.wattbrews.es/api/agent\": dial tcp: lookup bat.wattbrews.es on [::1]:53: read udp [::1]:50257->[::1]:53: read: connection refused"
+time=2026-06-17T10:10:49.089+01:00 level=INFO msg="applying remote configuration" revision=348 sent_at=2026-06-17T09:11:01.643Z
+time=2026-06-17T10:10:49.090+01:00 level=INFO msg="updated timezone" battery=BAT-001 mod=battery.discharge command=update_config timezone=Europe/Madrid
+time=2026-06-17T10:10:49.090+01:00 level=INFO msg="applied runtime config update" battery=BAT-001 mod=battery.discharge command=update_config
+time=2026-06-17T10:10:49.112+01:00 level=INFO msg="persisted remote configuration to local config file" revision=348
