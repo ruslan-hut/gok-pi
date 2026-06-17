@@ -80,24 +80,22 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 		return fmt.Errorf("install binary: %w", err)
 	}
 
-	if err := atomicfile.Write(cfg.localVersionPath(), []byte(remoteVersion+"\n"), 0o644); err != nil {
-		return fmt.Errorf("write version file: %w", err)
-	}
-
 	log.Info("agent binary updated successfully", "version", remoteVersion)
 
-	// Restart agent service if enabled
+	// Restart the agent onto the new binary BEFORE persisting VERSION. If the restart
+	// fails, returning the error leaves VERSION unchanged so the next run sees
+	// remote != local and retries the whole update (including the restart). Persisting
+	// VERSION first would mask the failure: subsequent runs would report "up to date"
+	// while the live process keeps running the OLD on-disk binary indefinitely.
 	if cfg.RestartEnabled && cfg.RestartService != "" {
 		if err := restartService(ctx, cfg.RestartService, log); err != nil {
-			// The new binary + VERSION are already on disk, so the next run will see
-			// VERSION==remote and do nothing — the device keeps running the OLD process
-			// until something restarts it. Surface this loudly (ERROR, not Warn) so the
-			// drift is visible; intentionally non-fatal since the install itself succeeded.
-			log.Error("agent updated on disk but service restart FAILED; device runs stale code until restarted",
-				slog.String("service", cfg.RestartService), slog.Any("error", err))
-		} else {
-			log.Info("agent service restarted successfully", slog.String("service", cfg.RestartService))
+			return fmt.Errorf("restart service after update (VERSION not advanced; will retry next run): %w", err)
 		}
+		log.Info("agent service restarted successfully", slog.String("service", cfg.RestartService))
+	}
+
+	if err := atomicfile.Write(cfg.localVersionPath(), []byte(remoteVersion+"\n"), 0o644); err != nil {
+		return fmt.Errorf("write version file: %w", err)
 	}
 
 	return nil
