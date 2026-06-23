@@ -145,7 +145,7 @@ func (a *agentConnection) handshake() error {
 
 	a.info = hello.Agent
 	a.id = hello.Agent.ID
-	a.lastSeen = hello.Timestamp
+	a.lastSeen = time.Now()
 
 	a.log().Info("agent connected",
 		slog.String("env", hello.Agent.Env),
@@ -242,7 +242,7 @@ func (a *agentConnection) handleMessage(message []byte) {
 func (a *agentConnection) updateTelemetry(msg AgentTelemetry) {
 	a.mu.Lock()
 	a.telemetry[msg.Snapshot.Name] = msg.Snapshot
-	a.lastSeen = msg.Timestamp
+	a.lastSeen = time.Now()
 	a.mu.Unlock()
 	// Broadcast only the per-battery delta. We deliberately do NOT also broadcast a
 	// full agent summary here: the summary would re-serialize and fan out the entire
@@ -254,9 +254,9 @@ func (a *agentConnection) updateTelemetry(msg AgentTelemetry) {
 	a.s.onTelemetry(a.id, msg.Snapshot)
 }
 
-func (a *agentConnection) updateHeartbeat(msg AgentHeartbeat) {
+func (a *agentConnection) updateHeartbeat(_ AgentHeartbeat) {
 	a.mu.Lock()
-	a.lastSeen = msg.Timestamp
+	a.lastSeen = time.Now()
 	a.mu.Unlock()
 	a.s.onAgentSummary(a.id)
 }
