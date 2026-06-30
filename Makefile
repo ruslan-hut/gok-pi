@@ -8,11 +8,11 @@ build:
 	go build -ldflags "$(LDFLAGS)" -o gok ./cmd/gok
 
 build-amd64:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w $(LDFLAGS)" -o .build/amd64/gok ./cmd/gok
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w $(LDFLAGS)" -o .build/amd64/gok-pi ./cmd/gok
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o .build/amd64/agentupdater ./cmd/agentupdater
 
 build-arm64:
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w $(LDFLAGS)" -o .build/arm64/gok ./cmd/gok
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w $(LDFLAGS)" -o .build/arm64/gok-pi ./cmd/gok
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o .build/arm64/agentupdater ./cmd/agentupdater
 
 build-all: build-amd64 build-arm64
