@@ -803,7 +803,14 @@ type configPayload struct {
 	ScheduleGoalReached map[string]time.Time   `json:"schedule_goal_reached,omitempty"`
 }
 
+// version is injected at build time via -ldflags "-X gok-pi/internal/remote/wsclient.version=...".
+// When empty, detectVersion falls back to the module build info.
+var version string
+
 func detectVersion() string {
+	if version != "" {
+		return version
+	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "dev"

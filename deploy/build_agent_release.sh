@@ -86,18 +86,23 @@ OUTPUT_BIN="${OUTPUT_DIR}/${BINARY_NAME}"
 VERSION_FILE="${OUTPUT_DIR}/VERSION"
 UPDATER_BIN="${OUTPUT_DIR}/${UPDATER_NAME}"
 
+AGENT_VERSION="$(git -C "$ROOT_DIR" describe --tags --always --dirty 2>/dev/null || echo dev)"
+echo "[build] agent version: ${AGENT_VERSION}"
+
 build_binary() {
   local target="$1"
   local pkg="$2"
+  local ldflags="$3"
   echo "[build] GOOS=${GOOS} GOARCH=${GOARCH} -> ${target}"
-  GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "-s -w" -o "$target" "$pkg"
+  GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "$ldflags" -o "$target" "$pkg"
   if [[ ! -x "$target" ]]; then
     chmod +x "$target"
   fi
 }
 
-build_binary "$OUTPUT_BIN" "$ROOT_DIR/cmd/gok"
-build_binary "$UPDATER_BIN" "$ROOT_DIR/cmd/agentupdater"
+build_binary "$OUTPUT_BIN" "$ROOT_DIR/cmd/gok" \
+  "-s -w -X gok-pi/internal/remote/wsclient.version=${AGENT_VERSION}"
+build_binary "$UPDATER_BIN" "$ROOT_DIR/cmd/agentupdater" "-s -w"
 
 compute_sha256() {
   local target="$1"
