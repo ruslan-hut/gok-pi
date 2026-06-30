@@ -8,6 +8,10 @@ Type=simple
 User={{AGENT_USER}}
 Group={{AGENT_GROUP}}
 
+# systemd creates and owns /var/log/gok for the service User= on every start, so
+# the agent can rotate its log file there. Keep GOK_LOG_DIR below pointed at it.
+LogsDirectory=gok
+
 # Option 1: Using command line parameters directly
 # ExecStart={{AGENT_PATH}}/current/gok -conf=/opt/gok/config.yml -log=/var/log/gok
 
