@@ -25,6 +25,21 @@ type batteryState struct {
 	operatingMode string // normalized: "manual" or "auto"
 }
 
+// sessionCloseGrace is how long a battery may report not-charging/not-discharging
+// before its session is finalized. Sonnen inverters briefly flip the charging/
+// discharging flag off during continuous low-power operation; without this grace
+// window each flicker would close one session and open another, fragmenting a
+// single continuous operation into dozens of ~1-minute, near-zero-energy records.
+const sessionCloseGrace = 3 * time.Minute
+
+// minSessionEnergyWh / minSessionDurationSec define what counts as a throwaway
+// session. A finalized session below both thresholds is deleted rather than kept,
+// so isolated flag blips never reach the reports.
+const (
+	minSessionEnergyWh    = 5.0
+	minSessionDurationSec = 60.0
+)
+
 // activeSession tracks in-flight telemetry accumulation for an open session.
 type activeSession struct {
 	dbID       int64
@@ -37,6 +52,13 @@ type activeSession struct {
 	samples    int
 	priceSum   float64 // sum of hourly prices seen
 	priceHours int     // distinct hours counted
+
+	// Deferred close: set when the battery reports inactive but the grace window
+	// has not yet elapsed. A resume within the window clears these and continues
+	// the same session.
+	pendingClose   bool
+	pendingCloseAt time.Time
+	pendingSoc     float64
 }
 
 // SessionTracker watches telemetry, records charge/discharge sessions to the database,
@@ -116,7 +138,13 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 		st.states[stateKey] = prev
 	}
 
-	now := time.Now().UTC()
+	// Use the snapshot's own timestamp as the logical clock so telemetry replayed
+	// from an agent's offline spool reconstructs session timing at the moment it was
+	// recorded, not at replay time. During live operation this equals wall-clock.
+	now := snapshot.UpdatedAt.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 
 	// Update operating mode tracking
 	if snapshot.OperatingModeSet {
@@ -134,7 +162,7 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 						slog.String("type", suffix[1:]),
 						slog.String("new_mode", newMode),
 					)
-					st.endSession(activeKey, now, snapshot.USOC)
+					st.closeSession(activeKey, now, snapshot.USOC)
 				}
 			}
 		}
@@ -174,7 +202,7 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 					st.startSession(activeKey, agentID, snapshot.Name, "charge", now, snapshot.USOC)
 				}
 			} else if prev.charging && !snapshot.BatteryCharging {
-				st.endSession(activeKey, now, snapshot.USOC)
+				st.requestClose(activeKey, now, snapshot.USOC)
 			}
 			prev.charging = snapshot.BatteryCharging
 		}
@@ -194,7 +222,7 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 					st.startSession(activeKey, agentID, snapshot.Name, "discharge", now, snapshot.USOC)
 				}
 			} else if prev.discharging && !snapshot.BatteryDischarging {
-				st.endSession(activeKey, now, snapshot.USOC)
+				st.requestClose(activeKey, now, snapshot.USOC)
 			}
 			prev.discharging = snapshot.BatteryDischarging
 		}
@@ -207,9 +235,23 @@ func (st *SessionTracker) OnTelemetry(agentID string, snapshot TelemetrySnapshot
 	// Accumulate energy for active sessions of this battery
 	st.accumulateEnergy(stateKey+":charge", snapshot.PacTotalW, snapshot.USOC, now)
 	st.accumulateEnergy(stateKey+":discharge", snapshot.PacTotalW, snapshot.USOC, now)
+
+	// Finalize sessions whose grace window has elapsed.
+	st.expirePending(stateKey+":charge", now)
+	st.expirePending(stateKey+":discharge", now)
 }
 
 func (st *SessionTracker) startSession(key, agentID, batteryName, sessionType string, now time.Time, soc float64) {
+	// Resume a session that is within its close grace window instead of opening
+	// a new one — this is what collapses inverter flag flicker into one session.
+	if sess, ok := st.active[key]; ok {
+		if sess.pendingClose {
+			sess.pendingClose = false
+			st.log.Debug("session resumed within grace", slog.String("type", sessionType), slog.String("battery", batteryName), slog.Int64("id", sess.dbID))
+		}
+		return
+	}
+
 	rec := &sessiondb.SessionRecord{
 		AgentID:     agentID,
 		BatteryName: batteryName,
@@ -231,7 +273,32 @@ func (st *SessionTracker) startSession(key, agentID, batteryName, sessionType st
 	st.log.Debug("session started", slog.String("type", sessionType), slog.String("battery", batteryName), slog.Int64("id", id))
 }
 
-func (st *SessionTracker) endSession(key string, now time.Time, soc float64) {
+// requestClose marks an active session for deferred finalization. The session
+// stays open until the grace window elapses (see expirePending); a startSession
+// for the same key before then cancels the pending close and resumes it.
+func (st *SessionTracker) requestClose(key string, now time.Time, soc float64) {
+	sess, ok := st.active[key]
+	if !ok || sess.pendingClose {
+		return
+	}
+	sess.pendingClose = true
+	sess.pendingCloseAt = now
+	sess.pendingSoc = soc
+}
+
+// expirePending finalizes a session whose deferred-close grace window has elapsed,
+// using the moment the battery went inactive as the end time.
+func (st *SessionTracker) expirePending(key string, now time.Time) {
+	sess, ok := st.active[key]
+	if !ok || !sess.pendingClose {
+		return
+	}
+	if now.Sub(sess.pendingCloseAt) >= sessionCloseGrace {
+		st.closeSession(key, sess.pendingCloseAt, sess.pendingSoc)
+	}
+}
+
+func (st *SessionTracker) closeSession(key string, now time.Time, soc float64) {
 	sess, ok := st.active[key]
 	if !ok {
 		return
@@ -239,6 +306,19 @@ func (st *SessionTracker) endSession(key string, now time.Time, soc float64) {
 
 	sess.socEnd = soc
 	duration := now.Sub(sess.startedAt).Seconds()
+
+	// Drop throwaway sessions: an isolated flag blip that transferred negligible
+	// energy over a negligible duration is noise, not a real operation.
+	if sess.energyWh < minSessionEnergyWh && duration < minSessionDurationSec {
+		if err := st.store.DeleteSession(sess.dbID); err != nil {
+			st.log.Warn("failed to delete throwaway session", slog.Any("error", err), slog.Int64("id", sess.dbID))
+		} else {
+			st.log.Debug("dropped throwaway session", slog.Int64("id", sess.dbID), slog.Float64("energy_wh", sess.energyWh), slog.Float64("duration_s", duration))
+		}
+		delete(st.active, key)
+		return
+	}
+
 	avgPower := 0.0
 	if sess.samples > 0 {
 		avgPower = sess.powerSum / float64(sess.samples)
@@ -271,6 +351,13 @@ func (st *SessionTracker) endSession(key string, now time.Time, soc float64) {
 func (st *SessionTracker) accumulateEnergy(key string, pacTotalW, soc float64, now time.Time) {
 	sess, ok := st.active[key]
 	if !ok {
+		return
+	}
+
+	// While pending close the battery reports inactive; don't accumulate the idle
+	// gap into the session that may still resume.
+	if sess.pendingClose {
+		sess.lastSample = now
 		return
 	}
 

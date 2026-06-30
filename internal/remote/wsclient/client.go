@@ -31,6 +31,7 @@ import (
 	"gok-pi/battery/entity"
 	"gok-pi/internal/config"
 	"gok-pi/internal/lib/sl"
+	"gok-pi/internal/remote/spool"
 	"gok-pi/metrics/observers"
 	"log/slog"
 	"net/http"
@@ -53,6 +54,12 @@ const (
 	defaultHeartbeatInterval = 30 * time.Second
 	defaultDialTimeout       = 10 * time.Second
 	defaultWriteTimeout      = 10 * time.Second
+
+	// defaultSpoolFlushInterval bounds how long buffered telemetry can wait if an
+	// append signal is missed; live appends normally wake the loop immediately.
+	defaultSpoolFlushInterval = 5 * time.Second
+	// spoolBatchSize caps how many snapshots are read per flush iteration.
+	spoolBatchSize = 200
 )
 
 const (
@@ -119,6 +126,8 @@ type Client struct {
 	startOnce       sync.Once
 	onConnected     func() // invoked once a connection is fully established (resets backoff)
 	telemetryCh     chan observers.Snapshot
+	spool           *spool.Spool  // durable telemetry buffer; nil = in-memory only
+	spoolSignal     chan struct{} // wakes the write loop when new spool data is appended
 	commands        chan Command
 	configs         chan ConfigUpdate
 	configSync      chan configSnapshot
@@ -147,10 +156,19 @@ func New(cfg config.RemoteControl, meta AgentMetadata, log *slog.Logger) *Client
 			Version:  detectVersion(),
 		},
 		telemetryCh: make(chan observers.Snapshot, 64),
+		spoolSignal: make(chan struct{}, 1),
 		commands:    make(chan Command, 32),
 		configs:     make(chan ConfigUpdate, 8),
 		configSync:  make(chan configSnapshot, 4),
 	}
+}
+
+// UseSpool enables durable telemetry buffering. When set, every snapshot is
+// persisted to disk before sending and replayed in order on reconnect, so data
+// collected during an outage (or across a restart) is not lost. Must be called
+// before Run. If never called, the client falls back to an in-memory buffer.
+func (c *Client) UseSpool(sp *spool.Spool) {
+	c.spool = sp
 }
 
 func (c *Client) Commands() <-chan Command {
@@ -204,6 +222,10 @@ func (c *Client) run(ctx context.Context) {
 	})
 	defer cancelObserver()
 
+	if c.spool != nil {
+		go c.spoolMaintenance(ctx)
+	}
+
 	initialBackoff := time.Duration(c.cfg.Reconnect.InitialSeconds) * time.Second
 	if initialBackoff <= 0 {
 		initialBackoff = 5 * time.Second
@@ -213,20 +235,42 @@ func (c *Client) run(ctx context.Context) {
 		maxBackoff = initialBackoff
 	}
 
+	// Connection state is tracked across reconnect attempts so the link going
+	// down and coming back up are each logged once, at INFO, as discrete events.
+	// onConnected runs synchronously from connectAndServe in this same goroutine,
+	// so sharing these locals needs no extra synchronization.
 	backoff := initialBackoff
-	for {
-		c.onConnected = func() { backoff = initialBackoff }
-		err := c.connectAndServe(ctx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
-				return
-			}
-			c.log.With(sl.Err(err)).Error("websocket connection ended")
+	connected := false
+	everConnected := false
+	c.onConnected = func() {
+		backoff = initialBackoff
+		connected = true
+		if everConnected {
+			c.log.Info("control server connection restored", slog.String("url", c.cfg.ServerURL))
 		} else {
-			if ctx.Err() != nil {
-				return
-			}
-			c.log.Info("websocket connection closed, retrying")
+			c.log.Info("control server connection established", slog.String("url", c.cfg.ServerURL))
+		}
+		everConnected = true
+	}
+
+	for {
+		err := c.connectAndServe(ctx)
+		wasConnected := connected
+		connected = false
+
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+
+		switch {
+		case wasConnected && err != nil:
+			c.log.With(sl.Err(err)).Info("control server connection lost")
+		case wasConnected:
+			c.log.Info("control server connection lost")
+		case err != nil:
+			// Still down: a dial/handshake attempt failed. Logged at WARN to avoid
+			// masking it, but it is not a fresh lost-connection event.
+			c.log.With(sl.Err(err)).Warn("control server connection attempt failed")
 		}
 
 		select {
@@ -238,11 +282,50 @@ func (c *Client) run(ctx context.Context) {
 	}
 }
 
+// spoolMaintenance periodically prunes the durable telemetry buffer so it cannot
+// grow without bound: delivered rows are kept briefly for debugging, and any row
+// past the hard retention is removed even if never delivered (long outage backstop).
+func (c *Client) spoolMaintenance(ctx context.Context) {
+	const (
+		interval           = time.Hour
+		deliveredRetention = 24 * time.Hour
+		hardRetention      = 30 * 24 * time.Hour
+	)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		if deleted, err := c.spool.Prune(deliveredRetention, hardRetention); err != nil {
+			c.log.With(sl.Err(err)).Warn("prune telemetry spool")
+		} else if deleted > 0 {
+			c.log.Info("pruned telemetry spool", slog.Int64("deleted", deleted))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 // enqueueSnapshot adds a telemetry snapshot to the send buffer using a "newest-wins" strategy.
 // If the buffer is full, it drops the oldest snapshot to make room for the new one.
 // This ensures the control server always receives the most recent battery state,
 // even if the WebSocket write loop is temporarily slower than the observer update rate.
 func (c *Client) enqueueSnapshot(snapshot observers.Snapshot) {
+	// Durable path: persist every snapshot to disk, then nudge the write loop.
+	// Nothing is dropped here — the spool survives disconnects and restarts.
+	if c.spool != nil {
+		if err := c.spool.Append(snapshot); err != nil {
+			c.log.With(sl.Err(err)).Warn("failed to spool telemetry snapshot")
+			return
+		}
+		select {
+		case c.spoolSignal <- struct{}{}:
+		default: // a wake-up is already pending
+		}
+		return
+	}
+
 	select {
 	case c.telemetryCh <- snapshot:
 	default:
@@ -351,6 +434,46 @@ func (c *Client) writeLoop(ctx context.Context, conn *websocket.Conn) error {
 	heartbeatTicker := time.NewTicker(defaultHeartbeatInterval)
 	defer heartbeatTicker.Stop()
 
+	// Spooled mode: replay any backlog (including data buffered while offline) before
+	// serving live updates, then drain on each append-signal. The ticker is a safety
+	// net in case a wake-up signal was coalesced away.
+	if c.spool != nil {
+		if err := c.flushSpool(ctx, conn); err != nil {
+			return err
+		}
+		spoolTicker := time.NewTicker(defaultSpoolFlushInterval)
+		defer spoolTicker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-c.spoolSignal:
+				if err := c.flushSpool(ctx, conn); err != nil {
+					return err
+				}
+			case <-spoolTicker.C:
+				if err := c.flushSpool(ctx, conn); err != nil {
+					return err
+				}
+			case cfg := <-c.configSync:
+				if err := c.writeConfigSnapshot(ctx, conn, cfg); err != nil {
+					return err
+				}
+			case <-heartbeatTicker.C:
+				if err := c.writeHeartbeat(ctx, conn); err != nil {
+					return err
+				}
+				pingCtx, cancel := context.WithTimeout(ctx, defaultWriteTimeout)
+				err := conn.Ping(pingCtx)
+				cancel()
+				if err != nil {
+					return fmt.Errorf("ping: %w", err)
+				}
+			}
+		}
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -383,6 +506,41 @@ func (c *Client) writeLoop(ctx context.Context, conn *websocket.Conn) error {
 	}
 }
 
+// flushSpool sends all undelivered telemetry from the durable buffer in order,
+// marking each batch delivered only after it is successfully written. A send error
+// returns immediately so the connection is torn down and the same backlog is
+// retried after reconnect; a batch is never marked delivered unless it was sent.
+func (c *Client) flushSpool(ctx context.Context, conn *websocket.Conn) error {
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		entries, err := c.spool.Undelivered(spoolBatchSize)
+		if err != nil {
+			// Treat a read failure as transient: log and stop this pass without
+			// dropping the connection. The next signal/tick retries.
+			c.log.With(sl.Err(err)).Warn("read telemetry spool")
+			return nil
+		}
+		if len(entries) == 0 {
+			return nil
+		}
+		for _, e := range entries {
+			if err := c.writeTelemetry(ctx, conn, e.Snapshot); err != nil {
+				return err
+			}
+		}
+		lastID := entries[len(entries)-1].ID
+		if err := c.spool.MarkDelivered(lastID); err != nil {
+			c.log.With(sl.Err(err)).Warn("mark telemetry delivered")
+			return nil
+		}
+		if len(entries) < spoolBatchSize {
+			return nil
+		}
+	}
+}
+
 // writeJSON writes a message bounded by defaultWriteTimeout so a stalled socket
 // cannot block the caller indefinitely.
 func (c *Client) writeJSON(ctx context.Context, conn *websocket.Conn, v interface{}) error {
@@ -404,10 +562,14 @@ func (c *Client) sendHello(ctx context.Context, conn *websocket.Conn) error {
 }
 
 func (c *Client) sendInitialSnapshots(ctx context.Context, conn *websocket.Conn) error {
-	initial := observers.GetSnapshots()
-	for _, snap := range initial {
-		if err := c.writeTelemetry(ctx, conn, snap); err != nil {
-			return err
+	// In spooled mode the write loop replays the full backlog (which already
+	// includes the latest snapshots), so sending them here would only duplicate.
+	if c.spool == nil {
+		initial := observers.GetSnapshots()
+		for _, snap := range initial {
+			if err := c.writeTelemetry(ctx, conn, snap); err != nil {
+				return err
+			}
 		}
 	}
 	c.initialConfigMu.RLock()

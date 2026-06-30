@@ -143,6 +143,12 @@ func (s *Store) CloseSession(id int64, endedAt time.Time, durationSec, energyWh,
 	return err
 }
 
+// DeleteSession removes a single session row, used to drop throwaway sessions.
+func (s *Store) DeleteSession(id int64) error {
+	_, err := s.db.Exec("DELETE FROM sessions WHERE id = ?", id)
+	return err
+}
+
 // GetOpenSessions returns all sessions that have not been closed.
 func (s *Store) GetOpenSessions() ([]SessionRecord, error) {
 	var rows []struct {

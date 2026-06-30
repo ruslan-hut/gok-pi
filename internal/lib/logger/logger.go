@@ -1,10 +1,12 @@
 package logger
 
 import (
-	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"os"
+
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -14,19 +16,16 @@ const (
 	logFileName = "gok-pi.log"
 )
 
+// Log rotation limits keep the on-disk log bounded so a long-running agent on a
+// small SD card cannot fill the filesystem.
+const (
+	logMaxSizeMB  = 50 // rotate when the active file reaches this size
+	logMaxBackups = 5  // keep this many rotated files
+	logMaxAgeDays = 30 // delete rotated files older than this
+)
+
 func SetupLogger(env, path string) *slog.Logger {
 	var logger *slog.Logger
-	var logFile *os.File
-	var err error
-
-	if env != envLocal {
-		logPath := logFilePath(path)
-		logFile, err = os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			log.Fatal("error opening log file: ", err)
-		}
-		log.Printf("env: %s; log file: %s", env, logPath)
-	}
 
 	switch env {
 	case envLocal:
@@ -35,11 +34,11 @@ func SetupLogger(env, path string) *slog.Logger {
 		)
 	case envDev:
 		logger = slog.New(
-			slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: slog.LevelDebug}),
+			slog.NewTextHandler(rotatingWriter(path), &slog.HandlerOptions{Level: slog.LevelDebug}),
 		)
 	case envProd:
 		logger = slog.New(
-			slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: slog.LevelInfo}),
+			slog.NewTextHandler(rotatingWriter(path), &slog.HandlerOptions{Level: slog.LevelInfo}),
 		)
 	default:
 		log.Fatal("invalid environment: ", env)
@@ -48,6 +47,22 @@ func SetupLogger(env, path string) *slog.Logger {
 	return logger
 }
 
+// rotatingWriter returns a size-rotating writer for the agent log file. Rotation
+// (size cap, backup retention, max age) bounds disk usage while preserving the
+// append semantics earlier callers relied on; the file stays pull-on-demand via
+// the control server's log request.
+func rotatingWriter(path string) io.Writer {
+	logPath := logFilePath(path)
+	log.Printf("log file: %s", logPath)
+	return &lumberjack.Logger{
+		Filename:   logPath,
+		MaxSize:    logMaxSizeMB,
+		MaxBackups: logMaxBackups,
+		MaxAge:     logMaxAgeDays,
+		Compress:   true,
+	}
+}
+
 func logFilePath(path string) string {
-	return fmt.Sprintf("%s/%s", path, logFileName)
+	return path + "/" + logFileName
 }

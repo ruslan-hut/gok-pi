@@ -513,6 +513,7 @@ func (s *Server) unregisterAgent(ac *agentConnection) {
 	delete(s.agents, ac.id)
 	s.agentsMu.Unlock()
 
+	s.log.With(slog.String("agent", ac.id)).Info("agent disconnected")
 	s.broadcastAgentRemoved(ac.id)
 }
 

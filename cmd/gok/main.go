@@ -24,12 +24,14 @@ import (
 	"gok-pi/internal/config"
 	"gok-pi/internal/lib/logger"
 	"gok-pi/internal/lib/sl"
+	"gok-pi/internal/remote/spool"
 	"gok-pi/internal/remote/wsclient"
 	"gok-pi/metrics/observers"
 	"gok-pi/metrics/server"
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -43,6 +45,7 @@ func main() {
 
 	configPath := flag.String("conf", "config.yml", "path to config file")
 	logPath := flag.String("log", "/var/log", "path to log file directory")
+	dataPath := flag.String("data", "/var/lib/gok", "path to durable data directory (telemetry spool)")
 	flag.Parse()
 
 	conf := config.MustLoad(*configPath)
@@ -120,6 +123,19 @@ func main() {
 			ID:  conf.DeviceID,
 			Env: conf.Env,
 		}, lg)
+
+		// Durable telemetry spool: buffer battery data to disk so an outage or
+		// restart does not lose readings; the backlog is replayed on reconnect.
+		if err := os.MkdirAll(*dataPath, 0o755); err != nil {
+			lg.With(sl.Err(err)).Warn("failed to create data directory; telemetry spool disabled")
+		} else if sp, err := spool.Open(filepath.Join(*dataPath, "telemetry-spool.db"), lg); err != nil {
+			lg.With(sl.Err(err)).Warn("failed to open telemetry spool; buffering in memory only")
+		} else {
+			defer func() { _ = sp.Close() }()
+			remoteClient.UseSpool(sp)
+			lg.Info("telemetry spool enabled", slog.String("path", filepath.Join(*dataPath, "telemetry-spool.db")))
+		}
+
 		remoteClient.Run(ctx)
 		remoteClient.PublishConfigSnapshot(conf.Batteries, conf.Schedules)
 
