@@ -54,13 +54,22 @@ func SetupLogger(env, path string) *slog.Logger {
 func rotatingWriter(path string) io.Writer {
 	logPath := logFilePath(path)
 	log.Printf("log file: %s", logPath)
-	return &lumberjack.Logger{
+	w := &lumberjack.Logger{
 		Filename:   logPath,
 		MaxSize:    logMaxSizeMB,
 		MaxBackups: logMaxBackups,
 		MaxAge:     logMaxAgeDays,
 		Compress:   true,
 	}
+	// lumberjack opens lazily and slog discards writer errors, so an unwritable
+	// log file (wrong owner/permissions after a restart) would silently freeze
+	// the log while the process keeps running. Probe up front and fall back to
+	// stderr so the failure is visible in the journal instead of disappearing.
+	if _, err := w.Write(nil); err != nil {
+		log.Printf("WARNING: cannot write log file %s: %v; falling back to stderr", logPath, err)
+		return os.Stderr
+	}
+	return w
 }
 
 func logFilePath(path string) string {
