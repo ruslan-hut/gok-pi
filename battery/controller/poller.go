@@ -70,16 +70,21 @@ func (p *StatusPoller) Run(ctx context.Context) {
 func (p *StatusPoller) poll() {
 	status, err := p.client.Status()
 	if err != nil {
-		// Log only on the healthy->failed transition so a sustained outage is
-		// logged once rather than every interval.
-		if observers.ConnectionFailed(p.name) {
-			p.log.With(sl.Err(err)).Error("checking battery status")
+		// Logged on the healthy->failed transition and then periodically while the
+		// battery stays unreachable, so an outage that never recovers stays visible
+		// instead of leaving a single line and then going silent indefinitely.
+		if shouldLog, consecutive := observers.ConnectionFailed(p.name); shouldLog {
+			p.log.With(
+				sl.Err(err),
+				slog.Int("consecutive_failures", consecutive),
+				slog.Duration("failing_for", time.Duration(consecutive-1)*p.interval),
+			).Error("checking battery status")
 		}
 		observers.UpdateStatus(p.name, "Disconnected")
 		return
 	}
-	if observers.ConnectionRecovered(p.name) {
-		p.log.Info("battery status recovered")
+	if recovered, failures := observers.ConnectionRecovered(p.name); recovered {
+		p.log.With(slog.Int("failed_polls", failures)).Info("battery status recovered")
 	}
 	observers.UpdateStatus(p.name, "Connected")
 	p.observe(status)

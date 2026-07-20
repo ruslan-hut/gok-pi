@@ -52,6 +52,10 @@ type Direction struct {
 	ScheduleFilter func(scheduleType string) bool
 	// GoalReached returns true when SoC has reached the target and the operation should stop.
 	GoalReached func(soc, socLimit float64) bool
+	// CanStart returns true when SoC is far enough past the target to (re)start the
+	// operation. It is deliberately stricter than !GoalReached: the deadband between
+	// the two is what stops the controller flapping when SoC sits exactly on the limit.
+	CanStart func(soc, socLimit, deadband float64) bool
 	// IsActive returns true if the battery is currently performing this operation.
 	IsActive func(status *entity.SystemStatus) bool
 	// StartOp starts the operation at the given power rate.
@@ -77,6 +81,7 @@ func DischargeDirection(client FullClient) Direction {
 		Module:         "battery.discharge",
 		ScheduleFilter: func(t string) bool { return t == "" || t == "discharge" },
 		GoalReached:    func(soc, limit float64) bool { return soc <= limit },
+		CanStart:       func(soc, limit, deadband float64) bool { return soc >= limit+deadband },
 		IsActive:       func(s *entity.SystemStatus) bool { return s.BatteryDischarging },
 		StartOp:        client.StartDischarge,
 		StopOp:         client.StopDischarge,
@@ -90,6 +95,7 @@ func ChargeDirection(client FullClient) Direction {
 		Module:         "battery.charge",
 		ScheduleFilter: func(t string) bool { return t == "charge" },
 		GoalReached:    func(soc, limit float64) bool { return soc >= limit },
+		CanStart:       func(soc, limit, deadband float64) bool { return soc <= limit-deadband },
 		IsActive:       func(s *entity.SystemStatus) bool { return s.BatteryCharging },
 		StartOp:        client.StartCharge,
 		StopOp:         client.StopCharge,
@@ -148,8 +154,11 @@ type Controller struct {
 	batterySocLimit   float64 // Default SoC limit from battery config
 	ready             bool    // Ready to start operation
 	active            bool    // Operation currently running
-	soc               float64 // State of Charge from last status
-	capacity          float64 // Remaining capacity in Wh from last status
+	socDeadband       float64 // SoC margin past socLimit required to (re)start, see DefaultSocDeadband
+	minDwell          time.Duration
+	lastTransition    time.Time // When the operation last started or stopped
+	soc               float64   // State of Charge from last status
+	capacity          float64   // Remaining capacity in Wh from last status
 	stopTime          time.Time
 	rate              int // Operation rate in W calculated based on the remaining capacity and time
 	client            Client
@@ -169,6 +178,20 @@ type Controller struct {
 	statusFeed        <-chan *entity.SystemStatus // Shared status readings from the battery's StatusPoller
 }
 
+const (
+	// DefaultSocDeadband is how far (in SoC percentage points) past the SoC limit the
+	// battery must be before an operation may (re)start. Without it, a battery sitting
+	// exactly on its limit alternates between "goal reached" and "not reached" on
+	// consecutive 10s readings, and the controller writes an operating-mode change to
+	// the battery on every flip.
+	DefaultSocDeadband = 2.0
+
+	// DefaultMinDwell is the minimum time after stopping an operation before it may
+	// start again. It backstops the deadband for flapping that SoC alone does not
+	// explain, e.g. a power limit toggling across zero via config pushes.
+	DefaultMinDwell = 5 * time.Minute
+)
+
 func New(name string, client Client, dir Direction, log *slog.Logger) (*Controller, error) {
 	return &Controller{
 		dir:             dir,
@@ -177,10 +200,36 @@ func New(name string, client Client, dir Direction, log *slog.Logger) (*Controll
 		log:             log.With(sl.Module(dir.Module)),
 		commands:        make(chan ControlCommand, 16),
 		timezone:        time.UTC,
+		socDeadband:     DefaultSocDeadband,
+		minDwell:        DefaultMinDwell,
 		stop:            make(chan struct{}),
 		stopped:         make(chan struct{}),
 		firstStatusPoll: true,
 	}, nil
+}
+
+// SetHysteresis overrides the anti-flapping parameters. A zero or negative value
+// leaves the corresponding default in place.
+func (c *Controller) SetHysteresis(socDeadband float64, minDwell time.Duration) {
+	if socDeadband > 0 {
+		c.socDeadband = socDeadband
+	}
+	if minDwell > 0 {
+		c.minDwell = minDwell
+	}
+}
+
+// canStartNow reports whether the minimum dwell since the last start/stop has
+// elapsed. It gates starting only — stopping is always allowed, since stopping is
+// the safe direction and must never be delayed by anti-flapping logic.
+func (c *Controller) canStartNow() (bool, time.Duration) {
+	if c.lastTransition.IsZero() || c.minDwell <= 0 {
+		return true, 0
+	}
+	if remaining := c.minDwell - time.Since(c.lastTransition); remaining > 0 {
+		return false, remaining
+	}
+	return true, 0
 }
 
 // SetModeCoordinator sets the shared operating-mode coordinator. Both the charge and
@@ -426,9 +475,12 @@ func (c *Controller) checkTime() {
 				if c.status == nil {
 					canStart = false
 					c.log.Debug("cannot start " + c.dir.Name + ": no battery status available")
-				} else if c.dir.GoalReached(c.soc, c.socLimit) {
+				} else if !c.dir.CanStart(c.soc, c.socLimit, c.socDeadband) {
 					canStart = false
-					if schedule.RunOnce {
+					// The run_once goal is marked only when the true limit is reached,
+					// not merely when SoC is inside the deadband, so the deadband can
+					// never cause a schedule to be consumed early.
+					if schedule.RunOnce && c.dir.GoalReached(c.soc, c.socLimit) {
 						goalTime := time.Now()
 						schedule.GoalReachedTime = &goalTime
 						if c.updateGoalReached != nil {
@@ -446,7 +498,8 @@ func (c *Controller) checkTime() {
 					c.log.With(
 						slog.Float64("usoc", c.soc),
 						slog.Float64("soc_limit", c.socLimit),
-					).Debug("schedule is active but battery already at SoC limit, not ready to " + c.dir.Name)
+						slog.Float64("soc_deadband", c.socDeadband),
+					).Debug("schedule is active but battery is at or within the deadband of the SoC limit, not ready to " + c.dir.Name)
 				} else if c.powerLimit <= 0 {
 					canStart = false
 					c.log.With(
@@ -471,11 +524,21 @@ func (c *Controller) checkTime() {
 						c.log.With(sl.Err(err)).Error("stopping " + c.dir.Name + " and returning to auto mode")
 					}
 				} else if !canStart && c.status != nil {
+					// The battery is not in manual mode, so there is nothing to stop.
+					// Clear any stale active flag: leaving it set would make the
+					// controller believe an operation is running that is not, which
+					// suppresses later starts and corrupts the rate-update branch below.
+					if c.active {
+						c.log.With(
+							slog.String("operating_mode", c.status.OperatingMode),
+						).Info("battery is not in manual mode, clearing stale active " + c.dir.Name + " state")
+						c.active = false
+						c.lastTransition = time.Now()
+					}
 					c.log.With(
 						slog.String("operating_mode", c.status.OperatingMode),
-						slog.Bool("is_active", c.active),
 						slog.Bool("battery_active", c.dir.IsActive(c.status)),
-					).Debug("schedule conditions not met but not stopping " + c.dir.Name + " (checking why)")
+					).Debug("schedule conditions not met but not stopping " + c.dir.Name)
 				}
 
 				if c.active && c.ready && c.rate > 0 && c.rate != oldRate {
@@ -605,11 +668,20 @@ func (c *Controller) runOperation() {
 		return
 	}
 
-	if c.dir.GoalReached(c.soc, c.socLimit) {
+	if !c.dir.CanStart(c.soc, c.socLimit, c.socDeadband) {
 		log.With(
 			slog.Float64("usoc", c.soc),
 			slog.Float64("soc_limit", c.socLimit),
-		).Info("battery already at SoC limit, not starting " + c.dir.Name)
+			slog.Float64("soc_deadband", c.socDeadband),
+		).Info("battery at or within the deadband of the SoC limit, not starting " + c.dir.Name)
+		return
+	}
+
+	// Anti-flapping backstop: never restart within minDwell of the last transition.
+	if ok, remaining := c.canStartNow(); !ok {
+		log.With(
+			slog.Duration("retry_in", remaining.Truncate(time.Second)),
+		).Debug("within minimum dwell since last transition, not starting " + c.dir.Name)
 		return
 	}
 
@@ -626,6 +698,7 @@ func (c *Controller) runOperation() {
 		return
 	}
 	c.active = true
+	c.lastTransition = time.Now()
 }
 
 // stopOperation stops the current operation if it is ongoing.
@@ -646,6 +719,7 @@ func (c *Controller) stopOperation() error {
 		}
 
 		c.active = false
+		c.lastTransition = time.Now()
 	}
 	return nil
 }

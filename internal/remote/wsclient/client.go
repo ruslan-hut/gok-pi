@@ -34,6 +34,7 @@ import (
 	"gok-pi/internal/remote/spool"
 	"gok-pi/metrics/observers"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -276,7 +277,7 @@ func (c *Client) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(backoff):
+		case <-time.After(jitter(backoff)):
 			backoff = minDuration(backoff*2, maxBackoff)
 		}
 	}
@@ -826,4 +827,16 @@ func minDuration(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
+}
+
+// jitter spreads a backoff delay by +/-20%. Without it every agent in the fleet
+// retries on the same cadence, so a control server coming back from a restart is
+// hit by all of them simultaneously, and a shared DNS failure produces lockstep
+// retries from every device behind the same resolver.
+func jitter(d time.Duration) time.Duration {
+	if d <= 0 {
+		return d
+	}
+	spread := float64(d) * 0.2
+	return time.Duration(float64(d) - spread + rand.Float64()*2*spread)
 }

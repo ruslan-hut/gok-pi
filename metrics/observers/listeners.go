@@ -33,41 +33,63 @@ var (
 	listeners  = make(map[int64]Listener)
 	nextID     int64
 
-	// connFailMu guards connFailed, the set of batteries currently in a logged
-	// failure state. Several pollers (the discharge/charge controllers and the
-	// standalone monitor) poll the same battery on independent tickers, so this
-	// is keyed by battery name and shared across all of them.
+	// connFailMu guards connFailed, the per-battery poll failure state. Several
+	// pollers (the discharge/charge controllers and the standalone monitor) poll
+	// the same battery on independent tickers, so this is keyed by battery name
+	// and shared across all of them.
 	connFailMu sync.Mutex
-	connFailed = make(map[string]bool)
+	connFailed = make(map[string]*failureState)
 )
 
-// ConnectionFailed records a battery poll failure and reports whether this is a
-// new failure, i.e. a transition from healthy to failed. It returns true exactly
-// once per outage — for the first poller to observe it — and false while the
-// battery stays continuously unreachable. Callers use the return value to log a
-// connection error once per outage instead of once per poll per poller.
-func ConnectionFailed(name string) bool {
+// FailureLogInterval is how often a battery that stays unreachable is re-logged.
+// Logging only the healthy->failed transition makes a permanent outage
+// indistinguishable from a blip that recovered seconds later: both leave exactly
+// one line. Re-logging on this interval keeps a sustained outage visible in the
+// log without emitting a line per poll.
+const FailureLogInterval = 5 * time.Minute
+
+type failureState struct {
+	consecutive int
+	lastLogged  time.Time
+}
+
+// ConnectionFailed records a battery poll failure and reports whether the caller
+// should log it, along with the number of consecutive failures so far (1 on the
+// first). It returns true for the healthy->failed transition and then again at
+// most once per FailureLogInterval while the battery stays unreachable, so a
+// sustained outage keeps producing evidence instead of going silent after one line.
+func ConnectionFailed(name string) (shouldLog bool, consecutive int) {
 	connFailMu.Lock()
 	defer connFailMu.Unlock()
-	if connFailed[name] {
-		return false
+
+	state, ok := connFailed[name]
+	if !ok {
+		connFailed[name] = &failureState{consecutive: 1, lastLogged: time.Now()}
+		return true, 1
 	}
-	connFailed[name] = true
-	return true
+
+	state.consecutive++
+	if time.Since(state.lastLogged) >= FailureLogInterval {
+		state.lastLogged = time.Now()
+		return true, state.consecutive
+	}
+	return false, state.consecutive
 }
 
 // ConnectionRecovered clears the failure state for a battery and reports whether
 // it was previously marked failed, i.e. whether this is a genuine recovery
-// transition. It returns true exactly once per recovery, for the first poller to
-// observe the battery responding again.
-func ConnectionRecovered(name string) bool {
+// transition, along with how many consecutive failures preceded the recovery.
+// It returns true exactly once per recovery, for the first poller to observe the
+// battery responding again.
+func ConnectionRecovered(name string) (recovered bool, failures int) {
 	connFailMu.Lock()
 	defer connFailMu.Unlock()
-	if !connFailed[name] {
-		return false
+	state, ok := connFailed[name]
+	if !ok {
+		return false, 0
 	}
 	delete(connFailed, name)
-	return true
+	return true, state.consecutive
 }
 
 func RegisterListener(listener Listener) (cancel func()) {
