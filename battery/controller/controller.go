@@ -154,6 +154,7 @@ type Controller struct {
 	batterySocLimit   float64 // Default SoC limit from battery config
 	ready             bool    // Ready to start operation
 	active            bool    // Operation currently running
+	deadbandHold      bool    // SoC is inside the restart deadband but has not reached the limit: keep a running operation alive
 	socDeadband       float64 // SoC margin past socLimit required to (re)start, see DefaultSocDeadband
 	minDwell          time.Duration
 	lastTransition    time.Time // When the operation last started or stopped
@@ -355,20 +356,35 @@ func (c *Controller) Run() error {
 				}
 			}
 
-			if c.manualOverride {
-				c.ready = true
-			} else {
-				c.checkTime()
-			}
-			if c.ready {
-				c.runOperation()
-			} else {
-				if err := c.stopOperation(); err != nil {
-					c.log.With(sl.Err(err)).Error("stopping " + c.dir.Name)
-				}
-			}
+			c.evaluate()
 		case <-c.stop:
 			return nil
+		}
+	}
+}
+
+// evaluate decides what to do with the current battery reading: re-check the
+// schedules, then start, keep running, or stop the operation.
+func (c *Controller) evaluate() {
+	if c.manualOverride {
+		c.ready = true
+		c.deadbandHold = false
+	} else {
+		c.checkTime()
+	}
+
+	switch {
+	case c.ready:
+		c.runOperation()
+	case c.deadbandHold && c.active:
+		// Not startable, but only because SoC sits inside the restart deadband.
+		// Stopping here would put start and stop on the same threshold and flap
+		// the battery once per minDwell; runOperation stops the operation once
+		// the true SoC limit is reached.
+		c.runOperation()
+	default:
+		if err := c.stopOperation(); err != nil {
+			c.log.With(sl.Err(err)).Error("stopping " + c.dir.Name)
 		}
 	}
 }
@@ -416,6 +432,7 @@ func (c *Controller) hasActiveSchedule() bool {
 // checkTime determines whether the current time falls within any enabled schedule.
 func (c *Controller) checkTime() {
 	now := time.Now().In(c.timezone)
+	c.deadbandHold = false
 
 	for i := range c.schedules {
 		schedule := &c.schedules[i]
@@ -495,6 +512,9 @@ func (c *Controller) checkTime() {
 						).Info("run_once schedule: battery already at goal, marking as reached")
 						continue
 					}
+					// Inside the deadband but short of the limit: not startable, yet
+					// not a reason to stop an operation that is already running.
+					c.deadbandHold = !c.dir.GoalReached(c.soc, c.socLimit)
 					c.log.With(
 						slog.Float64("usoc", c.soc),
 						slog.Float64("soc_limit", c.socLimit),
@@ -514,7 +534,7 @@ func (c *Controller) checkTime() {
 
 				c.ready = canStart
 
-				if !canStart && c.status != nil && c.status.OperatingMode == "1" && (c.active || c.dir.IsActive(c.status)) {
+				if !canStart && !c.deadbandHold && c.status != nil && c.status.OperatingMode == "1" && (c.active || c.dir.IsActive(c.status)) {
 					c.log.With(
 						slog.String("operating_mode", c.status.OperatingMode),
 						slog.Bool("is_active", c.active),
@@ -523,7 +543,7 @@ func (c *Controller) checkTime() {
 					if err := c.stopOperation(); err != nil {
 						c.log.With(sl.Err(err)).Error("stopping " + c.dir.Name + " and returning to auto mode")
 					}
-				} else if !canStart && c.status != nil {
+				} else if !canStart && c.status != nil && c.status.OperatingMode != "1" {
 					// The battery is not in manual mode, so there is nothing to stop.
 					// Clear any stale active flag: leaving it set would make the
 					// controller believe an operation is running that is not, which

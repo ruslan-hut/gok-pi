@@ -125,6 +125,119 @@ func TestMinDwellBlocksImmediateRestart(t *testing.T) {
 	}
 }
 
+// scheduleAllDay returns an enabled discharge schedule whose window always covers
+// the current time, so evaluate() takes the active-schedule path.
+func scheduleAllDay(socLimit int) entity.Schedule {
+	return entity.Schedule{
+		Name:       "test-discharge",
+		Type:       "discharge",
+		Enabled:    true,
+		StartTime:  "00:00",
+		StopTime:   "23:59",
+		PowerLimit: 2000,
+		SocLimit:   socLimit,
+	}
+}
+
+// TestScheduleEvaluationDoesNotFlapInsideDeadband reproduces the production pattern
+// from 2026-07-27, where an evening of discharge produced twelve start/stop pairs
+// with USOC pinned at 55. The schedule path used the start predicate to decide
+// whether to stop, so start and stop shared the threshold limit+deadband and the
+// deadband was cancelled out. An operation running inside the deadband must keep
+// running until the true limit is reached.
+func TestScheduleEvaluationDoesNotFlapInsideDeadband(t *testing.T) {
+	client := &fakeClient{}
+	c := newTestController(t, client)
+	c.socLimit = 53
+	c.schedules = []entity.Schedule{scheduleAllDay(53)}
+
+	// Outside the deadband: the schedule starts the discharge.
+	setSoC(c, 55)
+	c.evaluate()
+	if client.starts != 1 || !c.active {
+		t.Fatalf("setup: expected the schedule to start discharge, got %d starts (active=%v)",
+			client.starts, c.active)
+	}
+
+	// SoC drifts inside the deadband but never reaches the limit, exactly as in
+	// the logs. This must not stop the operation.
+	for _, soc := range []float64{54.6, 54, 54.4, 53.8, 54.2} {
+		setSoC(c, soc)
+		c.evaluate()
+	}
+
+	if client.stops != 0 {
+		t.Fatalf("expected no stops inside the deadband, got %d (mode changes: %v)",
+			client.stops, client.modes)
+	}
+	if !c.active {
+		t.Fatal("discharge should still be running inside the deadband")
+	}
+
+	// Reaching the true limit still stops it.
+	setSoC(c, 53)
+	c.evaluate()
+	if client.stops != 1 {
+		t.Fatalf("expected discharge to stop at the true SoC limit, got %d stops", client.stops)
+	}
+	if c.active {
+		t.Fatal("controller should be inactive after reaching the limit")
+	}
+}
+
+// TestScheduleEvaluationStopsWhenWindowEnds guards the other direction: leaving the
+// deadband-hold in place must not keep an operation alive past its schedule.
+func TestScheduleEvaluationStopsWhenWindowEnds(t *testing.T) {
+	client := &fakeClient{}
+	c := newTestController(t, client)
+	c.socLimit = 53
+	c.schedules = []entity.Schedule{scheduleAllDay(53)}
+
+	setSoC(c, 55)
+	c.evaluate()
+	if !c.active {
+		t.Fatal("setup: controller should be active")
+	}
+
+	// Schedule no longer covers the current time; SoC is still inside the deadband.
+	c.schedules[0].Enabled = false
+	setSoC(c, 54)
+	c.evaluate()
+
+	if client.stops != 1 {
+		t.Fatalf("expected discharge to stop when the schedule ended, got %d stops", client.stops)
+	}
+	if c.active {
+		t.Fatal("controller should be inactive after the schedule ended")
+	}
+}
+
+// TestScheduleEvaluationStopsOnInvalidPowerLimit checks that a config push that
+// zeroes the power limit still stops the operation; only the SoC deadband is
+// exempt from stopping.
+func TestScheduleEvaluationStopsOnInvalidPowerLimit(t *testing.T) {
+	client := &fakeClient{}
+	c := newTestController(t, client)
+	c.socLimit = 53
+	c.schedules = []entity.Schedule{scheduleAllDay(53)}
+
+	setSoC(c, 55)
+	c.evaluate()
+	if !c.active {
+		t.Fatal("setup: controller should be active")
+	}
+
+	c.schedules[0].PowerLimit = 0
+	c.evaluate()
+
+	if client.stops != 1 {
+		t.Fatalf("expected discharge to stop on an invalid power limit, got %d stops", client.stops)
+	}
+	if c.active {
+		t.Fatal("controller should be inactive after the power limit went invalid")
+	}
+}
+
 // TestStopUsesTrueLimitNotDeadband guards the safety property that the deadband
 // only delays starting. An active operation must still stop the moment the real
 // SoC limit is reached, never a deadband later.
