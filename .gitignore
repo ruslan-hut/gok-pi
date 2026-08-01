@@ -8,3 +8,4 @@ PLAN.md
 /.idea/
 /data/
 /.build/
+.log
