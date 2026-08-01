@@ -343,6 +343,11 @@ func (c *Controller) Run() error {
 				c.log.With(sl.Err(err)).Error("processing remote command")
 			}
 		case status := <-c.statusFeed:
+			if status == nil {
+				c.invalidateStatus()
+				continue
+			}
+
 			c.observeStatus(status)
 
 			if c.firstStatusPoll {
@@ -366,6 +371,12 @@ func (c *Controller) Run() error {
 // evaluate decides what to do with the current battery reading: re-check the
 // schedules, then start, keep running, or stop the operation.
 func (c *Controller) evaluate() {
+	if c.status == nil {
+		// No trustworthy reading. Commanding the battery now would be guesswork,
+		// and the stop path would clear c.active while the battery keeps running.
+		return
+	}
+
 	if c.manualOverride {
 		c.ready = true
 		c.deadbandHold = false
@@ -979,16 +990,42 @@ func (c *Controller) observeStatus(status *entity.SystemStatus) {
 	c.capacity = status.RemainingCapacityWh
 }
 
+// invalidateStatus drops the cached reading once the poller reports the battery has
+// been unreachable long enough that the reading is no longer evidence of anything.
+// Keeping it would let the controller start or stop an operation from data that is
+// minutes old; instead it goes quiet until a fresh reading arrives, and that first
+// reading re-syncs internal state, since the battery may have been changed by
+// someone else while it was unreachable.
+func (c *Controller) invalidateStatus() {
+	if c.status == nil {
+		return
+	}
+
+	c.log.With(
+		slog.Bool("is_active", c.active),
+	).Warn("battery unreachable, discarding stale status until a fresh reading arrives")
+
+	c.status = nil
+	c.ready = false
+	c.deadbandHold = false
+	c.firstStatusPoll = true
+}
+
 // syncStateFromBattery synchronizes internal state with actual battery state on startup.
 func (c *Controller) syncStateFromBattery(status *entity.SystemStatus) {
 	if status == nil {
 		return
 	}
 
+	// Whether the running operation is one this controller has no record of starting.
+	// True at startup, where the process has just lost all state, and false when
+	// re-syncing after an outage, where c.active still says the operation is ours.
+	unowned := !c.active
+
 	// If battery is in manual mode and operation is active, sync our internal state
 	// OperatingMode "1" = manual, "2" = auto
 	if status.OperatingMode == "1" && c.dir.IsActive(status) {
-		if !c.active {
+		if unowned {
 			c.log.With(
 				slog.String("operating_mode", status.OperatingMode),
 				slog.Bool("battery_active", c.dir.IsActive(status)),
@@ -1005,7 +1042,10 @@ func (c *Controller) syncStateFromBattery(status *entity.SystemStatus) {
 		// If no schedule currently justifies this operation, it was started manually
 		// (e.g. a remote start command before this agent restarted). Preserve it as a
 		// manual override; otherwise the next tick would stop it and return to auto.
-		if !c.manualOverride && !c.hasActiveSchedule() {
+		// Only for an operation this controller does not already own: after an outage
+		// a schedule-driven discharge whose window closed meanwhile must be stopped,
+		// not promoted to a manual override that would never end.
+		if unowned && !c.manualOverride && !c.hasActiveSchedule() {
 			c.log.Info("detected manual " + c.dir.Name + " with no active schedule on startup, preserving manual override")
 			c.manualOverride = true
 			c.ready = true

@@ -26,6 +26,13 @@ type StatusPoller struct {
 	subscribers []chan *entity.SystemStatus
 }
 
+// StaleAfterFailures is how many consecutive failed polls make the last successful
+// reading stale. At that point the poller publishes a nil status so consumers stop
+// deciding from data they can no longer refresh. It is deliberately small: a single
+// failed poll is a blip, but half a minute of silence means the battery may have
+// been changed by someone else, or not be there at all.
+const StaleAfterFailures = 3
+
 // NewStatusPoller creates a poller for a battery. Subscribe consumers before calling Run.
 func NewStatusPoller(name string, client Client, log *slog.Logger) *StatusPoller {
 	return &StatusPoller{
@@ -73,7 +80,8 @@ func (p *StatusPoller) poll() {
 		// Logged on the healthy->failed transition and then periodically while the
 		// battery stays unreachable, so an outage that never recovers stays visible
 		// instead of leaving a single line and then going silent indefinitely.
-		if shouldLog, consecutive := observers.ConnectionFailed(p.name); shouldLog {
+		shouldLog, consecutive := observers.ConnectionFailed(p.name)
+		if shouldLog {
 			p.log.With(
 				sl.Err(err),
 				slog.Int("consecutive_failures", consecutive),
@@ -81,6 +89,12 @@ func (p *StatusPoller) poll() {
 			).Error("checking battery status")
 		}
 		observers.UpdateStatus(p.name, "Disconnected")
+		if consecutive == StaleAfterFailures {
+			// Publish "no reading" once per outage. Without this the last
+			// successful status stays on the consumers' side indefinitely and
+			// they keep making decisions from data that is minutes old.
+			p.publish(nil)
+		}
 		return
 	}
 	if recovered, failures := observers.ConnectionRecovered(p.name); recovered {
@@ -94,8 +108,14 @@ func (p *StatusPoller) poll() {
 		p.observe(status)
 	}
 
+	p.publish(status)
+}
+
+// publish fans a reading out to every subscriber, keeping only the latest: a stale
+// unread reading is dropped before enqueueing. A nil reading means "the battery is
+// unreachable and the last one is no longer trustworthy".
+func (p *StatusPoller) publish(status *entity.SystemStatus) {
 	for _, ch := range p.subscribers {
-		// Keep only the latest reading: drop a stale unread one, then enqueue.
 		select {
 		case <-ch:
 		default:
