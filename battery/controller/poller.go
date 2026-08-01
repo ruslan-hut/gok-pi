@@ -86,8 +86,13 @@ func (p *StatusPoller) poll() {
 	if recovered, failures := observers.ConnectionRecovered(p.name); recovered {
 		p.log.With(slog.Int("failed_polls", failures)).Info("battery status recovered")
 	}
-	observers.UpdateStatus(p.name, "Connected")
-	p.observe(status)
+	if status == nil {
+		// Defensive: a driver returning (nil, nil) is still reachable, but there
+		// is no reading to publish.
+		observers.UpdateStatus(p.name, "Connected")
+	} else {
+		p.observe(status)
+	}
 
 	for _, ch := range p.subscribers {
 		// Keep only the latest reading: drop a stale unread one, then enqueue.
@@ -102,20 +107,20 @@ func (p *StatusPoller) poll() {
 	}
 }
 
-// observe pushes battery-level telemetry to the observers. Direction-specific gauges
-// (discharge/charge active state) are updated by the controllers from their own feed.
+// observe pushes battery-level telemetry to the observers. The whole reading goes
+// out as a single batched update: notifying per field would emit one telemetry
+// snapshot per field and multiply spool writes and uplink traffic accordingly.
+// The update is synchronous so a later "Disconnected" can never overtake it.
 func (p *StatusPoller) observe(status *entity.SystemStatus) {
-	if status == nil {
-		return
-	}
-	go func(s *entity.SystemStatus) {
-		observers.UpdateSoC(p.name, s.RSOC)
-		observers.UpdateUSoC(p.name, s.USOC)
-		observers.UpdateCapacity(p.name, s.RemainingCapacityWh)
-		observers.UpdateConsumption(p.name, s.ConsumptionW)
-		observers.UpdatePac(p.name, s.PacTotalW)
-		observers.UpdateDischargeState(p.name, s.BatteryDischarging)
-		observers.UpdateChargeState(p.name, s.BatteryCharging)
-		observers.UpdateOpMode(p.name, s.OperatingMode)
-	}(status)
+	observers.UpdateBattery(p.name, observers.Reading{
+		RSOC:                status.RSOC,
+		USOC:                status.USOC,
+		RemainingCapacityWh: status.RemainingCapacityWh,
+		ConsumptionW:        status.ConsumptionW,
+		PacTotalW:           status.PacTotalW,
+		BatteryDischarging:  status.BatteryDischarging,
+		BatteryCharging:     status.BatteryCharging,
+		OperatingMode:       status.OperatingMode,
+		Status:              "Connected",
+	})
 }

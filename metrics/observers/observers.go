@@ -79,11 +79,7 @@ var dischargeStateGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
 }, []string{"name"})
 
 func UpdateDischargeState(name string, state bool) {
-	if state {
-		dischargeStateGauge.WithLabelValues(name).Set(1.0)
-	} else {
-		dischargeStateGauge.WithLabelValues(name).Set(0.0)
-	}
+	setBoolGauge(dischargeStateGauge, name, state)
 	updateSnapshot(name, func(snapshot *Snapshot) {
 		snapshot.BatteryDischarging = state
 		snapshot.BatteryDischargingSet = true
@@ -97,11 +93,7 @@ var chargeStateGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
 }, []string{"name"})
 
 func UpdateChargeState(name string, state bool) {
-	if state {
-		chargeStateGauge.WithLabelValues(name).Set(1.0)
-	} else {
-		chargeStateGauge.WithLabelValues(name).Set(0.0)
-	}
+	setBoolGauge(chargeStateGauge, name, state)
 	updateSnapshot(name, func(snapshot *Snapshot) {
 		snapshot.BatteryCharging = state
 		snapshot.BatteryChargingSet = true
@@ -129,5 +121,65 @@ func UpdateOpMode(name string, value string) {
 func UpdateStatus(name string, status string) {
 	updateSnapshot(name, func(snapshot *Snapshot) {
 		snapshot.Status = status
+	})
+}
+
+func setBoolGauge(gauge *prometheus.GaugeVec, name string, state bool) {
+	if state {
+		gauge.WithLabelValues(name).Set(1.0)
+	} else {
+		gauge.WithLabelValues(name).Set(0.0)
+	}
+}
+
+// Reading is one complete battery status poll.
+type Reading struct {
+	RSOC                float64
+	USOC                float64
+	RemainingCapacityWh float64
+	ConsumptionW        float64
+	PacTotalW           float64
+	BatteryDischarging  bool
+	BatteryCharging     bool
+	OperatingMode       string
+	Status              string
+}
+
+// UpdateBattery records a complete reading: it updates every Prometheus gauge and
+// emits exactly one snapshot notification. Each per-field Update* helper notifies
+// listeners on its own, so a caller holding a whole reading must use this instead —
+// otherwise a single poll produces one telemetry row per field, multiplying spool
+// writes and uplink traffic by the number of fields.
+func UpdateBattery(name string, r Reading) {
+	socGauge.WithLabelValues(name).Set(r.RSOC)
+	uSocGauge.WithLabelValues(name).Set(r.USOC)
+	capacityGauge.WithLabelValues(name).Set(r.RemainingCapacityWh)
+	consumptionGauge.WithLabelValues(name).Set(r.ConsumptionW)
+	pacGauge.WithLabelValues(name).Set(r.PacTotalW)
+	setBoolGauge(dischargeStateGauge, name, r.BatteryDischarging)
+	setBoolGauge(chargeStateGauge, name, r.BatteryCharging)
+
+	opMode, opModeErr := strconv.ParseFloat(r.OperatingMode, 64)
+	if opModeErr == nil {
+		opModeGauge.WithLabelValues(name).Set(opMode)
+	}
+
+	updateSnapshot(name, func(snapshot *Snapshot) {
+		snapshot.RSOC = r.RSOC
+		snapshot.USOC = r.USOC
+		snapshot.RemainingCapacityWh = r.RemainingCapacityWh
+		snapshot.ConsumptionW = r.ConsumptionW
+		snapshot.PacTotalW = r.PacTotalW
+		snapshot.BatteryDischarging = r.BatteryDischarging
+		snapshot.BatteryDischargingSet = true
+		snapshot.BatteryCharging = r.BatteryCharging
+		snapshot.BatteryChargingSet = true
+		if opModeErr == nil {
+			snapshot.OperatingMode = r.OperatingMode
+			snapshot.OperatingModeSet = true
+		}
+		if r.Status != "" {
+			snapshot.Status = r.Status
+		}
 	})
 }
