@@ -586,6 +586,10 @@ func (c *Controller) checkTime() {
 }
 
 // removeExpiredAutoSchedules removes auto-schedules whose time window has ended.
+// Both direction controllers for a battery hold the full schedule list, so each one
+// only prunes the schedules it actually drives: otherwise the charge controller
+// deletes a discharge schedule from the shared config on its own clock while the
+// discharge controller is still running it.
 func (c *Controller) removeExpiredAutoSchedules() {
 	if c.removeSchedule == nil {
 		return
@@ -595,7 +599,7 @@ func (c *Controller) removeExpiredAutoSchedules() {
 	var remaining []entity.Schedule
 
 	for _, s := range c.schedules {
-		if !entity.IsAutoSchedule(s.Name) {
+		if !entity.IsAutoSchedule(s.Name) || !c.dir.ScheduleFilter(s.Type) {
 			remaining = append(remaining, s)
 			continue
 		}
