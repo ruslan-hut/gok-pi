@@ -25,16 +25,14 @@ function newLink(agentId: string, batteryName: string): ChargerLink {
 }
 
 function formatStarted(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  return at.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /**
@@ -60,6 +58,10 @@ export function ChargerLinksForm({
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
+  // Raw text of the charge point IDs field being edited. Parsing on every
+  // keystroke would swallow the separators as they are typed, so the field
+  // shows what was typed until it loses focus.
+  const [pointsDraft, setPointsDraft] = useState<{ index: number; text: string } | null>(null);
 
   const load = useCallback(async () => {
     if (!agentId) return;
@@ -153,17 +155,19 @@ export function ChargerLinksForm({
       </small>
 
       {sessions.length > 0 && (
-        <div className="config-item-goal-badge" style={{ marginTop: 8 }}>
+        <div className="config-item-goal-badge">
           <span className="goal-badge-text">
-            <Icon name="check_circle" size={16} />{" "}
-            {sessions.length} active charging session
-            {sessions.length > 1 ? "s" : ""}:{" "}
-            {sessions
-              .map(
-                (s) =>
-                  `${s.battery_name} ← ${s.charge_point_id} (since ${formatStarted(s.started_at)})`,
-              )
-              .join(", ")}
+            <strong className="charger-session-heading">
+              <Icon name="ev_station" size={16} />
+              {sessions.length} active charging session
+              {sessions.length > 1 ? "s" : ""}
+            </strong>
+            {sessions.map((s, i) => (
+              <span key={`${s.charge_point_id}-${i}`} className="charger-session-row">
+                {s.battery_name} is discharging for {s.charge_point_id}, since{" "}
+                {formatStarted(s.started_at)}
+              </span>
+            ))}
           </span>
         </div>
       )}
@@ -192,16 +196,6 @@ export function ChargerLinksForm({
                     <span className="switch-slider"></span>
                     <span className="switch-label">Enabled</span>
                   </label>
-                  {!readonly && (
-                    <button
-                      type="button"
-                      className="button-small button-danger"
-                      onClick={() => remove(index)}
-                      disabled={busy}
-                    >
-                      <Icon name="delete" size={16} />
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -232,6 +226,14 @@ export function ChargerLinksForm({
                         {name}
                       </option>
                     ))}
+                    {/* A renamed or deleted battery would otherwise blank the
+                        select and hide that the link points nowhere. */}
+                    {link.battery_name &&
+                      !batteryNames.includes(link.battery_name) && (
+                        <option value={link.battery_name}>
+                          {link.battery_name} — no longer configured
+                        </option>
+                      )}
                   </select>
                 </div>
 
@@ -259,15 +261,26 @@ export function ChargerLinksForm({
                   <input
                     id={`charger-points-${index}`}
                     type="text"
-                    value={link.charge_point_ids.join(", ")}
-                    onChange={(e) =>
-                      update(index, {
-                        charge_point_ids: e.target.value
-                          .split(",")
-                          .map((s) => s.trim())
-                          .filter(Boolean),
-                      })
+                    value={
+                      pointsDraft?.index === index
+                        ? pointsDraft.text
+                        : link.charge_point_ids.join(", ")
                     }
+                    onChange={(e) =>
+                      setPointsDraft({ index, text: e.target.value })
+                    }
+                    onBlur={(e) => {
+                      setPointsDraft(null);
+                      const parsed = e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                      // Leaving the field untouched must not mark the form dirty.
+                      if (parsed.join(" ") === link.charge_point_ids.join(" ")) {
+                        return;
+                      }
+                      update(index, { charge_point_ids: parsed });
+                    }}
                     disabled={busy || readonly}
                     placeholder="Wallbox3, Wallbox4"
                   />
@@ -335,6 +348,17 @@ export function ChargerLinksForm({
                   </small>
                 </div>
               </div>
+
+              {!readonly && (
+                <button
+                  type="button"
+                  className="config-item-remove"
+                  onClick={() => remove(index)}
+                  disabled={busy}
+                >
+                  Remove Link
+                </button>
+              )}
             </div>
           ))}
         </div>
