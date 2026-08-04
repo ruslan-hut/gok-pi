@@ -86,11 +86,13 @@ jobs:
           GOK_BREVO_API_KEY: ${{ secrets.GOK_BREVO_API_KEY }}
           GOK_BREVO_SENDER_NAME: ${{ secrets.GOK_BREVO_SENDER_NAME }}
           GOK_BREVO_SENDER_EMAIL: ${{ secrets.GOK_BREVO_SENDER_EMAIL }}
+          GOK_CHARGER_TOKEN: ${{ secrets.GOK_CHARGER_TOKEN }}
         run: |
           set -euo pipefail
           : "${CONTROL_ADDR:=:8080}"
           : "${GOK_BREVO_ENABLED:=false}"
           : "${GOK_BREVO_SENDER_NAME:=GOK-Pi}"
+          : "${GOK_CHARGER_TOKEN:=}"
 
           # yq-style YAML scalar quoter: escape backslash and double quote, wrap in "..."
           quote() {
@@ -118,6 +120,13 @@ jobs:
             echo "  sender_name: $(quote "${GOK_BREVO_SENDER_NAME}")"
             echo "  sender_email: $(quote "${GOK_BREVO_SENDER_EMAIL}")"
             echo 'email_state: "/var/lib/gok-cs/email-reports-state.json"'
+            echo ""
+            echo "# EV charger integration (evsys webhooks). The token must match the"
+            echo "# 'token' field of the gok-pi row in the evsys webhook_subscribers"
+            echo "# collection. Empty disables /api/webhooks/evsys entirely."
+            echo "charger_token: $(quote "${GOK_CHARGER_TOKEN}")"
+            echo 'charger_links: "/var/lib/gok-cs/charger-links.json"'
+            echo 'charger_sessions: "/var/lib/gok-cs/charger-sessions.json"'
           } > gok-cs-config.yml
 
       - name: Upload config to remote host

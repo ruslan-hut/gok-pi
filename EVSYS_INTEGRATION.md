@@ -54,6 +54,30 @@ charger_sessions: data/charger-sessions.json
 404). Unlike the agent shared secret and the UI login, it does not fail open:
 the endpoint drives the battery and is reachable from the public internet.
 
+The token is not editable from the web UI, by design. Changing it requires
+updating the evsys subscriber in the same breath — a UI-only change would just
+start bouncing deliveries with 401s — and the UI is fail-open when
+`ui_username`/`ui_password` are unset, which would make the secret world-readable.
+
+### Deployment
+
+`.github/workflows/deploy.yml` regenerates `/etc/gok-cs/config.yml` on every push
+to `master`, so the token must live in a **GitHub Actions repository secret**
+named `GOK_CHARGER_TOKEN` (Settings → Secrets and variables → Actions). Anything
+set by hand in `/etc/gok-cs/config.yml` is overwritten by the next deploy.
+
+The secret is optional: if it is not set, the generated config gets
+`charger_token: ""` and the integration stays off — the deploy does not fail.
+
+`charger_links` and `charger_sessions` are written to `/var/lib/gok-cs/`
+alongside the agent configs and session database, so links and in-flight
+sessions survive a redeploy.
+
+To rotate the token: update the `GOK_CHARGER_TOKEN` secret, update the evsys
+subscriber document, then redeploy. Between the two updates evsys deliveries
+fail with 401 and are retried, so nothing is lost as long as the gap is well
+under the 24h outbox give-up window.
+
 ## 3. Link chargers to batteries
 
 Edit the links in the web UI (Config → Charger links), or `PUT` them to
