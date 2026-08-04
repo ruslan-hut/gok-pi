@@ -30,6 +30,65 @@ func TestTranslateCommandStart(t *testing.T) {
 	}
 }
 
+// TestTranslateCommandStartFromCharger decodes the exact payload the control
+// server sends for an EV charging session (remote/server/chargers.go): the
+// limits ride along with the start, and the source marks the override as one
+// that must outlive config pushes.
+func TestTranslateCommandStartFromCharger(t *testing.T) {
+	raw := []byte(`{"power":3000,"power_limit":3000,"soc_limit":40,"source":"charger"}`)
+	cmd := wsclient.Command{
+		Type:    "agent.command",
+		Command: "start_discharge",
+		Target:  "battery1",
+		Payload: raw,
+	}
+
+	control, err := translateCommand(cmd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if control.Type != controller.CommandStart {
+		t.Fatalf("expected start, got %s", control.Type)
+	}
+	if control.Power != 3000 {
+		t.Fatalf("expected power 3000, got %d", control.Power)
+	}
+	if control.Source != controller.CommandSourceCharger {
+		t.Fatalf("expected source %q, got %q", controller.CommandSourceCharger, control.Source)
+	}
+	if control.Limits == nil {
+		t.Fatal("expected limits to be carried with the start")
+	}
+	if control.Limits.PowerLimit == nil || *control.Limits.PowerLimit != 3000 {
+		t.Fatalf("power limit = %v, want 3000", control.Limits.PowerLimit)
+	}
+	if control.Limits.SocLimit == nil || *control.Limits.SocLimit != 40 {
+		t.Fatalf("soc limit = %v, want 40", control.Limits.SocLimit)
+	}
+}
+
+// A UI start carries no limits and no source, and must stay an ordinary manual
+// override that a config push cancels.
+func TestTranslateCommandStartFromUIHasNoSource(t *testing.T) {
+	cmd := wsclient.Command{
+		Type:    "agent.command",
+		Command: "start_discharge",
+		Target:  "battery1",
+		Payload: []byte(`{"power":750}`),
+	}
+
+	control, err := translateCommand(cmd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if control.Source != "" {
+		t.Fatalf("source = %q, want empty", control.Source)
+	}
+	if control.Limits != nil {
+		t.Fatalf("limits = %+v, want nil", control.Limits)
+	}
+}
+
 func TestTranslateCommandSetLimits(t *testing.T) {
 	payload := map[string]int{
 		"power_limit": 900,

@@ -3,6 +3,7 @@ import { DeviceSettings } from "./DeviceSettings";
 import { BatteryConfigForm } from "./BatteryConfigForm";
 import { ScheduleConfigForm } from "./ScheduleConfigForm";
 import { EmailReportsForm } from "./EmailReportsForm";
+import { ChargerLinksForm } from "./ChargerLinksForm";
 import { ConfigActions } from "./ConfigActions";
 import { CopyButton } from "../shared/CopyButton";
 import { Icon } from "../shared/Icon";
@@ -264,6 +265,15 @@ export function ConfigTab({
               </div>
             )}
           </div>
+
+          {localConfig && (
+            <ChargerLinksForm
+              agentId={agentId}
+              batteryNames={localConfig.batteries.map((b) => b.name).filter(Boolean)}
+              disabled={saving}
+              readonly={readonly}
+            />
+          )}
 
           {localConfig && (
             <EmailReportsForm

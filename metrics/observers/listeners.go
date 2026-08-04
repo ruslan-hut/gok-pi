@@ -7,20 +7,27 @@ import (
 )
 
 type Snapshot struct {
-	Name                  string    `json:"name"`
-	RSOC                  float64   `json:"rsoc"`
-	USOC                  float64   `json:"usoc"`
-	RemainingCapacityWh   float64   `json:"remaining_capacity_wh"`
-	ConsumptionW          float64   `json:"consumption_w"`
-	PacTotalW             float64   `json:"pac_total_w"`
-	BatteryDischarging    bool      `json:"battery_discharging"`
-	BatteryDischargingSet bool      `json:"battery_discharging_set"`
-	BatteryCharging       bool      `json:"battery_charging"`
-	BatteryChargingSet    bool      `json:"battery_charging_set"`
-	OperatingMode         string    `json:"operating_mode"`
-	OperatingModeSet      bool      `json:"operating_mode_set"`
-	Status                string    `json:"status"`
-	UpdatedAt             time.Time `json:"updated_at"`
+	Name                  string  `json:"name"`
+	RSOC                  float64 `json:"rsoc"`
+	USOC                  float64 `json:"usoc"`
+	RemainingCapacityWh   float64 `json:"remaining_capacity_wh"`
+	ConsumptionW          float64 `json:"consumption_w"`
+	PacTotalW             float64 `json:"pac_total_w"`
+	BatteryDischarging    bool    `json:"battery_discharging"`
+	BatteryDischargingSet bool    `json:"battery_discharging_set"`
+	BatteryCharging       bool    `json:"battery_charging"`
+	BatteryChargingSet    bool    `json:"battery_charging_set"`
+	OperatingMode         string  `json:"operating_mode"`
+	OperatingModeSet      bool    `json:"operating_mode_set"`
+	Status                string  `json:"status"`
+	// OverrideSource says why the battery is running outside its schedule:
+	// "manual" for an operator command, "charger" for an EV charging session,
+	// empty when the schedules are in charge. OverrideDirection is the direction
+	// that set it, so the opposite-direction controller for the same battery
+	// cannot clear an override it does not own.
+	OverrideSource    string    `json:"override_source,omitempty"`
+	OverrideDirection string    `json:"override_direction,omitempty"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 type Listener func(Snapshot)

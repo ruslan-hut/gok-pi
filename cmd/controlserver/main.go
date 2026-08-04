@@ -35,6 +35,12 @@ type CSConfig struct {
 	LogFile       string               `yaml:"log_file" env:"GOK_CS_LOG_FILE" env-default:""`
 	EmailProvider email.ProviderConfig `yaml:"email_provider"`
 	EmailState    string               `yaml:"email_state" env-default:"data/email-reports-state.json"`
+
+	// EV charger integration. ChargerToken is the shared secret evsys presents
+	// on /api/webhooks/evsys; leaving it empty disables the endpoint.
+	ChargerToken    string `yaml:"charger_token" env:"GOK_CHARGER_TOKEN" env-default:""`
+	ChargerLinks    string `yaml:"charger_links" env-default:"data/charger-links.json"`
+	ChargerSessions string `yaml:"charger_sessions" env-default:"data/charger-sessions.json"`
 }
 
 func main() {
@@ -80,6 +86,10 @@ func main() {
 		UIPassword:    strings.TrimSpace(cfg.UIPassword),
 		EmailProvider: cfg.EmailProvider,
 		EmailState:    strings.TrimSpace(cfg.EmailState),
+
+		ChargerWebhookToken: strings.TrimSpace(cfg.ChargerToken),
+		ChargerLinks:        strings.TrimSpace(cfg.ChargerLinks),
+		ChargerSessions:     strings.TrimSpace(cfg.ChargerSessions),
 	}, logger)
 
 	logger.Info("starting control server", slog.String("addr", cfg.Addr))

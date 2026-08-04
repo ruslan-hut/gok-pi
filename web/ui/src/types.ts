@@ -19,7 +19,42 @@ export interface TelemetrySnapshot {
   operating_mode: string;
   operating_mode_set: boolean;
   status: string;
+  // Why the battery runs outside its schedule: "charger" for an EV charging
+  // session, "manual" for an operator command, absent when schedule-driven.
+  override_source?: string;
+  override_direction?: string;
   updated_at: string;
+}
+
+/** ChargerLink maps an evsys charging location to one battery on one agent. */
+export interface ChargerLink {
+  name: string;
+  enabled: boolean;
+  location_id: string;
+  charge_point_ids: string[];
+  agent_id: string;
+  battery_name: string;
+  power_limit: number;
+  soc_limit: number;
+  max_duration_min: number;
+}
+
+/** ChargerSession is an EV charging session currently driving a discharge. */
+export interface ChargerSession {
+  key: string;
+  link_name: string;
+  agent_id: string;
+  battery_name: string;
+  location_id: string;
+  charge_point_id: string;
+  connector_id: number;
+  transaction_id: number;
+  id_tag: string;
+  username: string;
+  started_at: string;
+  power_limit: number;
+  soc_limit: number;
+  max_duration_min: number;
 }
 
 export interface AgentSummary {

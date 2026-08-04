@@ -124,6 +124,25 @@ func UpdateStatus(name string, status string) {
 	})
 }
 
+// UpdateOverride records why a battery is running outside its schedules. An
+// empty source clears the override, but only when it comes from the direction
+// that set it: the charge and discharge controllers for one battery share this
+// snapshot, and the idle one would otherwise erase the running one's state.
+func UpdateOverride(name, direction, source string) {
+	updateSnapshot(name, func(snapshot *Snapshot) {
+		if source == "" {
+			if snapshot.OverrideDirection != direction {
+				return
+			}
+			snapshot.OverrideSource = ""
+			snapshot.OverrideDirection = ""
+			return
+		}
+		snapshot.OverrideSource = source
+		snapshot.OverrideDirection = direction
+	})
+}
+
 func setBoolGauge(gauge *prometheus.GaugeVec, name string, state bool) {
 	if state {
 		gauge.WithLabelValues(name).Set(1.0)

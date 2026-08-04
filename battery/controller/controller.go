@@ -17,7 +17,10 @@
 // update_config, reset_goal) via a buffered channel from the WebSocket client.
 //
 // Key concepts:
-//   - manualOverride: set by remote start command, bypasses schedule checks
+//   - manualOverride: set by remote start command, bypasses schedule checks. Its
+//     overrideSource says who asked: an operator's override is cancelled by the
+//     next config push, one driven by an external event (an EV charging session)
+//     is not — only the event that started it ends it.
 //   - run_once schedules: operate once per day, then skip until next schedule period
 //   - auto-schedules: generated from electricity prices, prefixed "auto-", auto-removed when expired
 //   - goal callbacks: persist "goal reached" state to config.yml so it survives restarts
@@ -29,6 +32,7 @@ import (
 	"gok-pi/battery/entity"
 	"gok-pi/internal/lib/sl"
 	"gok-pi/internal/lib/timer"
+	"gok-pi/metrics/observers"
 	"log/slog"
 	"sync"
 	"time"
@@ -120,6 +124,11 @@ const (
 	OperatingModeAuto   OperatingMode = "auto"
 )
 
+// CommandSourceCharger marks a start command issued because an EV charging
+// session began. Such an override outlives config pushes; see the comment on
+// Controller.overrideSource.
+const CommandSourceCharger = "charger"
+
 type ControlCommand struct {
 	Type         CommandType
 	Power        int
@@ -127,6 +136,7 @@ type ControlCommand struct {
 	Mode         OperatingMode
 	Config       *ConfigUpdate
 	ScheduleName string // Used for CommandResetGoal
+	Source       string // Who asked: "" for a UI/manual command, CommandSourceCharger for an EV session
 }
 
 type CommandLimits struct {
@@ -168,6 +178,17 @@ type Controller struct {
 	log               *slog.Logger
 	commands          chan ControlCommand
 	manualOverride    bool
+	// overrideSource records why manualOverride is set. A config push cancels an
+	// operator's manual override — that is intentional, the new config supersedes
+	// it — but must not cancel one driven by an external event that is still
+	// running, such as an EV charging session: the server pushes config whenever
+	// auto-schedules change, which would silently drop the car back to grid power
+	// mid-charge.
+	overrideSource string
+	// publishedOverride is the last value pushed to the observers, so the
+	// override is reported only when it actually changes rather than on every
+	// poll (each snapshot update costs a spool write and an uplink row).
+	publishedOverride string
 	timezone          *time.Location                // Timezone for schedule time parsing
 	updateGoalReached func(string, time.Time) error // Callback to persist goal reached state
 	clearGoalReached  func(string) error            // Callback to clear goal reached state
@@ -342,6 +363,7 @@ func (c *Controller) Run() error {
 			if err := c.processControlCommand(cmd); err != nil {
 				c.log.With(sl.Err(err)).Error("processing remote command")
 			}
+			c.publishOverride()
 		case status := <-c.statusFeed:
 			if status == nil {
 				c.invalidateStatus()
@@ -353,6 +375,7 @@ func (c *Controller) Run() error {
 			if c.firstStatusPoll {
 				c.syncStateFromBattery(status)
 				c.firstStatusPoll = false
+				c.publishOverride()
 			}
 
 			if len(c.schedules) == 0 {
@@ -736,6 +759,24 @@ func (c *Controller) runOperation() {
 	c.lastTransition = time.Now()
 }
 
+// publishOverride reports the current override state to the observers so the
+// control server and the UI can tell a schedule-driven operation from one an
+// operator or an EV charging session forced. It is a no-op when nothing changed.
+func (c *Controller) publishOverride() {
+	source := ""
+	if c.manualOverride {
+		source = c.overrideSource
+		if source == "" {
+			source = string(OperatingModeManual)
+		}
+	}
+	if source == c.publishedOverride {
+		return
+	}
+	c.publishedOverride = source
+	observers.UpdateOverride(c.name, c.dir.Name, source)
+}
+
 // stopOperation stops the current operation if it is ongoing.
 func (c *Controller) stopOperation() error {
 	shouldStop := c.active || (c.status != nil && c.dir.IsActive(c.status))
@@ -766,6 +807,21 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 
 	switch cmd.Type {
 	case CommandStart:
+		// Limits arrive with the start when the caller drives the battery from an
+		// external event, so the operation is configured and started by a single
+		// ordered command instead of a set_limits/start pair that could be split.
+		// They are applied before the rate is derived and before the SoC guard, so
+		// the caller's floor is the one enforced.
+		if cmd.Limits != nil {
+			if cmd.Limits.PowerLimit != nil {
+				c.powerLimit = *cmd.Limits.PowerLimit
+			}
+			if cmd.Limits.SocLimit != nil {
+				c.socLimit = float64(*cmd.Limits.SocLimit)
+			}
+			c.calculateRate()
+		}
+
 		rate := c.rate
 		if cmd.Power > 0 {
 			rate = cmd.Power
@@ -792,13 +848,17 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 
 		c.rate = rate
 		c.manualOverride = true
+		c.overrideSource = cmd.Source
 		c.ready = true
 
 		if err := c.switchToManual(); err != nil {
 			return fmt.Errorf("switching to manual mode: %w", err)
 		}
 
-		log.With(slog.Int("rate", c.rate)).Info("starting " + c.dir.Name + " via remote command")
+		log.With(
+			slog.Int("rate", c.rate),
+			slog.String("source", c.overrideSource),
+		).Info("starting " + c.dir.Name + " via remote command")
 		if err := c.dir.StartOp(c.rate); err != nil {
 			return fmt.Errorf("starting %s: %w", c.dir.Name, err)
 		}
@@ -808,6 +868,7 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 
 	case CommandStop:
 		c.manualOverride = false
+		c.overrideSource = ""
 		log.Info("stopping " + c.dir.Name + " via remote command")
 		return c.stopOperation()
 
@@ -838,6 +899,7 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 		switch cmd.Mode {
 		case OperatingModeManual:
 			c.manualOverride = true
+			c.overrideSource = cmd.Source
 			if err := c.switchToManual(); err != nil {
 				return fmt.Errorf("forcing manual mode: %w", err)
 			}
@@ -845,6 +907,7 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 			return nil
 		case OperatingModeAuto:
 			c.manualOverride = false
+			c.overrideSource = ""
 			if err := c.switchToAuto(); err != nil {
 				return fmt.Errorf("forcing auto mode: %w", err)
 			}
@@ -865,10 +928,19 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 
 		c.schedules = entity.CloneSchedules(cmd.Config.Schedules)
 
+		// An override driven by an external event survives the config update:
+		// the event, not the config, decides when it ends. The server pushes
+		// config on every auto-schedule change, so clearing it here would cut a
+		// running EV charging session off from the battery.
 		if c.manualOverride {
-			log.Info("config update received, clearing manual override mode")
+			if c.overrideSource != "" {
+				log.With(slog.String("source", c.overrideSource)).
+					Info("config update received, keeping externally driven override")
+			} else {
+				log.Info("config update received, clearing manual override mode")
+				c.manualOverride = false
+			}
 		}
-		c.manualOverride = false
 
 		for i := range c.schedules {
 			if oldSchedule, exists := oldScheduleMap[c.schedules[i].Name]; exists {
@@ -902,7 +974,15 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 		}
 
 		oldRate := c.rate
-		c.checkTime()
+		if c.manualOverride {
+			// Mirror evaluate(): an override owns the limits and the rate, so
+			// re-deriving them from the schedules here would reset a running
+			// operation to the battery defaults on the next poll.
+			c.ready = true
+			c.deadbandHold = false
+		} else {
+			c.checkTime()
+		}
 
 		if c.active && c.ready && c.rate > 0 && c.rate != oldRate {
 			log.With(

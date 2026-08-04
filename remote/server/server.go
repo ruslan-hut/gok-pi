@@ -12,11 +12,14 @@
 //   - Server → Agent: config push, commands (start/stop discharge/charge, set_limits, etc.)
 //   - Server → UI:    agent summaries, telemetry broadcasts, config updates, price data
 //   - UI → Server:    config changes (PUT /api/agents/{id}/config), commands (POST /api/agents/{id}/command)
+//   - evsys → Server: EV charging session events (POST /api/webhooks/evsys), which
+//     turn into discharge commands for the linked battery; see chargers.go
 //
 // Background goroutines:
 //   - Price fetcher: polls REData API for electricity prices (every 15 min)
 //   - Auto-scheduler: generates charge/discharge schedules from prices (every 5 min)
 //   - Session cleanup: removes sessions older than 1 year (every hour)
+//   - Charger sweeper: releases batteries held by expired EV sessions (every minute)
 //
 // Config persistence: agent configs are stored in a JSON file (data/agent-configs.json)
 // with optimistic locking (revision field) to prevent concurrent update conflicts.
@@ -69,6 +72,9 @@ type Server struct {
 	sessions    *SessionTracker
 	priceLimits *PriceLimitsStore
 
+	chargerLinks    *ChargerLinkStore
+	chargerSessions *chargerSessionStore
+
 	emailBrevo     *email.BrevoClient
 	emailScheduler *email.Scheduler
 }
@@ -103,6 +109,15 @@ func New(cfg Config, log *slog.Logger) *Server {
 
 	priceLimitsStore := NewPriceLimitsStore("data/price-limits.json")
 
+	chargerLinksPath := cfg.ChargerLinks
+	if chargerLinksPath == "" {
+		chargerLinksPath = "data/charger-links.json"
+	}
+	chargerSessionsPath := cfg.ChargerSessions
+	if chargerSessionsPath == "" {
+		chargerSessionsPath = "data/charger-sessions.json"
+	}
+
 	srv := &Server{
 		cfg: cfg,
 		log: log,
@@ -120,6 +135,19 @@ func New(cfg Config, log *slog.Logger) *Server {
 		prices:      prices,
 		sessions:    sessions,
 		priceLimits: priceLimitsStore,
+
+		chargerLinks:    NewChargerLinkStore(chargerLinksPath),
+		chargerSessions: newChargerSessionStore(chargerSessionsPath),
+	}
+
+	if strings.TrimSpace(cfg.ChargerWebhookToken) == "" {
+		log.Info("evsys charger webhook disabled: no token configured")
+	} else {
+		log.Info("evsys charger webhook enabled",
+			slog.String("links", chargerLinksPath),
+			slog.Int("links_configured", len(srv.chargerLinks.List())),
+			slog.Int("sessions_restored", len(srv.chargerSessions.List())),
+		)
 	}
 
 	if err := cfg.EmailProvider.Validate(); err != nil {
@@ -189,6 +217,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	go s.prices.Run(ctx)
 	go s.runAutoScheduler(ctx)
 	go s.runSessionCleanup(ctx)
+	go s.runChargerSweeper(ctx)
 	if s.emailScheduler != nil {
 		go s.emailScheduler.Run(ctx)
 	}
@@ -211,6 +240,11 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/db-stats", s.handleDBStats)
 	mux.HandleFunc("/api/db/records", s.requireAuth(s.handleDBRecords))
 	mux.HandleFunc("/api/email/status", s.handleEmailStatus)
+	// EV charger integration: evsys authenticates with its own webhook token,
+	// so this endpoint is outside the UI auth scheme entirely.
+	mux.HandleFunc("/api/webhooks/evsys", s.handleEVSysWebhook)
+	mux.HandleFunc("/api/charger-links", s.requireAuthForWrites(s.handleChargerLinks))
+	mux.HandleFunc("/api/charger-sessions", s.handleChargerSessions)
 
 	if s.cfg.UIStaticDir != "" {
 		fs := http.FileServer(http.Dir(s.cfg.UIStaticDir))
@@ -498,6 +532,10 @@ func (s *Server) registerAgent(ac *agentConnection) {
 			).Warn("failed to push config to agent on registration")
 		}
 	}
+
+	// A charger-driven discharge lives only in the agent's memory, so an agent
+	// that restarted (or missed the command while offline) needs it re-asserted.
+	s.reassertChargerSessions(ac.id)
 }
 
 func (s *Server) unregisterAgent(ac *agentConnection) {

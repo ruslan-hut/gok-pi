@@ -121,6 +121,14 @@ export function BatteryCard({
                 ? "Charging"
                 : "Idle"}
           </span>
+          {snapshot.override_source === "charger" && (
+            <span
+              className="badge"
+              title="An EV charging session is driving this battery; it overrides the schedule until the session ends."
+            >
+              <Icon name="ev_station" size={14} /> EV session
+            </span>
+          )}
           {!readonly && (
             <span
               className="battery-card-toggle"
