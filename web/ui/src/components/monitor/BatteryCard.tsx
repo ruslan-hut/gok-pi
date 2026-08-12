@@ -30,9 +30,21 @@ export function BatteryCard({
   const [expanded, setExpanded] = useState(false);
   const [commandState, setCommandState] =
     useState<CommandState>(defaultCommandState);
+  const [sent, setSent] = useState<string | null>(null);
 
   const { name } = snapshot;
   const controlsDisabled = !isOnline;
+
+  // Confirm dispatch at the button that caused it. The command is only sent
+  // here — the real resulting state arrives back on the flow badge above.
+  const send = (command: string, payload?: unknown) => {
+    onCommand(command, name, payload);
+    setSent(command);
+    window.setTimeout(
+      () => setSent((current) => (current === command ? null : current)),
+      2000,
+    );
+  };
 
   const hasConfigLimits =
     batteryConfig &&
@@ -43,15 +55,19 @@ export function BatteryCard({
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case "Connected":
-        return "online";
-      case "Disconnected":
-        return "offline";
+        return "ok";
       case "Disabled":
-        return "disabled";
+        return "muted";
       default:
-        return "offline";
+        return "fault";
     }
   };
+
+  const flow = snapshot.battery_discharging
+    ? { className: "discharge", label: "Discharging" }
+    : snapshot.battery_charging
+      ? { className: "charge", label: "Charging" }
+      : { className: "idle", label: "Idle" };
 
   const renderOperatingMode = (mode: string | undefined | null): string => {
     if (!mode) return "n/a";
@@ -112,15 +128,7 @@ export function BatteryCard({
               <Icon name="check_circle" size={18} />
             </span>
           )}
-          <span
-            className={`badge ${snapshot.battery_discharging ? "online" : "offline"}`}
-          >
-            {snapshot.battery_discharging
-              ? "Discharging"
-              : snapshot.battery_charging
-                ? "Charging"
-                : "Idle"}
-          </span>
+          <span className={`badge ${flow.className}`}>{flow.label}</span>
           {!readonly && (
             <span
               className="battery-card-toggle"
@@ -168,57 +176,45 @@ export function BatteryCard({
         </div>
 
         <div className="control-group">
-          <span className="control-label">Discharge</span>
           <div className="control-actions">
             <button
-              className="control-button control-button-primary"
+              className="control-button control-button-discharge"
               disabled={controlsDisabled}
-              onClick={() =>
-                onCommand("start_discharge", name, {
-                  power: commandState.power,
-                })
-              }
-              title="Start Discharge"
+              onClick={() => send("start_discharge", { power: commandState.power })}
             >
               <span className="control-button-icon"><Icon name="play_arrow" size={16} /></span>
-              Start
+              {sent === "start_discharge" ? "Sent" : "Start discharge"}
             </button>
             <button
               className="control-button"
               disabled={controlsDisabled}
-              onClick={() => onCommand("stop_discharge", name)}
-              title="Stop Discharge"
+              onClick={() => send("stop_discharge")}
+              aria-label="Stop discharge"
             >
               <span className="control-button-icon"><Icon name="stop" size={16} /></span>
-              Stop
+              {sent === "stop_discharge" ? "Sent" : "Stop"}
             </button>
           </div>
         </div>
 
         <div className="control-group">
-          <span className="control-label">Charge</span>
           <div className="control-actions">
             <button
-              className="control-button control-button-primary"
+              className="control-button control-button-charge"
               disabled={controlsDisabled}
-              onClick={() =>
-                onCommand("start_charge", name, {
-                  power: commandState.power,
-                })
-              }
-              title="Start Charge"
+              onClick={() => send("start_charge", { power: commandState.power })}
             >
               <span className="control-button-icon"><Icon name="play_arrow" size={16} /></span>
-              Start
+              {sent === "start_charge" ? "Sent" : "Start charge"}
             </button>
             <button
               className="control-button"
               disabled={controlsDisabled}
-              onClick={() => onCommand("stop_charge", name)}
-              title="Stop Charge"
+              onClick={() => send("stop_charge")}
+              aria-label="Stop charge"
             >
               <span className="control-button-icon"><Icon name="stop" size={16} /></span>
-              Stop
+              {sent === "stop_charge" ? "Sent" : "Stop"}
             </button>
           </div>
         </div>
@@ -276,37 +272,35 @@ export function BatteryCard({
               className="control-button control-button-secondary"
               disabled={controlsDisabled}
               onClick={() =>
-                onCommand("set_limits", name, {
+                send("set_limits", {
                   power_limit: commandState.powerLimit,
                   soc_limit: commandState.socLimit,
                 })
               }
             >
-              Update Limits
+              {sent === "set_limits" ? "Sent" : "Update limits"}
             </button>
           </div>
         )}
 
         <div className="control-group">
-          <span className="control-label">Mode</span>
-          <div className="control-actions">
+          <span className="control-label">Operating mode</span>
+          <div className="control-actions control-actions-even">
             <button
               className="control-button"
               disabled={controlsDisabled}
-              onClick={() =>
-                onCommand("force_mode", name, { mode: "manual" })
-              }
+              onClick={() => send("force_mode", { mode: "manual" })}
+              title="Take the battery off its own automation so schedules and commands from here apply"
             >
-              Force Manual
+              Switch to manual
             </button>
             <button
               className="control-button"
               disabled={controlsDisabled}
-              onClick={() =>
-                onCommand("force_mode", name, { mode: "auto" })
-              }
+              onClick={() => send("force_mode", { mode: "auto" })}
+              title="Hand control back to the battery's own automation"
             >
-              Force Auto
+              Switch to auto
             </button>
           </div>
         </div>

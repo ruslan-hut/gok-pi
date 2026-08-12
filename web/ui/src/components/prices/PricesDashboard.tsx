@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { exportPricesURL, fetchPrices, fetchSessions, savePriceLimits } from "../../api";
+import { fmtAgo, fmtDateTime, fmtEUR, fmtEnergy, fmtSignedEUR } from "../../lib/format";
 import type { BatterySummary, DayData, PriceLimits, PricesState, ScheduleWindow, SessionsResponse } from "../../types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -88,14 +89,8 @@ export default function PricesDashboard({ readonly }: { readonly?: boolean }) {
       {state && (
         <>
           <div className="prices-meta">
-            <span>
-              Last updated:{" "}
-              {new Date(state.last_updated).toLocaleString()}
-            </span>
-            <span>
-              Next update:{" "}
-              {new Date(state.next_update).toLocaleString()}
-            </span>
+            <span>Last updated {fmtAgo(state.last_updated)}</span>
+            <span>Next update {fmtDateTime(state.next_update)}</span>
             {loading && <span className="spinner-small" />}
           </div>
           <PriceLimitsPanel
@@ -210,11 +205,11 @@ function PriceLimitsPanel({
             </div>
           </label>
           <button
-            className="btn btn-primary"
+            className="primary"
             onClick={handleSave}
             disabled={saving || !hasChanges}
           >
-            {saving ? "Saving..." : "Save"}
+            {saving ? "Saving…" : "Save limits"}
           </button>
         </div>
       )}
@@ -351,7 +346,7 @@ function PriceChart({
         x2={width - padding.right}
         y1={yScale(stats.low_eur_mwh)}
         y2={yScale(stats.low_eur_mwh)}
-        style={{ stroke: "var(--color-success)" }}
+        style={{ stroke: "var(--color-charge)" }}
         strokeDasharray="4,3"
         strokeWidth="1"
         opacity="0.5"
@@ -363,7 +358,7 @@ function PriceChart({
         x2={width - padding.right}
         y1={yScale(stats.high_eur_mwh)}
         y2={yScale(stats.high_eur_mwh)}
-        style={{ stroke: "var(--color-danger)" }}
+        style={{ stroke: "var(--color-discharge)" }}
         strokeDasharray="4,3"
         strokeWidth="1"
         opacity="0.5"
@@ -375,7 +370,7 @@ function PriceChart({
         x2={width - padding.right}
         y1={yScale(stats.avg_price_eur_mwh)}
         y2={yScale(stats.avg_price_eur_mwh)}
-        style={{ stroke: "var(--color-warning)" }}
+        style={{ stroke: "var(--color-text-muted)" }}
         strokeDasharray="4,3"
         strokeWidth="1"
         opacity="0.6"
@@ -391,8 +386,8 @@ function PriceChart({
         const y = Math.min(barTop, barBottom);
 
         let fill = "var(--color-text-dim)";
-        if (chargeHours.has(p.hour)) fill = "var(--color-success)";
-        if (dischargeHours.has(p.hour)) fill = "var(--color-danger)";
+        if (chargeHours.has(p.hour)) fill = "var(--color-charge)";
+        if (dischargeHours.has(p.hour)) fill = "var(--color-discharge)";
 
         return (
           <g key={p.hour}>
@@ -418,7 +413,7 @@ function PriceChart({
           x2={width - padding.right}
           y1={yScale(limits.charge_limit_eur_mwh)}
           y2={yScale(limits.charge_limit_eur_mwh)}
-          style={{ stroke: "var(--color-success)" }}
+          style={{ stroke: "var(--color-charge)" }}
           strokeDasharray="6,3"
           strokeWidth="1.5"
           opacity="0.9"
@@ -432,7 +427,7 @@ function PriceChart({
           x2={width - padding.right}
           y1={yScale(limits.discharge_limit_eur_mwh)}
           y2={yScale(limits.discharge_limit_eur_mwh)}
-          style={{ stroke: "var(--color-danger)" }}
+          style={{ stroke: "var(--color-discharge)" }}
           strokeDasharray="6,3"
           strokeWidth="1.5"
           opacity="0.9"
@@ -459,7 +454,7 @@ function PriceChart({
         y={4}
         width={10}
         height={10}
-        style={{ fill: "var(--color-success)" }}
+        style={{ fill: "var(--color-charge)" }}
         rx="2"
       />
       <text x={width - 156} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
@@ -470,7 +465,7 @@ function PriceChart({
         y={4}
         width={10}
         height={10}
-        style={{ fill: "var(--color-danger)" }}
+        style={{ fill: "var(--color-discharge)" }}
         rx="2"
       />
       <text x={width - 106} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
@@ -481,7 +476,7 @@ function PriceChart({
         x2={width - 32}
         y1={9}
         y2={9}
-        style={{ stroke: "var(--color-warning)" }}
+        style={{ stroke: "var(--color-text-muted)" }}
         strokeDasharray="4,3"
         opacity="0.6"
       />
@@ -553,7 +548,7 @@ function ScheduleTable({
             <tr>
               <th>Type</th>
               <th>Window</th>
-              <th>Avg Price</th>
+              <th className="num">Avg price</th>
               <th></th>
             </tr>
           </thead>
@@ -568,7 +563,7 @@ function ScheduleTable({
                 <td>
                   {fmt2(w.start_hour)}:00 — {fmt2(w.end_hour)}:00
                 </td>
-                <td>{w.avg_price_eur_mwh.toFixed(1)} EUR/MWh</td>
+                <td className="num">{w.avg_price_eur_mwh.toFixed(1)} EUR/MWh</td>
                 <td>
                   {i === activeIdx && <span className="schedule-status-badge schedule-status-active">ACTIVE</span>}
                   {i === nextIdx && <span className="schedule-status-badge schedule-status-next">NEXT</span>}
@@ -630,11 +625,11 @@ function SessionsPanel({
           <thead>
             <tr>
               <th>Battery</th>
-              <th>Charged</th>
-              <th>Charge Cost</th>
-              <th>Discharged</th>
-              <th>Discharge Value</th>
-              <th>Net</th>
+              <th className="num">Charged</th>
+              <th className="num">Cost</th>
+              <th className="num">Discharged</th>
+              <th className="num">Revenue</th>
+              <th className="num">Net</th>
             </tr>
           </thead>
           <tbody>
@@ -642,14 +637,22 @@ function SessionsPanel({
               <tr key={s.battery_name}>
                 <td>
                   {s.battery_name}
-                  {s.active_charge && <span className="session-live-dot" />}
-                  {s.active_discharge && <span className="session-live-dot" />}
+                  {s.active_charge && (
+                    <span className="session-live" title="Charging now">
+                      <span className="session-live-dot" /> charging
+                    </span>
+                  )}
+                  {s.active_discharge && (
+                    <span className="session-live" title="Discharging now">
+                      <span className="session-live-dot" /> discharging
+                    </span>
+                  )}
                 </td>
-                <td>{fmtEnergy(s.charge_energy_wh)}</td>
-                <td>{fmtCost(s.charge_cost_eur)}</td>
-                <td>{fmtEnergy(s.discharge_energy_wh)}</td>
-                <td>{fmtCost(s.discharge_cost_eur)}</td>
-                <td><SignedCost eur={s.net_cost_eur} /></td>
+                <td className="num">{fmtEnergy(s.charge_energy_wh)}</td>
+                <td className="num">{fmtCost(s.charge_cost_eur)}</td>
+                <td className="num">{fmtEnergy(s.discharge_energy_wh)}</td>
+                <td className="num">{fmtCost(s.discharge_cost_eur)}</td>
+                <td className="num"><SignedCost eur={s.net_cost_eur} /></td>
               </tr>
             ))}
           </tbody>
@@ -671,7 +674,7 @@ function SessionsPanel({
               <span className="data-card-value">{fmtEnergy(s.charge_energy_wh)}</span>
             </div>
             <div className="data-card-row">
-              <span className="data-card-label">Charge Cost</span>
+              <span className="data-card-label">Cost</span>
               <span className="data-card-value">{fmtCost(s.charge_cost_eur)}</span>
             </div>
             <div className="data-card-row">
@@ -679,7 +682,7 @@ function SessionsPanel({
               <span className="data-card-value">{fmtEnergy(s.discharge_energy_wh)}</span>
             </div>
             <div className="data-card-row">
-              <span className="data-card-label">Discharge Value</span>
+              <span className="data-card-label">Revenue</span>
               <span className="data-card-value">{fmtCost(s.discharge_cost_eur)}</span>
             </div>
             <div className="data-card-row">
@@ -752,22 +755,18 @@ function ExportPricesPanel() {
   );
 }
 
-function fmtEnergy(wh: number): string {
-  if (wh <= 0) return "—";
-  if (wh >= 1000) return `${(wh / 1000).toFixed(2)} kWh`;
-  return `${wh.toFixed(0)} Wh`;
-}
-
 function fmtCost(eur: number): string {
   if (eur === 0) return "—";
-  return `${Math.abs(eur).toFixed(4)} EUR`;
+  return fmtEUR(Math.abs(eur));
 }
 
 function SignedCost({ eur }: { eur: number }) {
   if (eur === 0) return <>{"—"}</>;
-  const sign = eur > 0 ? "+" : "-";
-  const color = eur > 0 ? "var(--color-success)" : "var(--color-danger)";
-  return <span style={{ color }}>{sign}{Math.abs(eur).toFixed(4)} EUR</span>;
+  return (
+    <span className={eur < 0 ? "amount-negative" : "amount-positive"}>
+      {fmtSignedEUR(eur)}
+    </span>
+  );
 }
 
 function fmt2(n: number): string {

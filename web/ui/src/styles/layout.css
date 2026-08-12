@@ -545,6 +545,9 @@
 
 .db-stats-agents table {
   width: 100%;
+  /* Six short columns stretched over the full content width force the eye to
+     travel; cap it so the row reads as one unit. */
+  max-width: 760px;
   border-collapse: collapse;
   font-size: 0.8rem;
 }
@@ -560,6 +563,19 @@
 .db-stats-agents td {
   padding: 0.35rem 0.5rem;
   color: var(--color-text);
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.db-stats-agents th.num,
+.db-stats-agents td.num {
+  text-align: right;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.db-stats-agents td:first-child {
+  font-family: var(--font-body), sans-serif;
 }
 
 /* Tablet breakpoint */

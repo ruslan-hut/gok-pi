@@ -7,6 +7,7 @@ import { ConfigActions } from "./ConfigActions";
 import { CopyButton } from "../shared/CopyButton";
 import { Icon } from "../shared/Icon";
 import { formatConfigDraft } from "../../hooks/useConfig";
+import { fmtDateTime } from "../../lib/format";
 import type { AgentConfig, BatteryConfig, EmailReportsConfig, ScheduleConfig } from "../../types";
 
 interface ConfigTabProps {
@@ -166,7 +167,7 @@ export function ConfigTab({
       )}
       <p className="config-meta">
         {config
-          ? `Last updated ${new Date(config.updated_at).toLocaleString()}`
+          ? `Last updated ${fmtDateTime(config.updated_at)}`
           : "No remote configuration stored yet. Configure batteries and schedules below."}
       </p>
 

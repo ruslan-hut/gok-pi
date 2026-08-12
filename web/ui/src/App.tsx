@@ -6,6 +6,7 @@ import {
   sendCommand,
 } from "./api";
 import Login from "./Login";
+import { fmtAgo, fmtDateTime } from "./lib/format";
 import { useAgents } from "./hooks/useAgents";
 import { useConfig } from "./hooks/useConfig";
 import { useLogs } from "./hooks/useLogs";
@@ -215,17 +216,14 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, b
                 <div className="agent-header">
                   <h2>{deviceName}</h2>
                   <span
-                    className={`badge ${selectedAgentOnline ? "online" : "offline"}`}
+                    className={`badge ${selectedAgentOnline ? "ok" : "fault"}`}
                   >
                     {selectedAgentOnline ? "Connected" : "Offline"}
                   </span>
                 </div>
                 <div className="status-bar">
-                  <span>
-                    Last contact:{" "}
-                    {new Date(
-                      selectedAgent.last_seen,
-                    ).toLocaleTimeString()}
+                  <span title={fmtDateTime(selectedAgent.last_seen)}>
+                    Last contact {fmtAgo(selectedAgent.last_seen)}
                   </span>
                 </div>
               </header>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchDBStats } from "../../api";
+import { fmtAgo, fmtBytes, fmtDate, fmtEnergy, fmtSignedEUR } from "../../lib/format";
 import { Icon } from "../shared/Icon";
 import type { AgentsMap, AppPage, DBStats, AgentDBStats } from "../../types";
 
@@ -56,7 +57,7 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                     agent.agent.id}
                 </strong>
                 <span
-                  className={`badge ${agent.connected === false ? "offline" : "online"}`}
+                  className={`badge ${agent.connected === false ? "fault" : "ok"}`}
                 >
                   {agent.connected === false ? "Offline" : "Online"}
                 </span>
@@ -65,14 +66,7 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                 <span>{agent.agent.env}</span>
                 {agent.connected === false && (
                   <span className="agent-last-seen">
-                    Last seen{" "}
-                    {(() => {
-                      const d = new Date(agent.last_seen);
-                      const isToday = d.toDateString() === new Date().toDateString();
-                      return isToday
-                        ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                        : d.toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-                    })()}
+                    Last seen {fmtAgo(agent.last_seen)}
                   </span>
                 )}
               </div>
@@ -121,7 +115,7 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                 <span className="db-stats-label">Data range</span>
                 <span className="db-stats-value">
                   {dbStats.oldest_session
-                    ? `${new Date(dbStats.oldest_session).toLocaleDateString()} — ${dbStats.newest_session ? new Date(dbStats.newest_session).toLocaleDateString() : "—"}`
+                    ? `${fmtDate(dbStats.oldest_session)} — ${dbStats.newest_session ? fmtDate(dbStats.newest_session) : "—"}`
                     : "—"}
                 </span>
               </div>
@@ -132,27 +126,35 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                   <thead>
                     <tr>
                       <th>Device</th>
-                      <th>Sessions</th>
-                      <th>Charge</th>
-                      <th>Discharge</th>
-                      <th>Energy</th>
-                      <th>Net Result</th>
+                      <th className="num">Sessions</th>
+                      <th className="num">Charge</th>
+                      <th className="num">Discharge</th>
+                      <th className="num">Energy</th>
+                      <th className="num">Net</th>
                     </tr>
                   </thead>
                   <tbody>
                     {agentStats.map((a) => (
                       <tr key={a.agent_id}>
                         <td>{a.agent_id}</td>
-                        <td>{a.total_sessions}</td>
-                        <td>{a.charge_sessions}</td>
-                        <td>{a.discharge_sessions}</td>
-                        <td>{fmtEnergyWh(a.total_energy_wh)}</td>
-                        <td>
+                        <td className="num">{a.total_sessions}</td>
+                        <td className="num">{a.charge_sessions}</td>
+                        <td className="num">{a.discharge_sessions}</td>
+                        <td className="num">{fmtEnergy(a.total_energy_wh)}</td>
+                        <td className="num">
                           {a.net_cost_eur !== 0 ? (
-                            <span style={{ color: a.net_cost_eur > 0 ? "var(--color-success)" : "var(--color-danger)" }}>
-                              {a.net_cost_eur > 0 ? "+" : "-"}{Math.abs(a.net_cost_eur).toFixed(2)} EUR
+                            <span
+                              className={
+                                a.net_cost_eur < 0
+                                  ? "amount-negative"
+                                  : "amount-positive"
+                              }
+                            >
+                              {fmtSignedEUR(a.net_cost_eur)}
                             </span>
-                          ) : "—"}
+                          ) : (
+                            "—"
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -167,14 +169,3 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
   );
 }
 
-function fmtBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function fmtEnergyWh(wh: number): string {
-  if (wh <= 0) return "—";
-  if (wh >= 1000) return `${(wh / 1000).toFixed(1)} kWh`;
-  return `${wh.toFixed(0)} Wh`;
-}

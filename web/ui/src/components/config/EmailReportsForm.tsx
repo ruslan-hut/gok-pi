@@ -98,7 +98,7 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
         <h4>Email reports</h4>
         {status && (
           <span
-            className={`badge ${status.enabled ? "badge-success" : "badge-warning"}`}
+            className={`badge ${status.enabled ? "ok" : "muted"}`}
             title={status.sender ? `Sender: ${status.sender}` : undefined}
           >
             Email provider: {status.enabled ? "active" : status.configured ? "configured" : "not configured"}

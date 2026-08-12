@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { fmtDateTime } from "../../lib/format";
 import { Icon } from "../shared/Icon";
 import type { ScheduleConfig } from "../../types";
 
@@ -15,19 +16,6 @@ interface ScheduleConfigFormProps {
   isOnline?: boolean;
 }
 
-function formatGoalReachedTime(isoTime: string): string {
-  try {
-    const date = new Date(isoTime);
-    return date.toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return isoTime;
-  }
-}
 
 export function ScheduleConfigForm({
   index,
@@ -104,7 +92,7 @@ export function ScheduleConfigForm({
           title={`Goal reached at ${goalReachedAt}`}
         >
           <span className="goal-badge-text">
-            <Icon name="check_circle" size={16} /> Goal reached {formatGoalReachedTime(goalReachedAt)}
+            <Icon name="check_circle" size={16} /> Goal reached {fmtDateTime(goalReachedAt)}
           </span>
           {onResetGoal && !readonly && (
             <button

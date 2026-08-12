@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { fetchDBRecords, fetchDBStats } from "../../api";
+import {
+  fmtBytes,
+  fmtDate,
+  fmtDateTime,
+  fmtDuration,
+  fmtEnergy,
+  fmtSignedEUR,
+} from "../../lib/format";
 import { Icon } from "../shared/Icon";
 import type { DBRecordsQuery, DBRecordsResponse, DBStats } from "../../types";
 
@@ -106,7 +114,7 @@ export function DatabaseInspector() {
               <span className="db-stats-label">Range</span>
               <span className="db-stats-value">
                 {dbStats.oldest_session
-                  ? `${new Date(dbStats.oldest_session).toLocaleDateString()} — ${dbStats.newest_session ? new Date(dbStats.newest_session).toLocaleDateString() : "now"}`
+                  ? `${fmtDate(dbStats.oldest_session)} — ${dbStats.newest_session ? fmtDate(dbStats.newest_session) : "now"}`
                   : "—"}
               </span>
             </div>
@@ -185,8 +193,85 @@ export function DatabaseInspector() {
       {/* Records table */}
       {data && data.records && data.records.length > 0 && (
         <>
-          {/* Card list */}
-          <div className="card-list">
+          {/* Desktop: one row per record, so a page of results reads as a list
+              rather than a stack of full-width cards. */}
+          <div className="db-inspector-table">
+            <table>
+              <thead>
+                <tr>
+                  <th className="num">#</th>
+                  <th>Battery</th>
+                  <th>Type</th>
+                  <th>Agent</th>
+                  <th>Started</th>
+                  <th className="num">Duration</th>
+                  <th className="num">Energy</th>
+                  <th className="num">SoC</th>
+                  <th className="num">Cost</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.records.map((r) => (
+                  <Fragment key={r.id}>
+                    <tr
+                      className={`db-inspector-row${expandedId === r.id ? " db-inspector-row-expanded" : ""}`}
+                      onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+                      tabIndex={0}
+                      aria-expanded={expandedId === r.id}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setExpandedId(expandedId === r.id ? null : r.id);
+                        }
+                      }}
+                    >
+                      <td className="num db-inspector-id">{r.id}</td>
+                      <td>{r.battery_name}</td>
+                      <td>
+                        <span className={`schedule-badge ${r.type === "charge" ? "schedule-badge-charge" : "schedule-badge-discharge"}`}>
+                          {r.type}
+                        </span>
+                      </td>
+                      <td className="db-inspector-dim">{r.agent_id}</td>
+                      <td>{fmtDateTime(r.started_at)}</td>
+                      <td className="num">
+                        {r.duration_seconds ? fmtDuration(r.duration_seconds) : "—"}
+                      </td>
+                      <td className="num">{fmtEnergy(r.energy_wh)}</td>
+                      <td className="num db-inspector-dim">
+                        {r.soc_start.toFixed(0)}→{r.soc_end.toFixed(0)}%
+                      </td>
+                      <td className="num">
+                        <span
+                          className={
+                            r.cost_eur < 0 ? "amount-negative" : "amount-positive"
+                          }
+                        >
+                          {fmtSignedCost(r.cost_eur)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${r.ended_at ? "muted" : "ok"}`}>
+                          {r.ended_at ? "Closed" : "Open"}
+                        </span>
+                      </td>
+                    </tr>
+                    {expandedId === r.id && (
+                      <tr className="db-inspector-detail-row">
+                        <td colSpan={10}>
+                          <RecordDetail record={r} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Narrow screens: cards */}
+          <div className="card-list db-inspector-cards">
             {data.records.map((r) => (
               <div
                 key={r.id}
@@ -220,7 +305,7 @@ export function DatabaseInspector() {
                 <div className="data-card-row">
                   <span className="data-card-label">Status</span>
                   <span className="data-card-value">
-                    <span className={`badge ${r.ended_at ? "offline" : "online"}`}>
+                    <span className={`badge ${r.ended_at ? "muted" : "ok"}`}>
                       {r.ended_at ? "Closed" : "Open"}
                     </span>
                   </span>
@@ -276,7 +361,7 @@ function RecordDetail({ record }: { record?: DBRecordsResponse["records"][0] }) 
   return (
     <div className="db-inspector-detail" onClick={(e) => e.stopPropagation()}>
       <div className="db-inspector-detail-grid">
-        <DetailItem label="Ended" value={record.ended_at ? new Date(record.ended_at).toLocaleString() : "—"} />
+        <DetailItem label="Ended" value={record.ended_at ? fmtDateTime(record.ended_at) : "—"} />
         <DetailItem label="Avg Power" value={record.avg_power_w ? `${record.avg_power_w.toFixed(0)} W` : "—"} />
         <DetailItem label="Peak Power" value={record.peak_power_w ? `${record.peak_power_w.toFixed(0)} W` : "—"} />
         <DetailItem label="SoC Start" value={record.soc_start ? `${record.soc_start.toFixed(1)}%` : "—"} />
@@ -298,38 +383,7 @@ function DetailItem({ label, value, mono }: { label: string; value: string; mono
   );
 }
 
-function fmtBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function fmtEnergy(wh: number): string {
-  if (wh <= 0) return "—";
-  if (wh >= 1000) return `${(wh / 1000).toFixed(2)} kWh`;
-  return `${wh.toFixed(0)} Wh`;
-}
-
 function fmtSignedCost(eur: number): string {
   if (eur === 0) return "—";
-  const sign = eur > 0 ? "+" : "-";
-  return `${sign}${Math.abs(eur).toFixed(4)} EUR`;
-}
-
-function fmtDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function fmtDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds.toFixed(0)}s`;
-  if (seconds < 3600) return `${(seconds / 60).toFixed(0)}m`;
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
+  return fmtSignedEUR(eur);
 }

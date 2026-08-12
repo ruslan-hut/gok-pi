@@ -89,9 +89,94 @@
   cursor: not-allowed;
 }
 
+/* Records table (wide screens) */
+.db-inspector-table {
+  overflow-x: auto;
+}
+
+.db-inspector-cards {
+  display: none;
+}
+
+.db-inspector-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.db-inspector-table th {
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.db-inspector-table td {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-color-subtle);
+  color: var(--color-text);
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.db-inspector-table th.num,
+.db-inspector-table td.num {
+  text-align: right;
+  width: 1%;
+}
+
+.db-inspector-id {
+  color: var(--color-text-dim);
+}
+
+.db-inspector-dim {
+  color: var(--color-text-muted);
+}
+
+.db-inspector-row {
+  cursor: pointer;
+}
+
+.db-inspector-row:hover td {
+  background: var(--color-bg-hover);
+}
+
+.db-inspector-row:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.db-inspector-row-expanded td {
+  background: var(--color-bg-muted);
+  border-bottom-color: transparent;
+}
+
+.db-inspector-detail-row td {
+  padding: 0 var(--space-md) var(--space-md);
+  white-space: normal;
+}
+
 /* Card tweaks */
 .db-inspector-card {
   cursor: pointer;
+}
+
+/* Ten columns stop fitting well before the phone breakpoint, so this view
+   falls back to cards earlier than the rest of the app. */
+@media (max-width: 900px) {
+  .db-inspector-table {
+    display: none;
+  }
+
+  .db-inspector-cards {
+    display: flex;
+  }
 }
 
 /* Record detail panel */

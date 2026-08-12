@@ -4,6 +4,8 @@
   display: grid;
   gap: var(--space-lg);
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* Expanding one card's controls must not stretch its neighbours. */
+  align-items: start;
 }
 
 /* Staggered animation for battery cards */
@@ -12,30 +14,39 @@
 .metrics-grid > :nth-child(3) { animation-delay: 0.12s; }
 .metrics-grid > :nth-child(4) { animation-delay: 0.18s; }
 
+/* Operating mode is not a power flow, so it gets an edge marker rather than a
+   colour wash that would compete with the charge/discharge badges. */
 .battery-card.manual-mode {
-  background: var(--color-manual-mode-bg);
-  border-color: var(--color-manual-mode-border);
-  box-shadow: var(--shadow-card), var(--shadow-glow-success);
+  border-left: 3px solid var(--color-primary);
 }
 
 .battery-card.service-mode {
+  border-left: 3px solid var(--color-danger);
   background: var(--color-service-mode-bg);
   border-color: var(--color-service-mode-border);
-  box-shadow: var(--shadow-card), 0 0 20px rgba(248, 113, 113, 0.1);
+  border-left-color: var(--color-danger);
 }
 
 .battery-card-header {
   cursor: pointer;
   user-select: none;
   transition: all var(--transition-base);
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 
 .battery-card-header:hover {
   opacity: 0.85;
 }
 
+/* The name asks for 8rem before anything else gets space, so the badges wrap to
+   their own line rather than the battery name being truncated. */
 .battery-card-title {
-  flex: 1;
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .battery-card-badges {
@@ -43,6 +54,7 @@
   align-items: center;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .battery-card-toggle {
@@ -142,10 +154,17 @@
   cursor: not-allowed;
 }
 
+/* Start and stop share a row, with the start action taking the larger share so
+   its fuller label fits inside a 280px card. */
 .control-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
   gap: var(--space-sm);
-  flex-wrap: wrap;
+}
+
+/* Operating mode is two peers, not a start/stop pair. */
+.control-actions-even {
+  grid-template-columns: 1fr 1fr;
 }
 
 .control-inputs-row {
@@ -176,7 +195,8 @@
 
 .control-button {
   height: 40px;
-  padding: 0 var(--space-lg);
+  padding: 0 var(--space-md);
+  min-width: 0;
   font-size: 0.95rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color-input);
@@ -209,23 +229,32 @@
   background: var(--color-bg-disabled);
 }
 
-.control-button.control-button-primary {
-  border: none;
-  background: var(--gradient-primary);
-  color: #fff;
+/* The two start buttons move energy in opposite directions, so they never look
+   alike: each one carries its own flow colour. */
+.control-button.control-button-charge {
+  color: var(--color-charge);
+  background: var(--color-charge-bg);
+  border-color: var(--color-charge-border);
   font-weight: 600;
-  box-shadow: var(--shadow-primary-button);
 }
 
-.control-button.control-button-primary:hover:not(:disabled) {
-  background: var(--gradient-primary);
-  box-shadow: var(--shadow-primary-button-hover);
-  transform: translateY(-1px);
+.control-button.control-button-charge:hover:not(:disabled) {
+  background: var(--color-charge);
+  border-color: var(--color-charge);
+  color: var(--color-bg);
 }
 
-.control-button.control-button-primary:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: var(--shadow-primary-button);
+.control-button.control-button-discharge {
+  color: var(--color-discharge);
+  background: var(--color-discharge-bg);
+  border-color: var(--color-discharge-border);
+  font-weight: 600;
+}
+
+.control-button.control-button-discharge:hover:not(:disabled) {
+  background: var(--color-discharge);
+  border-color: var(--color-discharge);
+  color: var(--color-bg);
 }
 
 .control-button.control-button-secondary {
@@ -285,19 +314,11 @@
 }
 
 .system-summary-status.charging {
-  color: var(--color-success);
-  background: var(--gradient-success);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--color-charge);
 }
 
 .system-summary-status.discharging {
-  color: var(--color-danger);
-  background: var(--gradient-danger);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--color-discharge);
 }
 
 .system-summary-status.idle {
@@ -342,7 +363,7 @@
   }
 
   .control-actions {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .control-actions .control-button {

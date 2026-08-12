@@ -50,6 +50,7 @@
 
 .schedule-table table {
   width: 100%;
+  max-width: 860px;
   border-collapse: collapse;
   font-size: 0.9rem;
 }
@@ -73,6 +74,34 @@
   color: var(--color-text);
 }
 
+/* Numeric columns align right so the decimals line up under each other, and
+   claim only the width they need — the label column absorbs the slack. */
+.schedule-table th.num,
+.schedule-table td.num {
+  text-align: right;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.schedule-table th:first-child,
+.schedule-table td:first-child {
+  width: auto;
+}
+
+.schedule-table tbody tr:hover td {
+  background: var(--color-bg-hover);
+}
+
+/* Money reads by sign, not by hue — green and amber already mean power flow. */
+.amount-positive {
+  font-weight: 600;
+}
+
+.amount-negative {
+  color: var(--color-danger-text);
+  font-weight: 600;
+}
+
 .schedule-badge {
   display: inline-block;
   padding: 0.15rem 0.5rem;
@@ -84,17 +113,15 @@
 }
 
 .schedule-badge-charge {
-  color: var(--badge-charge-text);
-  border: none;
-  background: var(--badge-online-bg);
-  box-shadow: 0 1px 4px rgba(74, 222, 128, 0.3);
+  color: var(--color-charge);
+  background: var(--color-charge-bg);
+  border: 1px solid var(--color-charge-border);
 }
 
 .schedule-badge-discharge {
-  color: var(--badge-discharge-text);
-  border: none;
-  background: var(--badge-offline-bg);
-  box-shadow: 0 1px 4px rgba(248, 113, 113, 0.3);
+  color: var(--color-discharge);
+  background: var(--color-discharge-bg);
+  border: 1px solid var(--color-discharge-border);
 }
 
 /* Schedule status badges (active/next) */
@@ -108,23 +135,17 @@
   font-family: var(--font-body), sans-serif;
 }
 
+/* "Now" and "next" mark position in time, not power flow, so they stay on the
+   neutral primary hue — amber and green are spoken for. */
 .schedule-status-active {
   color: var(--color-bg);
-  background: var(--color-warning);
-  box-shadow: 0 0 6px 1px rgba(251, 191, 36, 0.5), 0 0 12px 2px rgba(251, 191, 36, 0.25);
-  animation: glow-active 1.5s ease-in-out infinite;
-}
-
-@keyframes glow-active {
-  0%, 100% { box-shadow: 0 0 6px 1px rgba(251, 191, 36, 0.5), 0 0 12px 2px rgba(251, 191, 36, 0.25); }
-  50% { box-shadow: 0 0 8px 2px rgba(251, 191, 36, 0.7), 0 0 16px 4px rgba(251, 191, 36, 0.35); }
+  background: var(--color-primary);
 }
 
 .schedule-status-next {
-  color: var(--color-success);
-  background: var(--color-success-bg);
-  border: 1px solid var(--color-success-border);
-  box-shadow: 0 0 6px 1px rgba(74, 222, 128, 0.3);
+  color: var(--color-primary);
+  background: transparent;
+  border: 1px solid var(--color-primary);
 }
 
 /* Price limits panel */
@@ -197,13 +218,25 @@
   background: var(--color-success-bg);
 }
 
+/* A live session says so in words; the dot alone was an unexplained marker. */
+.session-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.5rem;
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
 .session-live-dot {
   display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-success);
-  margin-left: 0.4rem;
+  background: var(--color-online);
   vertical-align: middle;
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
