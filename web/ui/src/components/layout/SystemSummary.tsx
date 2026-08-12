@@ -21,7 +21,12 @@ export function SystemSummary({ batteries }: SystemSummaryProps) {
   return (
     <div className="system-summary">
       <div className="system-summary-item">
-        <span className="system-summary-label">Capacity</span>
+        <span
+          className="system-summary-label"
+          title="Energy stored across these batteries right now, not their total capacity."
+        >
+          Remaining
+        </span>
         <span className="system-summary-value">
           {totalCapacity.toFixed(0)} Wh
         </span>
@@ -31,8 +36,21 @@ export function SystemSummary({ batteries }: SystemSummaryProps) {
         <span className="system-summary-value">{avgSoc.toFixed(1)}%</span>
       </div>
       <div className="system-summary-item">
-        <span className="system-summary-label">Total Pac</span>
-        <span className="system-summary-value">{totalPac} W</span>
+        <span
+          className="system-summary-label"
+          title="These batteries added together. Charging on one offsets discharging on another, so this is the site's net flow."
+        >
+          Net flow
+        </span>
+        <span className="system-summary-value">
+          {Math.abs(totalPac)} W
+          {totalPac !== 0 && (
+            <span className="metric-qualifier">
+              {" "}
+              {totalPac > 0 ? "out" : "in"}
+            </span>
+          )}
+        </span>
       </div>
       <div className="system-summary-item">
         <span className="system-summary-label">Status</span>

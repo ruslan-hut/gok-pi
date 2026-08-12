@@ -9,8 +9,9 @@ import type { DayData, PriceLimits, SessionRecord } from "../../types";
  */
 
 const WIDTH = 1000;
-// The right gutter holds the price-limit labels so they never sit over bars.
-const PAD = { top: 18, right: 74, bottom: 22, left: 64 };
+// The right gutter must fit the whole price-limit label inside the viewBox:
+// the scroll container clips anything drawn past it.
+const PAD = { top: 18, right: 92, bottom: 22, left: 64 };
 const PRICE_H = 150;
 const LANE_H = 16;
 const LANE_GAP = 5;

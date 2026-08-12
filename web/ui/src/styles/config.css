@@ -406,6 +406,17 @@
 
 /* The panel heading owns the section title, so a form's own header row is
    left holding just its controls. */
+.report-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.report-toggle .form-help-text {
+  margin-top: 0;
+  padding-left: calc(44px + var(--space-sm));
+}
+
 .config-section-header-actions {
   justify-content: flex-end;
 }

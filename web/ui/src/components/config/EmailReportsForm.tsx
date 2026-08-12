@@ -107,17 +107,18 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
 
       <div className="config-form-grid">
         <div className="form-field">
-          <label>
+          <label className="switch">
             <input
               type="checkbox"
               checked={cfg.enabled}
               disabled={disabled || readonly}
               onChange={(e) => update({ enabled: e.target.checked })}
             />
-            {" "}Enable email reports
+            <span className="switch-slider"></span>
+            <span className="switch-label">Send email reports</span>
           </label>
           <small className="form-help-text">
-            When enabled and at least one report is selected, the control server will email the listed recipients.
+            Reports go to the recipients below once at least one kind is selected.
           </small>
         </div>
 
@@ -172,35 +173,61 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
 
         <div className="form-field">
           <label>Reports</label>
-          <label>
-            <input
-              type="checkbox"
-              checked={cfg.daily}
-              disabled={disabled || readonly || !cfg.enabled}
-              onChange={(e) => update({ daily: e.target.checked })}
-            />
-            {" "}Daily — sent each morning for the previous day, with session details and price chart.
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={cfg.weekly}
-              disabled={disabled || readonly || !cfg.enabled}
-              onChange={(e) => update({ weekly: e.target.checked })}
-            />
-            {" "}Weekly — sent Monday for the previous Mon–Sun, aggregated per battery.
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={cfg.monthly}
-              disabled={disabled || readonly || !cfg.enabled}
-              onChange={(e) => update({ monthly: e.target.checked })}
-            />
-            {" "}Monthly — sent on day 1 for the previous month, aggregated per battery.
-          </label>
+          {/* A label labels; the schedule is help text rather than doing both
+              jobs inside one long switch label. */}
+          <ReportToggle
+            label="Daily"
+            help="Each morning, covering the previous day, with session detail and the price chart."
+            checked={cfg.daily}
+            disabled={disabled || readonly || !cfg.enabled}
+            onChange={(daily) => update({ daily })}
+          />
+          <ReportToggle
+            label="Weekly"
+            help="Monday, covering the previous Mon–Sun, totalled per battery."
+            checked={cfg.weekly}
+            disabled={disabled || readonly || !cfg.enabled}
+            onChange={(weekly) => update({ weekly })}
+          />
+          <ReportToggle
+            label="Monthly"
+            help="Day 1, covering the previous month, totalled per battery."
+            checked={cfg.monthly}
+            disabled={disabled || readonly || !cfg.enabled}
+            onChange={(monthly) => update({ monthly })}
+          />
         </div>
       </div>
+    </div>
+  );
+}
+
+function ReportToggle({
+  label,
+  help,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  help: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="report-toggle">
+      <label className="switch">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span className="switch-slider"></span>
+        <span className="switch-label">{label}</span>
+      </label>
+      <small className="form-help-text">{help}</small>
     </div>
   );
 }

@@ -158,8 +158,6 @@
   color: var(--color-primary);
   border-color: var(--color-primary);
   background: var(--color-primary-hover);
-  transform: rotate(15deg);
-  box-shadow: var(--shadow-glow-primary);
 }
 
 .top-nav-logout {
@@ -311,8 +309,6 @@
 
 .overview-agent-card:hover {
   border-color: var(--color-primary);
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-card-hover), var(--shadow-glow-primary);
   background: var(--gradient-card-hover);
 }
 
@@ -339,34 +335,111 @@
 
 .overview-batteries {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
+  flex-direction: column;
+  gap: var(--space-md);
   margin-top: var(--space-xs);
 }
 
-.overview-battery-mini {
+.overview-battery {
   display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: 0.2rem 0.5rem;
-  background: var(--color-bg-muted);
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.overview-battery-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.overview-battery-name {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overview-battery-soc {
   font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
   font-weight: 600;
-  color: var(--color-primary);
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--color-text);
+}
+
+/* Charge as a bar, not only a number: 8% and 89% must not look alike in a
+   grid of devices. */
+.overview-soc-track {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-muted);
+  overflow: hidden;
+}
+
+.overview-soc-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-text-dim);
+  transition: width var(--transition-base);
+}
+
+.overview-soc-charge {
+  background: var(--color-charge);
+}
+
+.overview-soc-discharge {
+  background: var(--color-discharge);
+}
+
+.overview-battery-state {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: 0.72rem;
+}
+
+.overview-flow {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.overview-flow-charge {
+  color: var(--color-charge);
+}
+
+.overview-flow-discharge {
+  color: var(--color-discharge);
+}
+
+/* Last-known readings are shown, but muted so they cannot be mistaken for
+   live ones. */
+.overview-battery-stale {
+  opacity: 0.55;
+}
+
+.overview-soc-stale {
+  background: var(--color-text-dim);
+}
+
+.overview-flow-stale {
+  color: var(--color-text-dim);
+}
+
+.overview-battery-power {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
 }
 
 .overview-agent-id {
   color: var(--color-text-dim);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
 }
 
 .overview-section {
@@ -377,14 +450,6 @@
   border-top: 1px solid var(--border-color-subtle);
 }
 
-/* Staggered animation for grid items */
-.overview-agents-grid > :nth-child(1) { animation-delay: 0s; }
-.overview-agents-grid > :nth-child(2) { animation-delay: 0.05s; }
-.overview-agents-grid > :nth-child(3) { animation-delay: 0.1s; }
-.overview-agents-grid > :nth-child(4) { animation-delay: 0.15s; }
-.overview-agents-grid > :nth-child(5) { animation-delay: 0.2s; }
-.overview-agents-grid > :nth-child(6) { animation-delay: 0.25s; }
-
 /* Connection dot */
 .connection {
   display: inline-flex;
@@ -393,17 +458,18 @@
 }
 
 .connection-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--color-danger);
-  box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.7);
   animation: pulse-offline 2s infinite;
 }
 
+/* Live updates are the norm, so the dot rests. Losing them is the exception
+   worth pulsing about. */
 .connection-dot.online {
   background: var(--color-online);
-  animation: pulse-online 2s infinite;
+  animation: none;
 }
 
 /* Login */

@@ -33,6 +33,10 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
+        // The dashboard's live telemetry rides a WebSocket on /api/ui. Without
+        // this the upgrade is not forwarded and dev only ever sees the initial
+        // REST fetch, with the connection dot stuck on reconnecting.
+        ws: true,
       },
     },
   },

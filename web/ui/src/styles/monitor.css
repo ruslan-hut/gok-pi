@@ -8,12 +8,6 @@
   align-items: start;
 }
 
-/* Staggered animation for battery cards */
-.metrics-grid > :nth-child(1) { animation-delay: 0s; }
-.metrics-grid > :nth-child(2) { animation-delay: 0.06s; }
-.metrics-grid > :nth-child(3) { animation-delay: 0.12s; }
-.metrics-grid > :nth-child(4) { animation-delay: 0.18s; }
-
 /* Operating mode is not a power flow, so it gets an edge marker rather than a
    colour wash that would compete with the charge/discharge badges. */
 .battery-card.manual-mode {
@@ -81,7 +75,10 @@
   gap: 0.15rem;
 }
 
-.metric span:first-child {
+.metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-size: 0.75rem;
   color: var(--color-text-muted);
   text-transform: uppercase;
@@ -89,12 +86,54 @@
   font-weight: 500;
 }
 
-.metric span:last-child {
+/* A term with an explanation behind it gets a quiet mark, so the tooltip is
+   discoverable without an icon on every label. */
+.metric-label[title] {
+  cursor: help;
+}
+
+.metric-hint-mark {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+}
+
+.metric-label[title]:hover .metric-hint-mark {
+  background: var(--color-primary);
+}
+
+.metric-value {
   font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text);
+  border-radius: 3px;
+}
+
+/* The only motion in the metric grid: a value that just changed. */
+.metric-value-changed {
+  animation: metric-flash 0.7s ease-out;
+}
+
+@keyframes metric-flash {
+  0% {
+    background: var(--color-primary-glow);
+    box-shadow: 0 0 0 3px var(--color-primary-glow);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+.metric-qualifier {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 /* Controls — expandable */

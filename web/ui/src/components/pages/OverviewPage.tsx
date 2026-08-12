@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { fetchDBStats } from "../../api";
 import { fmtAgo, fmtBytes, fmtDate, fmtEnergy, fmtSignedEUR } from "../../lib/format";
-import { Icon } from "../shared/Icon";
-import type { AgentsMap, AppPage, DBStats, AgentDBStats } from "../../types";
+import type {
+  AgentsMap,
+  AppPage,
+  DBStats,
+  AgentDBStats,
+  TelemetrySnapshot,
+} from "../../types";
 
 interface OverviewPageProps {
   agents: AgentsMap;
@@ -74,19 +79,15 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                 Object.keys(agent.telemetry).length > 0 && (
                   <div className="overview-batteries">
                     {Object.values(agent.telemetry).map((t) => (
-                      <div key={t.name} className="overview-battery-mini">
-                        <Icon name="battery_full" size={16} />
-                        <span>{t.name}</span>
-                        <span className="overview-battery-soc">
-                          {t.usoc.toFixed(0)}%
-                        </span>
-                      </div>
+                      <BatteryRow
+                        key={t.name}
+                        snapshot={t}
+                        stale={agent.connected === false}
+                      />
                     ))}
                   </div>
                 )}
-              <small className="overview-agent-id">
-                ID: {agent.agent.id}
-              </small>
+              <small className="overview-agent-id">{agent.agent.id}</small>
             </button>
           ))}
         </div>
@@ -169,3 +170,54 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
   );
 }
 
+/**
+ * BatteryRow answers the question the overview exists to answer: what is this
+ * battery doing right now. Charge is a bar rather than a number so a nearly
+ * empty battery stands out in a grid of them.
+ */
+function BatteryRow({
+  snapshot,
+  stale,
+}: {
+  snapshot: TelemetrySnapshot;
+  stale: boolean;
+}) {
+  // An agent we have not heard from is reporting the last thing it said, not
+  // what it is doing now, so its flow state is not claimed as current.
+  const flow = stale
+    ? { className: "stale", label: "No live data" }
+    : snapshot.battery_discharging
+      ? { className: "discharge", label: "Discharging" }
+      : snapshot.battery_charging
+        ? { className: "charge", label: "Charging" }
+        : { className: "idle", label: "Idle" };
+  const soc = Math.max(0, Math.min(100, snapshot.usoc));
+  const power = stale ? 0 : Math.abs(snapshot.pac_total_w);
+
+  return (
+    <div className={`overview-battery${stale ? " overview-battery-stale" : ""}`}>
+      <div className="overview-battery-top">
+        <span className="overview-battery-name">{snapshot.name}</span>
+        <span className="overview-battery-soc">{soc.toFixed(0)}%</span>
+      </div>
+      <div
+        className="overview-soc-track"
+        role="img"
+        aria-label={`${soc.toFixed(0)} percent charged${stale ? ", last known" : ""}`}
+      >
+        <div
+          className={`overview-soc-fill overview-soc-${flow.className}`}
+          style={{ width: `${soc}%` }}
+        />
+      </div>
+      <div className="overview-battery-state">
+        <span className={`overview-flow overview-flow-${flow.className}`}>
+          {flow.label}
+        </span>
+        {power > 0 && (
+          <span className="overview-battery-power">{power} W</span>
+        )}
+      </div>
+    </div>
+  );
+}

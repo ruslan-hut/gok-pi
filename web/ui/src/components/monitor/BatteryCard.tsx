@@ -149,17 +149,36 @@ export function BatteryCard({
       </h2>
 
       <div className="metrics">
-        <Metric label="RSoC" value={`${snapshot.rsoc.toFixed(1)} %`} />
-        <Metric label="USoC" value={`${snapshot.usoc.toFixed(1)} %`} />
         <Metric
-          label="Capacity"
-          value={`${snapshot.remaining_capacity_wh.toFixed(0)} Wh`}
+          label="RSoC"
+          value={`${snapshot.rsoc.toFixed(1)} %`}
+          hint="Relative state of charge — how full the cells are, across the battery's full physical range."
         />
-        <Metric label="Consumption" value={`${snapshot.consumption_w} W`} />
-        <Metric label="Pac" value={`${snapshot.pac_total_w} W`} />
         <Metric
-          label="Op Mode"
+          label="USoC"
+          value={`${snapshot.usoc.toFixed(1)} %`}
+          hint="Usable state of charge — what is available to you, once the reserve the battery keeps back is excluded. This is the figure schedules act on."
+        />
+        <Metric
+          label="Remaining"
+          value={`${snapshot.remaining_capacity_wh.toFixed(0)} Wh`}
+          hint="Energy left in the battery right now, not its total capacity."
+        />
+        <Metric
+          label="House load"
+          value={`${snapshot.consumption_w} W`}
+          hint="What the site is drawing right now, from any source."
+        />
+        <Metric
+          label="AC power"
+          value={`${Math.abs(snapshot.pac_total_w)} W`}
+          qualifier={pacDirection(snapshot.pac_total_w)}
+          hint="Power across the battery's inverter (Pac). Out means the battery is supplying the site, in means it is being charged."
+        />
+        <Metric
+          label="Mode"
           value={renderOperatingMode(snapshot.operating_mode)}
+          hint="Manual means the battery follows commands and schedules from here. Auto means it runs its own built-in logic. Service is a vendor maintenance state."
         />
       </div>
 
@@ -315,4 +334,11 @@ export function BatteryCard({
       </div>}
     </div>
   );
+}
+
+/** Positive Pac is energy leaving the battery; see remote/server/sessions.go. */
+function pacDirection(pacTotalW: number): string | undefined {
+  if (pacTotalW > 0) return "out";
+  if (pacTotalW < 0) return "in";
+  return undefined;
 }
