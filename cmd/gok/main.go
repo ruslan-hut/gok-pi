@@ -719,18 +719,34 @@ func groupSchedules(schedules []entity.Schedule) map[string][]entity.Schedule {
 func translateCommand(cmd wsclient.Command) (controller.ControlCommand, error) {
 	switch cmd.Command {
 	case wireStartDischarge, wireStartCharge:
+		// power_limit/soc_limit/source are optional: the UI sends only "power".
+		// Callers that drive the battery from an external event (an EV charging
+		// session, see remote/server/chargers.go) send their limits along with
+		// the start so the operation cannot land in a half-applied state, and a
+		// source so the controller knows the override is not a UI click.
 		var payload struct {
-			Power int `json:"power"`
+			Power      int    `json:"power"`
+			PowerLimit *int   `json:"power_limit"`
+			SocLimit   *int   `json:"soc_limit"`
+			Source     string `json:"source"`
 		}
 		if len(cmd.Payload) > 0 {
 			if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
 				return controller.ControlCommand{}, fmt.Errorf("decode start payload: %w", err)
 			}
 		}
-		return controller.ControlCommand{
-			Type:  controller.CommandStart,
-			Power: payload.Power,
-		}, nil
+		out := controller.ControlCommand{
+			Type:   controller.CommandStart,
+			Power:  payload.Power,
+			Source: strings.ToLower(strings.TrimSpace(payload.Source)),
+		}
+		if payload.PowerLimit != nil || payload.SocLimit != nil {
+			out.Limits = &controller.CommandLimits{
+				PowerLimit: payload.PowerLimit,
+				SocLimit:   payload.SocLimit,
+			}
+		}
+		return out, nil
 	case wireStopDischarge, wireStopCharge:
 		return controller.ControlCommand{
 			Type: controller.CommandStop,

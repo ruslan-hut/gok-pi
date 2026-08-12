@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentSummary, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, EmailProviderStatus, PriceLimits, PricesState, SessionsResponse } from "./types";
+import type { AgentConfig, AgentSummary, ChargerLink, ChargerSession, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, EmailProviderStatus, PriceLimits, PricesState, SessionsResponse } from "./types";
 
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
 const AUTH_EXPIRY_KEY = "gok-pi-auth-expires";
@@ -275,6 +275,46 @@ export async function sendEmailTest(
     throw new Error(text || `Failed to send test email: ${res.statusText}`);
   }
   return (await res.json()) as EmailTestResponse;
+}
+
+export async function fetchChargerLinks(): Promise<ChargerLink[]> {
+  const res = await fetch("/api/charger-links", { headers: { ...getAuthHeaders() } });
+  if (!res.ok) {
+    throw new Error(`Failed to load charger links: ${res.statusText}`);
+  }
+  return (await res.json()) as ChargerLink[];
+}
+
+/**
+ * saveChargerLinks replaces the whole link set. Callers editing one agent's
+ * links must merge them back into the full list first — the server stores a
+ * single global set.
+ */
+export async function saveChargerLinks(links: ChargerLink[]): Promise<ChargerLink[]> {
+  const res = await fetch("/api/charger-links", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(links),
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("Login required to edit charger links.");
+    }
+    const text = await res.text();
+    throw new Error(text || "Failed to save charger links");
+  }
+  return (await res.json()) as ChargerLink[];
+}
+
+export async function fetchChargerSessions(): Promise<ChargerSession[]> {
+  const res = await fetch("/api/charger-sessions");
+  if (!res.ok) {
+    throw new Error(`Failed to load charger sessions: ${res.statusText}`);
+  }
+  return (await res.json()) as ChargerSession[];
 }
 
 export async function fetchDBStats(): Promise<DBStatsResponse> {

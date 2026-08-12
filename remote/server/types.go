@@ -34,6 +34,12 @@ type Config struct {
 	UIPassword    string               // Optional: password for UI login
 	EmailProvider email.ProviderConfig // Brevo email provider settings
 	EmailState    string               // Path to email-reports-state.json
+
+	// EV charger integration (see chargers.go). An empty ChargerWebhookToken
+	// disables the webhook endpoint entirely.
+	ChargerWebhookToken string // Shared secret evsys presents on /api/webhooks/evsys
+	ChargerLinks        string // Path to charger-links.json
+	ChargerSessions     string // Path to charger-sessions.json
 }
 
 // TelemetrySnapshot is an alias for observers.Snapshot to avoid duplicating the struct definition.
@@ -137,6 +143,12 @@ type UIAgentRemovedBroadcast struct {
 	Type    string    `json:"type"`
 	AgentID string    `json:"agent_id"`
 	SentAt  time.Time `json:"sent_at"`
+}
+
+type UIChargerSessionsBroadcast struct {
+	Type     string           `json:"type"`
+	Sessions []ChargerSession `json:"sessions"`
+	SentAt   time.Time        `json:"sent_at"`
 }
 
 type AgentLogResponse struct {

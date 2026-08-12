@@ -219,6 +219,19 @@
   flex: 1;
 }
 
+/* Active EV charging sessions: one line each, so several stay readable. */
+.charger-session-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.charger-session-row {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--color-text-muted);
+}
+
 .goal-reset-button {
   background: none;
   border: 1px solid var(--color-warning-border);

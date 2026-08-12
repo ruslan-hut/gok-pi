@@ -60,6 +60,7 @@ Key packages:
 - `internal/remote/wsclient` - Agent-side WebSocket client with reconnection backoff
 - `remote/server` - Control server WebSocket handlers, config store, UI serving
 - `remote/server/email` - Brevo-backed daily/weekly/monthly email reports built from session DB + price fetcher
+- `remote/server/chargers.go` + `charger_links.go` - evsys EV charger integration: webhook receiver, charger↔battery links, active session tracking
 - `metrics/observers` - Prometheus gauges and telemetry snapshots
 - `internal/config` - YAML config loading via cleanenv, thread-safe updates
 - `internal/lib/atomicfile` - Atomic file writes (write-to-temp-then-rename)
@@ -72,6 +73,10 @@ Config file: `config.yml` (YAML format)
 - `remote_control` - WebSocket connection to control server (enabled, server_url, shared_secret)
 - `metrics` - Prometheus endpoint settings
 
+Control server config (`cmd/controlserver`) additionally has `charger_token` /
+`charger_links` / `charger_sessions` for the evsys integration; see
+`EVSYS_INTEGRATION.md`.
+
 Environment variables override config values via cleanenv tags.
 
 ## Data Flow
@@ -81,7 +86,8 @@ Environment variables override config values via cleanenv tags.
 3. If remote_control enabled: WebSocket streams telemetry to control server, receives commands
 4. Control server aggregates telemetry, broadcasts to web UI clients, routes commands to agents
 5. Config updates from UI persist to agent's local `config.yml` via optimistic locking
-6. Email scheduler (control server) ticks every minute; for each agent with `email_reports.enabled` and a populated recipients list, it dispatches daily / weekly (Mon) / monthly (1st) summaries through Brevo at the agent's configured `send_hour` in the agent timezone. Last-sent date per (agent, kind) is persisted to `data/email-reports-state.json` so reports are not duplicated across restarts. Brevo credentials live in the controlserver config (`email_provider`); per-agent recipients/toggles live in `AgentConfig.email_reports` and are editable from the web UI.
+6. EV charger integration: evsys POSTs `transaction.start`/`transaction.stop` to `/api/webhooks/evsys`; the server matches the event to a charger link (by evsys location, falling back to charge point id) and sends `start_discharge`/`stop_discharge` to that link's agent. The discharge is an override that outranks schedules and survives config pushes; see `EVSYS_INTEGRATION.md`.
+7. Email scheduler (control server) ticks every minute; for each agent with `email_reports.enabled` and a populated recipients list, it dispatches daily / weekly (Mon) / monthly (1st) summaries through Brevo at the agent's configured `send_hour` in the agent timezone. Last-sent date per (agent, kind) is persisted to `data/email-reports-state.json` so reports are not duplicated across restarts. Brevo credentials live in the controlserver config (`email_provider`); per-agent recipients/toggles live in `AgentConfig.email_reports` and are editable from the web UI.
 
 ## Battery Drivers
 

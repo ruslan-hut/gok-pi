@@ -84,6 +84,14 @@
   border-color: var(--border-color-subtle);
 }
 
+/* Badges that carry a leading icon: keep the glyph on the text's centre line
+   instead of the baseline, which would stretch the pill. */
+.badge.badge-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 /* Status banners (persistent, non-dismissible) */
 .status-banner {
   display: flex;

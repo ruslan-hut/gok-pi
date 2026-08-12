@@ -129,6 +129,14 @@ export function BatteryCard({
             </span>
           )}
           <span className={`badge ${flow.className}`}>{flow.label}</span>
+          {snapshot.override_source === "charger" && (
+            <span
+              className="badge badge-with-icon"
+              title="An EV charging session is driving this battery; it overrides the schedule until the session ends."
+            >
+              <Icon name="ev_station" size={14} />EV session
+            </span>
+          )}
           {!readonly && (
             <span
               className="battery-card-toggle"
