@@ -61,10 +61,6 @@ export function ChargerLinksForm({
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
-  // Raw text of the charge point IDs field being edited. Parsing on every
-  // keystroke would swallow the separators as they are typed, so the field
-  // shows what was typed until it loses focus.
-  const [pointsDraft, setPointsDraft] = useState<{ index: number; text: string } | null>(null);
 
   // Held in a ref so an inline callback from the parent cannot re-fire the
   // reporting effect on every render.
@@ -195,184 +191,17 @@ export function ChargerLinksForm({
       ) : (
         <div className="config-items">
           {links.map((link, index) => (
-            <div className="config-item" key={`charger-link-${index}`}>
-              <div className="config-item-header">
-                <h5>{link.name || "Unnamed Link"}</h5>
-                <div className="config-item-header-actions">
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      checked={link.enabled}
-                      onChange={(e) => update(index, { enabled: e.target.checked })}
-                      disabled={busy || readonly}
-                    />
-                    <span className="switch-slider"></span>
-                    <span className="switch-label">Enabled</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="config-form-grid">
-                <div className="form-field">
-                  <label htmlFor={`charger-name-${index}`}>Link name *</label>
-                  <input
-                    id={`charger-name-${index}`}
-                    type="text"
-                    value={link.name}
-                    onChange={(e) => update(index, { name: e.target.value })}
-                    disabled={busy || readonly}
-                    placeholder="Office car park"
-                  />
-                </div>
-
-                <div className="form-field">
-                  <label htmlFor={`charger-battery-${index}`}>Battery *</label>
-                  <select
-                    id={`charger-battery-${index}`}
-                    value={link.battery_name}
-                    onChange={(e) => update(index, { battery_name: e.target.value })}
-                    disabled={busy || readonly}
-                  >
-                    <option value="">Select a battery</option>
-                    {batteryNames.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                    {/* A renamed or deleted battery would otherwise blank the
-                        select and hide that the link points nowhere. */}
-                    {link.battery_name &&
-                      !batteryNames.includes(link.battery_name) && (
-                        <option value={link.battery_name}>
-                          {link.battery_name} — no longer configured
-                        </option>
-                      )}
-                  </select>
-                </div>
-
-                <div className="form-field">
-                  <label htmlFor={`charger-location-${index}`}>
-                    evsys location ID
-                  </label>
-                  <input
-                    id={`charger-location-${index}`}
-                    type="text"
-                    value={link.location_id}
-                    onChange={(e) => update(index, { location_id: e.target.value })}
-                    disabled={busy || readonly}
-                    placeholder="loc-01"
-                  />
-                  <small className="form-help-text">
-                    Matches every charger at that location.
-                  </small>
-                </div>
-
-                <div className="form-field">
-                  <label htmlFor={`charger-points-${index}`}>
-                    Charge point IDs
-                  </label>
-                  <input
-                    id={`charger-points-${index}`}
-                    type="text"
-                    value={
-                      pointsDraft?.index === index
-                        ? pointsDraft.text
-                        : link.charge_point_ids.join(", ")
-                    }
-                    onChange={(e) =>
-                      setPointsDraft({ index, text: e.target.value })
-                    }
-                    onBlur={(e) => {
-                      setPointsDraft(null);
-                      const parsed = e.target.value
-                        .split(",")
-                        .map((s) => s.trim())
-                        .filter(Boolean);
-                      // Leaving the field untouched must not mark the form dirty.
-                      if (parsed.join(" ") === link.charge_point_ids.join(" ")) {
-                        return;
-                      }
-                      update(index, { charge_point_ids: parsed });
-                    }}
-                    disabled={busy || readonly}
-                    placeholder="Wallbox3, Wallbox4"
-                  />
-                  <small className="form-help-text">
-                    Comma-separated fallback. Required for OCPP 2.0.1 chargers,
-                    whose events carry no location.
-                  </small>
-                </div>
-
-                <div className="form-field">
-                  <label htmlFor={`charger-power-${index}`}>
-                    Discharge power (W) *
-                  </label>
-                  <input
-                    id={`charger-power-${index}`}
-                    type="number"
-                    min={1}
-                    value={link.power_limit}
-                    onChange={(e) =>
-                      update(index, { power_limit: Number(e.target.value) || 0 })
-                    }
-                    disabled={busy || readonly}
-                  />
-                </div>
-
-                <div className="form-field">
-                  <label htmlFor={`charger-soc-${index}`}>SoC floor (%)</label>
-                  <input
-                    id={`charger-soc-${index}`}
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={link.soc_limit}
-                    onChange={(e) =>
-                      update(index, {
-                        soc_limit: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
-                      })
-                    }
-                    disabled={busy || readonly}
-                  />
-                  <small className="form-help-text">
-                    The battery never discharges below this level.
-                  </small>
-                </div>
-
-                <div className="form-field">
-                  <label htmlFor={`charger-duration-${index}`}>
-                    Max duration (minutes)
-                  </label>
-                  <input
-                    id={`charger-duration-${index}`}
-                    type="number"
-                    min={0}
-                    value={link.max_duration_min}
-                    onChange={(e) =>
-                      update(index, {
-                        max_duration_min: Math.max(0, Number(e.target.value) || 0),
-                      })
-                    }
-                    disabled={busy || readonly}
-                  />
-                  <small className="form-help-text">
-                    Safety cap: the battery is released after this long even if
-                    the charger never reports the session stopping. 0 disables it.
-                  </small>
-                </div>
-              </div>
-
-              {!readonly && (
-                <button
-                  type="button"
-                  className="config-item-remove"
-                  onClick={() => remove(index)}
-                  disabled={busy}
-                >
-                  Remove Link
-                </button>
-              )}
-            </div>
+            <ChargerLinkItem
+              key={`charger-link-${index}`}
+              index={index}
+              link={link}
+              batteryNames={batteryNames}
+              activeSessions={sessions.filter((s) => matchesLink(s, link)).length}
+              disabled={busy}
+              readonly={readonly}
+              onChange={(patch) => update(index, patch)}
+              onRemove={() => remove(index)}
+            />
           ))}
         </div>
       )}
@@ -401,6 +230,270 @@ export function ChargerLinksForm({
             Charger links are saved separately from the agent configuration.
           </small>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** matchesLink reports whether an active session belongs to this link. */
+function matchesLink(session: ChargerSession, link: ChargerLink): boolean {
+  if (link.location_id && session.location_id === link.location_id) return true;
+  return link.charge_point_ids.includes(session.charge_point_id);
+}
+
+interface ChargerLinkItemProps {
+  index: number;
+  link: ChargerLink;
+  batteryNames: string[];
+  activeSessions: number;
+  disabled: boolean;
+  readonly?: boolean;
+  onChange: (patch: Partial<ChargerLink>) => void;
+  onRemove: () => void;
+}
+
+/**
+ * ChargerLinkItem collapses to a summary line, matching how batteries and
+ * schedules present a list. A link with no name yet is a link being created,
+ * so it opens expanded.
+ */
+function ChargerLinkItem({
+  index,
+  link,
+  batteryNames,
+  activeSessions,
+  disabled,
+  readonly,
+  onChange,
+  onRemove,
+}: ChargerLinkItemProps) {
+  const [collapsed, setCollapsed] = useState(() => Boolean(link.name));
+  // Parsing on every keystroke would swallow the separators as they are typed,
+  // so the field shows what was typed until it loses focus.
+  const [pointsDraft, setPointsDraft] = useState<string | null>(null);
+
+  const matcher =
+    link.location_id ||
+    (link.charge_point_ids.length > 0
+      ? link.charge_point_ids.join(", ")
+      : "No location or charge point");
+
+  return (
+    <div className="config-item">
+      <div
+        className={`config-item-header ${collapsed ? "config-item-header-collapsed" : ""}`}
+        onClick={() => setCollapsed(!collapsed)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setCollapsed(!collapsed);
+          }
+        }}
+        tabIndex={0}
+        role="button"
+        aria-expanded={!collapsed}
+        style={{ cursor: "pointer" }}
+      >
+        <h5>
+          {link.name || "Unnamed Link"}
+          <span className="config-item-toggle">
+            <Icon name={collapsed ? "chevron_right" : "expand_more"} size={18} />
+          </span>
+        </h5>
+        <div
+          className="config-item-header-actions"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {activeSessions > 0 && (
+            <span className="badge discharge" title="A charging session is running on this link">
+              {activeSessions} active
+            </span>
+          )}
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={link.enabled}
+              onChange={(e) => onChange({ enabled: e.target.checked })}
+              disabled={disabled || readonly}
+            />
+            <span className="switch-slider"></span>
+            <span className="switch-label">Enabled</span>
+          </label>
+        </div>
+      </div>
+
+      {collapsed && (
+        <div className="config-item-summary">
+          {link.battery_name || "No battery"}
+          {" · "}
+          {matcher}
+          {" · "}
+          {link.power_limit > 0 ? `${link.power_limit} W` : "No power set"}
+          {" · "}
+          {`floor ${link.soc_limit}%`}
+        </div>
+      )}
+
+      {!collapsed && (
+        <>
+          <div className="config-form-grid">
+            <div className="form-field">
+              <label htmlFor={`charger-name-${index}`}>Link name *</label>
+              <input
+                id={`charger-name-${index}`}
+                type="text"
+                value={link.name}
+                onChange={(e) => onChange({ name: e.target.value })}
+                disabled={disabled || readonly}
+                placeholder="Office car park"
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor={`charger-battery-${index}`}>Battery *</label>
+              <select
+                id={`charger-battery-${index}`}
+                value={link.battery_name}
+                onChange={(e) => onChange({ battery_name: e.target.value })}
+                disabled={disabled || readonly}
+              >
+                <option value="">Select a battery</option>
+                {batteryNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+                {/* A renamed or deleted battery would otherwise blank the
+                    select and hide that the link points nowhere. */}
+                {link.battery_name &&
+                  !batteryNames.includes(link.battery_name) && (
+                    <option value={link.battery_name}>
+                      {link.battery_name} — no longer configured
+                    </option>
+                  )}
+              </select>
+            </div>
+
+            <div className="form-field">
+              <label htmlFor={`charger-location-${index}`}>
+                evsys location ID
+              </label>
+              <input
+                id={`charger-location-${index}`}
+                type="text"
+                value={link.location_id}
+                onChange={(e) => onChange({ location_id: e.target.value })}
+                disabled={disabled || readonly}
+                placeholder="loc-01"
+              />
+              <small className="form-help-text">
+                Matches every charger at that location.
+              </small>
+            </div>
+
+            <div className="form-field">
+              <label htmlFor={`charger-points-${index}`}>
+                Charge point IDs
+              </label>
+              <input
+                id={`charger-points-${index}`}
+                type="text"
+                value={pointsDraft ?? link.charge_point_ids.join(", ")}
+                onChange={(e) => setPointsDraft(e.target.value)}
+                onBlur={(e) => {
+                  setPointsDraft(null);
+                  const parsed = e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  // Leaving the field untouched must not mark the form dirty.
+                  if (parsed.join(" ") === link.charge_point_ids.join(" ")) {
+                    return;
+                  }
+                  onChange({ charge_point_ids: parsed });
+                }}
+                disabled={disabled || readonly}
+                placeholder="Wallbox3, Wallbox4"
+              />
+              <small className="form-help-text">
+                Comma-separated fallback. Required for OCPP 2.0.1 chargers,
+                whose events carry no location.
+              </small>
+            </div>
+
+            <div className="form-field">
+              <label htmlFor={`charger-power-${index}`}>
+                Discharge power (W) *
+              </label>
+              <input
+                id={`charger-power-${index}`}
+                type="number"
+                min={1}
+                value={link.power_limit}
+                onChange={(e) =>
+                  onChange({ power_limit: Number(e.target.value) || 0 })
+                }
+                disabled={disabled || readonly}
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor={`charger-soc-${index}`}>SoC floor (%)</label>
+              <input
+                id={`charger-soc-${index}`}
+                type="number"
+                min={0}
+                max={100}
+                value={link.soc_limit}
+                onChange={(e) =>
+                  onChange({
+                    soc_limit: Math.max(
+                      0,
+                      Math.min(100, Number(e.target.value) || 0),
+                    ),
+                  })
+                }
+                disabled={disabled || readonly}
+              />
+              <small className="form-help-text">
+                The battery never discharges below this level.
+              </small>
+            </div>
+
+            <div className="form-field">
+              <label htmlFor={`charger-duration-${index}`}>
+                Max duration (minutes)
+              </label>
+              <input
+                id={`charger-duration-${index}`}
+                type="number"
+                min={0}
+                value={link.max_duration_min}
+                onChange={(e) =>
+                  onChange({
+                    max_duration_min: Math.max(0, Number(e.target.value) || 0),
+                  })
+                }
+                disabled={disabled || readonly}
+              />
+              <small className="form-help-text">
+                Safety cap: the battery is released after this long even if the
+                charger never reports the session stopping. 0 disables it.
+              </small>
+            </div>
+          </div>
+
+          {!readonly && (
+            <button
+              type="button"
+              className="config-item-remove"
+              onClick={onRemove}
+              disabled={disabled}
+            >
+              Remove Link
+            </button>
+          )}
+        </>
       )}
     </div>
   );
