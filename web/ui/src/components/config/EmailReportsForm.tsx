@@ -94,8 +94,7 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
 
   return (
     <div className="config-section">
-      <div className="config-section-header">
-        <h4>Email reports</h4>
+      <div className="config-section-header config-section-header-actions">
         {status && (
           <span
             className={`badge ${status.enabled ? "ok" : "muted"}`}

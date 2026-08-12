@@ -15,7 +15,6 @@ export function DeviceSettings({
 }: DeviceSettingsProps) {
   return (
     <div className="config-section">
-      <h4>Device Settings</h4>
       <div className="config-form-grid">
         <div className="form-field">
           <label htmlFor="device-name">Device Name</label>

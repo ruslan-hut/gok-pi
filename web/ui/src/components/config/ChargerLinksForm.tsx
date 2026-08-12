@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../shared/Icon";
 import { fetchChargerLinks, fetchChargerSessions, saveChargerLinks } from "../../api";
 import type { ChargerLink, ChargerSession } from "../../types";
@@ -8,6 +8,8 @@ interface ChargerLinksFormProps {
   batteryNames: string[];
   disabled?: boolean;
   readonly?: boolean;
+  /** Reports link and active-session counts so the section nav can show them. */
+  onSummaryChange?: (summary: { links: number; active: number }) => void;
 }
 
 function newLink(agentId: string, batteryName: string): ChargerLink {
@@ -49,6 +51,7 @@ export function ChargerLinksForm({
   batteryNames,
   disabled,
   readonly,
+  onSummaryChange,
 }: ChargerLinksFormProps) {
   const [allLinks, setAllLinks] = useState<ChargerLink[]>([]);
   const [links, setLinks] = useState<ChargerLink[]>([]);
@@ -62,6 +65,13 @@ export function ChargerLinksForm({
   // keystroke would swallow the separators as they are typed, so the field
   // shows what was typed until it loses focus.
   const [pointsDraft, setPointsDraft] = useState<{ index: number; text: string } | null>(null);
+
+  // Held in a ref so an inline callback from the parent cannot re-fire the
+  // reporting effect on every render.
+  const onSummaryChangeRef = useRef(onSummaryChange);
+  useEffect(() => {
+    onSummaryChangeRef.current = onSummaryChange;
+  }, [onSummaryChange]);
 
   const load = useCallback(async () => {
     if (!agentId) return;
@@ -86,6 +96,10 @@ export function ChargerLinksForm({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    onSummaryChangeRef.current?.({ links: links.length, active: sessions.length });
+  }, [links.length, sessions.length]);
 
   const update = (index: number, patch: Partial<ChargerLink>) => {
     setLinks((current) =>
@@ -134,8 +148,7 @@ export function ChargerLinksForm({
 
   return (
     <div className="config-section">
-      <div className="config-section-header">
-        <h4>EV charger links</h4>
+      <div className="config-section-header config-section-header-actions">
         {!readonly && (
           <button
             type="button"

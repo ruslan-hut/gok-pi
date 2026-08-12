@@ -162,7 +162,7 @@
   gap: var(--space-md);
   min-height: 1.4rem;
   font-size: 0.85rem;
-  padding-left: 46px;
+  padding-left: 64px;
 }
 
 .day-rail-readout-hour,

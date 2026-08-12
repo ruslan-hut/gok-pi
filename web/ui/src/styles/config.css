@@ -284,11 +284,191 @@
   cursor: not-allowed;
 }
 
-.config-view-toggle {
+/* ── Section rail + panel ──
+   The tab used to be one 3-to-4 screen scroll holding five unrelated
+   features. Each now gets its own panel, reached from a rail that carries
+   each section's count and unsaved state. */
+
+.config-header {
   display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-lg);
+}
+
+.config-header .config-meta {
+  margin: 0;
+}
+
+.config-layout {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  gap: var(--space-xl);
+  align-items: start;
+}
+
+.config-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: var(--space-lg);
+}
+
+.config-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.config-nav-item:hover {
+  background: var(--color-bg-hover);
+  border-color: transparent;
+  color: var(--color-text);
+}
+
+.config-nav-item-active,
+.config-nav-item-active:hover {
+  background: var(--color-bg-muted);
+  border-color: var(--border-color);
+  color: var(--color-text-heading);
+}
+
+.config-nav-icon {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.config-nav-item-active .config-nav-icon {
+  opacity: 1;
+  color: var(--color-primary);
+}
+
+.config-nav-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.config-nav-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.config-nav-meta {
+  font-size: 0.72rem;
+  color: var(--color-text-dim);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-nav-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  flex-shrink: 0;
+}
+
+.config-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0;
+}
+
+.config-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+}
+
+.config-panel-heading h4 {
+  margin: 0;
+  color: var(--color-text-heading);
+}
+
+/* The panel heading owns the section title, so a form's own header row is
+   left holding just its controls. */
+.config-section-header-actions {
   justify-content: flex-end;
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--border-color);
+}
+
+.config-section-intro {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  max-width: 62ch;
+  line-height: 1.45;
+}
+
+/* Save now sits with the fields it saves rather than four screens below. */
+.config-panel-body .config-actions {
+  position: sticky;
+  bottom: 0;
+  padding: var(--space-md) 0;
+  margin-top: auto;
+  background: var(--color-bg);
+  border-top: 1px solid var(--border-color-subtle);
+}
+
+/* The rail needs real width for label + meta; below this it becomes a
+   horizontal chip row above the panel. */
+@media (max-width: 860px) {
+  .config-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-lg);
+  }
+
+  .config-nav {
+    position: static;
+    flex-direction: row;
+    gap: var(--space-sm);
+    overflow-x: auto;
+    padding-bottom: var(--space-xs);
+    scrollbar-width: none;
+  }
+
+  .config-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .config-nav-item {
+    width: auto;
+    flex-shrink: 0;
+    border-color: var(--border-color-subtle);
+    border-radius: var(--radius-full);
+    padding: 0.4rem 0.85rem;
+    min-height: 44px;
+  }
+
+  .config-nav-meta {
+    display: none;
+  }
+
+  .config-panel-body .config-actions {
+    bottom: 64px;
+    background: var(--color-bg-bottom-nav);
+    padding: var(--space-md);
+    margin: 0 calc(-1 * var(--space-lg));
+    border-top: 1px solid var(--border-color);
+  }
 }
 
 /* Mobile */
@@ -360,6 +540,25 @@
   .config-actions button {
     width: 100%;
     min-height: 44px;
+  }
+
+  /* A full-width add button crowds the title beside it. */
+  .config-panel-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-sm);
+  }
+
+  /* The panel's bar is pinned above the bottom nav, so stacking its buttons
+     would cost a third of the screen. It stays one row. */
+  .config-panel-body .config-actions {
+    flex-direction: row;
+    gap: var(--space-sm);
+  }
+
+  .config-panel-body .config-actions button {
+    flex: 1;
+    width: auto;
   }
 
   .config-item-remove {
