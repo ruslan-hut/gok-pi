@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { exportPricesURL, fetchPrices, fetchSessions, savePriceLimits } from "../../api";
 import { fmtAgo, fmtDateTime, fmtEUR, fmtEnergy, fmtSignedEUR } from "../../lib/format";
-import type { BatterySummary, DayData, PriceLimits, PricesState, ScheduleWindow, SessionsResponse } from "../../types";
+import { DayRail } from "./DayRail";
+import type { BatterySummary, DayData, PriceLimits, PricesState, ScheduleWindow, SessionRecord, SessionsResponse } from "../../types";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const ACTIVE_POLL_INTERVAL_MS = 30 * 1000; // 30 seconds when sessions are active
@@ -104,9 +105,23 @@ export default function PricesDashboard({ readonly }: { readonly?: boolean }) {
                 );
             }}
           />
-          {state.today && <DayPanel label="Today" data={state.today} limits={state.price_limits} />}
+          {state.today && (
+            <DayPanel
+              label="Today"
+              data={state.today}
+              limits={state.price_limits}
+              sessions={todaySess?.sessions ?? []}
+              isToday
+            />
+          )}
           {state.tomorrow && (
-            <DayPanel label="Tomorrow" data={state.tomorrow} limits={state.price_limits} />
+            <DayPanel
+              label="Tomorrow"
+              data={state.tomorrow}
+              limits={state.price_limits}
+              sessions={[]}
+              isToday={false}
+            />
           )}
           {!state.today && !state.tomorrow && (
             <div className="config-empty">
@@ -217,25 +232,21 @@ function PriceLimitsPanel({
   );
 }
 
-function DayPanel({ label, data, limits }: { label: string; data: DayData; limits: PriceLimits }) {
-  const chargeHours = new Set<number>();
-  const dischargeHours = new Set<number>();
-
-  for (const w of data.schedule.charge_windows ?? []) {
-    for (let h = w.start_hour; h < w.end_hour; h++) chargeHours.add(h);
-  }
-  for (const w of data.schedule.discharge_windows ?? []) {
-    for (let h = w.start_hour; h < w.end_hour; h++) dischargeHours.add(h);
-  }
-
+function DayPanel({
+  label,
+  data,
+  limits,
+  sessions,
+  isToday,
+}: {
+  label: string;
+  data: DayData;
+  limits: PriceLimits;
+  sessions: SessionRecord[];
+  isToday: boolean;
+}) {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.75rem",
-      }}
-    >
+    <section className="day-panel">
       <h4>
         {label} — {data.date}
       </h4>
@@ -257,233 +268,14 @@ function DayPanel({ label, data, limits }: { label: string; data: DayData; limit
         </span>
         <span className="prices-stats-unit">EUR/MWh</span>
       </div>
-      <PriceChart
-        prices={data.prices}
-        chargeHours={chargeHours}
-        dischargeHours={dischargeHours}
-        stats={data.stats}
-        limits={limits}
-      />
+      <DayRail data={data} limits={limits} sessions={sessions} isToday={isToday} />
       <ScheduleTable
         chargeWindows={data.schedule.charge_windows}
         dischargeWindows={data.schedule.discharge_windows}
         stats={data.stats}
-        isToday={label === "Today"}
+        isToday={isToday}
       />
-    </div>
-  );
-}
-
-function PriceChart({
-  prices,
-  chargeHours,
-  dischargeHours,
-  stats,
-  limits,
-}: {
-  prices: DayData["prices"];
-  chargeHours: Set<number>;
-  dischargeHours: Set<number>;
-  stats: DayData["stats"];
-  limits: PriceLimits;
-}) {
-  const width = 720;
-  const height = 200;
-  const padding = { top: 20, right: 12, bottom: 28, left: 48 };
-  const chartW = width - padding.left - padding.right;
-  const chartH = height - padding.top - padding.bottom;
-
-  const maxPrice = Math.max(stats.max_price_eur_mwh * 1.1, 1);
-  const minPrice = Math.min(0, stats.min_price_eur_mwh);
-  const range = maxPrice - minPrice;
-  const barW = chartW / 24 - 2;
-
-  const yScale = (v: number) =>
-    padding.top + chartH - ((v - minPrice) / range) * chartH;
-
-  const zeroY = yScale(0);
-
-  // Grid lines
-  const gridLines: number[] = [];
-  const step = niceStep(range, 5);
-  for (let v = Math.ceil(minPrice / step) * step; v <= maxPrice; v += step) {
-    gridLines.push(v);
-  }
-
-  return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="price-chart-svg"
-      role="img"
-      aria-label="Hourly electricity prices"
-    >
-      {/* Grid */}
-      {gridLines.map((v) => (
-        <g key={v}>
-          <line
-            x1={padding.left}
-            x2={width - padding.right}
-            y1={yScale(v)}
-            y2={yScale(v)}
-            style={{ stroke: "var(--border-color-subtle)" }}
-            strokeDasharray="2,3"
-          />
-          <text
-            x={padding.left - 6}
-            y={yScale(v) + 3}
-            textAnchor="end"
-            style={{ fill: "var(--color-text-muted)" }}
-            fontSize="10"
-          >
-            {v.toFixed(0)}
-          </text>
-        </g>
-      ))}
-
-      {/* Low threshold line — charge below this */}
-      <line
-        x1={padding.left}
-        x2={width - padding.right}
-        y1={yScale(stats.low_eur_mwh)}
-        y2={yScale(stats.low_eur_mwh)}
-        style={{ stroke: "var(--color-charge)" }}
-        strokeDasharray="4,3"
-        strokeWidth="1"
-        opacity="0.5"
-      />
-
-      {/* High threshold line — discharge above this */}
-      <line
-        x1={padding.left}
-        x2={width - padding.right}
-        y1={yScale(stats.high_eur_mwh)}
-        y2={yScale(stats.high_eur_mwh)}
-        style={{ stroke: "var(--color-discharge)" }}
-        strokeDasharray="4,3"
-        strokeWidth="1"
-        opacity="0.5"
-      />
-
-      {/* Average line */}
-      <line
-        x1={padding.left}
-        x2={width - padding.right}
-        y1={yScale(stats.avg_price_eur_mwh)}
-        y2={yScale(stats.avg_price_eur_mwh)}
-        style={{ stroke: "var(--color-text-muted)" }}
-        strokeDasharray="4,3"
-        strokeWidth="1"
-        opacity="0.6"
-      />
-
-      {/* Bars */}
-      {prices.map((p) => {
-        const x = padding.left + (p.hour / 24) * chartW + 1;
-        const barTop = yScale(Math.max(p.price_eur_mwh, 0));
-        const barBottom =
-          p.price_eur_mwh >= 0 ? zeroY : yScale(p.price_eur_mwh);
-        const barHeight = Math.abs(barBottom - barTop);
-        const y = Math.min(barTop, barBottom);
-
-        let fill = "var(--color-text-dim)";
-        if (chargeHours.has(p.hour)) fill = "var(--color-charge)";
-        if (dischargeHours.has(p.hour)) fill = "var(--color-discharge)";
-
-        return (
-          <g key={p.hour}>
-            <rect
-              x={x}
-              y={y}
-              width={barW}
-              height={Math.max(barHeight, 1)}
-              style={{ fill }}
-              rx="2"
-            />
-            <title>
-              {`${String(p.hour).padStart(2, "0")}:00 — ${p.price_eur_mwh.toFixed(1)} EUR/MWh`}
-            </title>
-          </g>
-        );
-      })}
-
-      {/* Charge price limit line (drawn over bars) */}
-      {limits.charge_limit_eur_mwh > 0 && (
-        <line
-          x1={padding.left}
-          x2={width - padding.right}
-          y1={yScale(limits.charge_limit_eur_mwh)}
-          y2={yScale(limits.charge_limit_eur_mwh)}
-          style={{ stroke: "var(--color-charge)" }}
-          strokeDasharray="6,3"
-          strokeWidth="1.5"
-          opacity="0.9"
-        />
-      )}
-
-      {/* Discharge price limit line (drawn over bars) */}
-      {limits.discharge_limit_eur_mwh > 0 && (
-        <line
-          x1={padding.left}
-          x2={width - padding.right}
-          y1={yScale(limits.discharge_limit_eur_mwh)}
-          y2={yScale(limits.discharge_limit_eur_mwh)}
-          style={{ stroke: "var(--color-discharge)" }}
-          strokeDasharray="6,3"
-          strokeWidth="1.5"
-          opacity="0.9"
-        />
-      )}
-
-      {/* X axis labels */}
-      {[0, 3, 6, 9, 12, 15, 18, 21].map((h) => (
-        <text
-          key={h}
-          x={padding.left + (h / 24) * chartW + barW / 2}
-          y={height - 6}
-          textAnchor="middle"
-          style={{ fill: "var(--color-text-muted)" }}
-          fontSize="10"
-        >
-          {String(h).padStart(2, "0")}
-        </text>
-      ))}
-
-      {/* Legend */}
-      <rect
-        x={width - 170}
-        y={4}
-        width={10}
-        height={10}
-        style={{ fill: "var(--color-charge)" }}
-        rx="2"
-      />
-      <text x={width - 156} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
-        ≤ P{stats.charge_percentile}
-      </text>
-      <rect
-        x={width - 120}
-        y={4}
-        width={10}
-        height={10}
-        style={{ fill: "var(--color-discharge)" }}
-        rx="2"
-      />
-      <text x={width - 106} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
-        ≥ P{stats.discharge_percentile}
-      </text>
-      <line
-        x1={width - 46}
-        x2={width - 32}
-        y1={9}
-        y2={9}
-        style={{ stroke: "var(--color-text-muted)" }}
-        strokeDasharray="4,3"
-        opacity="0.6"
-      />
-      <text x={width - 28} y={13} style={{ fill: "var(--color-text-muted)" }} fontSize="10">
-        Avg
-      </text>
-    </svg>
+    </section>
   );
 }
 
@@ -773,14 +565,3 @@ function fmt2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-function niceStep(range: number, targetTicks: number): number {
-  const rough = range / targetTicks;
-  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
-  const norm = rough / mag;
-  let step: number;
-  if (norm <= 1.5) step = 1;
-  else if (norm <= 3) step = 2;
-  else if (norm <= 7) step = 5;
-  else step = 10;
-  return step * mag;
-}

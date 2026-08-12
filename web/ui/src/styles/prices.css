@@ -6,6 +6,12 @@
   gap: var(--space-md);
 }
 
+.day-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
 .prices-stats {
   display: flex;
   flex-wrap: wrap;
@@ -27,21 +33,167 @@
   color: var(--color-text-dim);
 }
 
-.price-chart-svg {
-  width: 100%;
-  max-width: 720px;
-  align-self: center;
-  height: auto;
-  min-height: 140px;
-  background: var(--color-bg-overlay);
-  background-image: var(--gradient-surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color-subtle);
-  transition: border-color var(--transition-base);
+/* The rail is the subject of this page, so it takes the full content width
+   rather than floating as a capped widget. */
+.day-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
 }
 
-.price-chart-svg:hover {
-  border-color: var(--border-color);
+.day-rail-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.day-rail-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.day-rail-grid {
+  stroke: var(--border-color-subtle);
+  stroke-dasharray: 2 4;
+}
+
+.day-rail-axis-label {
+  fill: var(--color-text-muted);
+  font-size: 10px;
+  font-family: var(--font-mono), monospace;
+}
+
+.day-rail-axis-unit {
+  fill: var(--color-text-dim);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.day-rail-lane-label {
+  fill: var(--color-text-muted);
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+}
+
+.day-rail-bar {
+  fill: var(--color-text-dim);
+  opacity: 0.5;
+  transition: opacity var(--transition-fast);
+}
+
+.day-rail-bar-charge {
+  fill: var(--color-charge);
+  opacity: 0.9;
+}
+
+.day-rail-bar-discharge {
+  fill: var(--color-discharge);
+  opacity: 0.9;
+}
+
+.day-rail-bar-hover {
+  opacity: 1;
+}
+
+.day-rail-hover-band {
+  fill: var(--color-text);
+  opacity: 0.07;
+}
+
+.day-rail-lane-bed {
+  fill: var(--color-bg-muted);
+}
+
+.day-rail-block-charge {
+  fill: var(--color-charge);
+}
+
+.day-rail-block-discharge {
+  fill: var(--color-discharge);
+}
+
+/* A session still running is hatched so it reads as unfinished. */
+.day-rail-block-open {
+  opacity: 0.55;
+}
+
+.day-rail-limit line {
+  stroke-dasharray: 5 4;
+  stroke-width: 1.25;
+  opacity: 0.75;
+}
+
+.day-rail-limit text {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+.day-rail-limit-charge line {
+  stroke: var(--color-charge);
+}
+
+.day-rail-limit-charge text {
+  fill: var(--color-charge);
+}
+
+.day-rail-limit-discharge line {
+  stroke: var(--color-discharge);
+}
+
+.day-rail-limit-discharge text {
+  fill: var(--color-discharge);
+}
+
+.day-rail-now line {
+  stroke: var(--color-primary);
+  stroke-width: 1.5;
+}
+
+.day-rail-now text {
+  fill: var(--color-primary);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.day-rail-readout {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+  min-height: 1.4rem;
+  font-size: 0.85rem;
+  padding-left: 46px;
+}
+
+.day-rail-readout-hour,
+.day-rail-readout-price {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.day-rail-readout-hour {
+  color: var(--color-text-muted);
+}
+
+.day-rail-readout-hint {
+  color: var(--color-text-dim);
+}
+
+.day-rail-readout-tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.day-rail-readout-tag.charge {
+  color: var(--color-charge);
+}
+
+.day-rail-readout-tag.discharge {
+  color: var(--color-discharge);
 }
 
 .schedule-table {
@@ -351,6 +503,18 @@
 }
 
 /* Mobile */
+@media (max-width: 700px) {
+  /* Shrinking the rail to phone width makes its labels unreadable, so it keeps
+     its designed proportions and scrolls sideways inside its own container. */
+  .day-rail-svg {
+    min-width: 620px;
+  }
+
+  .day-rail-readout {
+    padding-left: 0;
+  }
+}
+
 @media (max-width: 600px) {
   .prices-stats {
     gap: 0.35rem 0.75rem;
