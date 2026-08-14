@@ -52,7 +52,16 @@ const (
 type agentConnection struct {
 	id       string          // Unique agent identifier (from hello message)
 	info     AgentDescriptor // Agent metadata (ID, env, hostname, version)
-	lastSeen time.Time       // Timestamp of last received message
+	lastSeen time.Time       // Timestamp of last received message (telemetry OR heartbeat)
+
+	// lastTelemetryAt tracks the telemetry stream specifically. lastSeen cannot
+	// stand in for it: the 30s heartbeat refreshes lastSeen, so an agent whose
+	// telemetry has stopped still reads as perfectly healthy everywhere lastSeen
+	// is used. telemetryFrames counts frames on this connection.
+	lastTelemetryAt  time.Time
+	telemetryFrames  uint64
+	connectedAt      time.Time
+	telemetryStalled bool
 
 	conn *websocket.Conn // Underlying WebSocket connection
 	req  *http.Request   // Original HTTP upgrade request (for remote addr logging)
@@ -146,6 +155,7 @@ func (a *agentConnection) handshake() error {
 	a.info = hello.Agent
 	a.id = hello.Agent.ID
 	a.lastSeen = time.Now()
+	a.connectedAt = a.lastSeen
 
 	a.log().Info("agent connected",
 		slog.String("env", hello.Agent.Env),
@@ -242,8 +252,17 @@ func (a *agentConnection) handleMessage(message []byte) {
 func (a *agentConnection) updateTelemetry(msg AgentTelemetry) {
 	a.mu.Lock()
 	a.telemetry[msg.Snapshot.Name] = msg.Snapshot
-	a.lastSeen = time.Now()
+	now := time.Now()
+	a.lastSeen = now
+	a.lastTelemetryAt = now
+	a.telemetryFrames++
+	resumed := a.telemetryStalled
+	a.telemetryStalled = false
 	a.mu.Unlock()
+
+	if resumed {
+		a.log().Info("agent telemetry resumed")
+	}
 	// Broadcast only the per-battery delta. We deliberately do NOT also broadcast a
 	// full agent summary here: the summary would re-serialize and fan out the entire
 	// telemetry + goalReached map to every UI client on every ~10s frame, which is the
@@ -303,12 +322,46 @@ func (a *agentConnection) summary() AgentSummary {
 		}
 	}
 
+	var lastTelemetry *time.Time
+	if !a.lastTelemetryAt.IsZero() {
+		at := a.lastTelemetryAt
+		lastTelemetry = &at
+	}
+
 	return AgentSummary{
 		Agent:               a.info,
 		LastSeen:            a.lastSeen,
+		LastTelemetryAt:     lastTelemetry,
+		TelemetryFrames:     a.telemetryFrames,
+		TelemetryStalled:    a.telemetryStalled,
 		Telemetry:           telemetry,
 		ScheduleGoalReached: goalReached,
 	}
+}
+
+// evaluateTelemetryStall decides whether this connection's telemetry has gone
+// quiet, and reports whether that verdict just changed so the caller logs the
+// transition once rather than on every tick.
+//
+// The reference point is the last frame, or the moment the agent connected if it
+// has never sent one: "connected and immediately silent" is the same fault as
+// "connected and then went silent", and is just as invisible from lastSeen.
+func (a *agentConnection) evaluateTelemetryStall(now time.Time, after time.Duration) (stalled, changed bool, quietSince time.Time) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	since := a.lastTelemetryAt
+	if since.IsZero() {
+		since = a.connectedAt
+	}
+	if since.IsZero() {
+		return false, false, time.Time{}
+	}
+
+	stalled = now.Sub(since) >= after
+	changed = stalled != a.telemetryStalled
+	a.telemetryStalled = stalled
+	return stalled, changed, since
 }
 
 func (a *agentConnection) sendCommand(req CommandRequest) error {

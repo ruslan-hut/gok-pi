@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { BatteryCard } from "./BatteryCard";
+import { HistoryPanel } from "./HistoryPanel";
 import { SystemSummary } from "../layout/SystemSummary";
 import type {
   AgentConfig,
@@ -36,6 +37,15 @@ export function MonitorTab({
         a.name.localeCompare(b.name),
       );
   }, [selectedAgent, agentConfig]);
+
+  // History comes from the configured batteries, not the live telemetry map: an
+  // agent whose telemetry stopped has no live snapshots, and that is exactly when
+  // an operator needs to look at the recorded history.
+  const batteryNames = useMemo(() => {
+    const configured = (agentConfig?.batteries || []).map((b) => b.name);
+    if (configured.length) return configured;
+    return batteries.map((b) => b.name);
+  }, [agentConfig, batteries]);
 
   const batteryConfigMap = useMemo(() => {
     const map = new Map<string, BatteryConfig>();
@@ -91,6 +101,12 @@ export function MonitorTab({
           );
         })}
       </section>
+
+      {/* Same subject as the cards above, one step back in time. */}
+      <HistoryPanel
+        agentId={selectedAgent.agent.id}
+        batteryNames={batteryNames}
+      />
     </>
   );
 }

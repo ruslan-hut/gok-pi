@@ -364,6 +364,300 @@
   color: var(--color-text-muted);
 }
 
+/* ── History ───────────────────────────────────────────────────────────────
+   The chart carries the meaning, so everything around it stays recessive:
+   muted axis ink, a hairline grid, and colour only on the data itself. */
+
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+.history-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.history-panel-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.history-panel-title h2 {
+  margin: 0;
+}
+
+.history-panel-subtitle {
+  font-size: 0.78rem;
+  color: var(--color-text-dim);
+}
+
+/* Missing telemetry is a fault worth noticing, not a neutral statistic. */
+.history-panel-subtitle.warn {
+  color: var(--color-warning);
+}
+
+.history-panel-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.history-select {
+  height: 32px;
+  padding: 0 var(--space-sm);
+  font-size: 0.85rem;
+  color: var(--color-text);
+  background: var(--color-bg-input);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-md);
+}
+
+.history-range {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--color-bg-overlay);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-md);
+}
+
+.history-range-button {
+  min-width: 40px;
+  padding: 0.3rem var(--space-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.history-range-button:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+
+.history-range-button.active {
+  color: var(--color-text-heading);
+  background: var(--color-primary-bg);
+}
+
+.history-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.history-chart-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.history-chart-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  touch-action: pan-y;
+}
+
+.history-grid {
+  stroke: var(--border-color-subtle);
+  stroke-dasharray: 2 4;
+}
+
+.history-zero-line {
+  stroke: var(--color-text-dim);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.history-axis-label {
+  fill: var(--color-text-muted);
+  font-size: 10px;
+  font-family: var(--font-mono), monospace;
+}
+
+.history-axis-unit {
+  fill: var(--color-text-dim);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+/* Charge level: a filled level reads as a quantity in a container. */
+.history-soc-area {
+  fill: var(--color-primary);
+  opacity: 0.12;
+}
+
+.history-soc-line {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.history-pac-out {
+  fill: var(--color-discharge);
+  opacity: 0.28;
+}
+
+.history-pac-in {
+  fill: var(--color-charge);
+  opacity: 0.28;
+}
+
+/* The trace itself carries the colour at full strength; the fill only says
+   which side of zero it is on. */
+.history-pac-line {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.history-pac-line.out {
+  stroke: var(--color-discharge);
+}
+
+.history-pac-line.in {
+  stroke: var(--color-charge);
+}
+
+/* House load is context for the battery trace, so it is achromatic and thin —
+   separated from the two power poles by mark type as well as colour. */
+.history-load-line {
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+
+.history-lane-label {
+  fill: var(--color-text-dim);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+
+/* The bed is the full window; the fill on top is what actually arrived, so an
+   unfilled stretch is the shape of the loss. */
+.history-coverage-bed {
+  fill: var(--color-text-dim);
+  opacity: 0.18;
+}
+
+/* Filled where telemetry actually arrived; a hole is missing data, not idleness. */
+.history-coverage {
+  fill: var(--color-text-dim);
+  opacity: 0.55;
+}
+
+.history-crosshair line {
+  stroke: var(--color-primary);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+
+.history-dot-soc {
+  fill: var(--color-primary);
+}
+
+.history-dot-pac {
+  fill: var(--color-text);
+}
+
+.history-readout {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  min-height: 1.4rem;
+  padding-left: 46px;
+  font-size: 0.85rem;
+}
+
+.history-readout-time,
+.history-readout-value {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.history-readout-time {
+  color: var(--color-text-muted);
+}
+
+.history-readout-qualifier {
+  font-weight: 400;
+  color: var(--color-text-dim);
+}
+
+.history-readout-hint {
+  color: var(--color-text-dim);
+}
+
+.history-readout-warn {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.history-legend {
+  display: flex;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+  padding-left: 46px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.history-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.history-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.history-legend-swatch.soc {
+  background: var(--color-primary);
+}
+
+.history-legend-swatch.out {
+  background: var(--color-discharge);
+}
+
+.history-legend-swatch.in {
+  background: var(--color-charge);
+}
+
+.history-legend-swatch.load {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-text-muted);
+}
+
+.history-empty {
+  margin: 0;
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+}
+
 /* Mobile */
 @media (max-width: 600px) {
   .metrics-grid {
@@ -416,5 +710,25 @@
 
   .system-summary-item {
     min-width: calc(50% - var(--space-md));
+  }
+
+  /* The chart keeps a usable aspect ratio on a phone by scrolling sideways
+     rather than compressing 24 hours into 320px. */
+  .history-chart-svg {
+    min-width: 560px;
+  }
+
+  .history-readout,
+  .history-legend {
+    padding-left: 0;
+  }
+
+  .history-legend {
+    gap: var(--space-md);
+  }
+
+  .history-panel-controls {
+    width: 100%;
+    justify-content: space-between;
   }
 }

@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentSummary, ChargerLink, ChargerSession, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, EmailProviderStatus, PriceLimits, PricesState, SessionsResponse } from "./types";
+import type { AgentConfig, AgentSummary, ChargerLink, ChargerSession, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, EmailProviderStatus, HistoryResponse, PriceLimits, PricesState, SessionsResponse } from "./types";
 
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
 const AUTH_EXPIRY_KEY = "gok-pi-auth-expires";
@@ -217,6 +217,27 @@ export async function fetchSessions(opts?: {
     throw new Error(`Failed to load sessions: ${res.statusText}`);
   }
   return (await res.json()) as SessionsResponse;
+}
+
+export async function fetchHistory(opts: {
+  agentId?: string;
+  battery?: string;
+  hours?: number;
+  since?: string;
+  until?: string;
+}): Promise<HistoryResponse> {
+  const params = new URLSearchParams();
+  if (opts.agentId) params.set("agent_id", opts.agentId);
+  if (opts.battery) params.set("battery", opts.battery);
+  if (opts.since) params.set("since", opts.since);
+  if (opts.until) params.set("until", opts.until);
+  if (opts.hours) params.set("hours", opts.hours.toString());
+  const qs = params.toString();
+  const res = await fetch(`/api/history${qs ? `?${qs}` : ""}`);
+  if (!res.ok) {
+    throw new Error(`Failed to load history: ${res.statusText}`);
+  }
+  return (await res.json()) as HistoryResponse;
 }
 
 export async function savePriceLimits(limits: PriceLimits): Promise<PriceLimits> {

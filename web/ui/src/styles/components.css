@@ -63,6 +63,15 @@
   border-color: var(--border-color-subtle);
 }
 
+/* A degraded state that is not a lost connection: the agent is there, but part
+   of what it should be sending is not arriving. */
+.badge.warn {
+  color: var(--color-warning);
+  background: var(--color-warning-bg, var(--color-bg-muted));
+  border-color: var(--color-warning-border);
+  font-weight: 600;
+}
+
 /* Power flow. Green in, amber out — matches the schedule and session badges. */
 .badge.charge {
   color: var(--color-charge);

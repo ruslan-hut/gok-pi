@@ -60,9 +60,43 @@ export interface ChargerSession {
 export interface AgentSummary {
   agent: AgentDescriptor;
   last_seen: string;
+  // last_seen is refreshed by the agent's 30s heartbeat as well, so it cannot
+  // tell a healthy agent from one whose telemetry stopped. These three describe
+  // the telemetry stream on its own.
+  last_telemetry_at?: string;
+  telemetry_frames?: number;
+  telemetry_stalled?: boolean;
   telemetry: Record<string, TelemetrySnapshot>;
   schedule_goal_reached?: Record<string, string>;
   connected?: boolean;
+}
+
+/**
+ * TelemetryPoint is one minute of recorded history for a battery. samples is how
+ * many frames the agent actually delivered for that minute — six is a complete
+ * minute at the 10s poll interval, so a lower count marks telemetry that was lost
+ * rather than a battery that was idle.
+ */
+export interface TelemetryPoint {
+  agent_id: string;
+  battery_name: string;
+  bucket: string;
+  usoc: number;
+  rsoc: number;
+  remaining_capacity_wh: number;
+  consumption_avg_w: number;
+  consumption_max_w: number;
+  pac_avg_w: number;
+  pac_min_w: number;
+  pac_max_w: number;
+  operating_mode: string;
+  samples: number;
+}
+
+export interface HistoryResponse {
+  points: TelemetryPoint[];
+  since: string;
+  until?: string;
 }
 
 export interface BatteryConfig {

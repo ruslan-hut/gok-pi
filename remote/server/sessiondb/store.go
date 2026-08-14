@@ -74,6 +74,11 @@ func Open(path string, log *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("migrate computed_schedules: %w", err)
 	}
 
+	if err := migrateHistory(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate telemetry_history: %w", err)
+	}
+
 	return &Store{db: db, log: log.With(slog.String("component", "session-db"))}, nil
 }
 

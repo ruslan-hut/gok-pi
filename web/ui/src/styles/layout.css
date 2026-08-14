@@ -205,6 +205,15 @@
   gap: var(--space-lg);
 }
 
+/* Connection state and telemetry state are one status group, so they stay
+   together at the end of the row rather than being spread across it. */
+.agent-header-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
 .status-bar {
   display: flex;
   gap: var(--space-lg);

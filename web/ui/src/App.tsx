@@ -215,16 +215,39 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, b
               <header>
                 <div className="agent-header">
                   <h2>{deviceName}</h2>
-                  <span
-                    className={`badge ${selectedAgentOnline ? "ok" : "fault"}`}
-                  >
-                    {selectedAgentOnline ? "Connected" : "Offline"}
-                  </span>
+                  <div className="agent-header-badges">
+                    <span
+                      className={`badge ${selectedAgentOnline ? "ok" : "fault"}`}
+                    >
+                      {selectedAgentOnline ? "Connected" : "Offline"}
+                    </span>
+                    {/* A connected agent whose telemetry stopped looks perfectly
+                        healthy from "Last contact" alone: the 30s heartbeat keeps
+                        that fresh. This badge is the only place the difference
+                        shows. */}
+                    {selectedAgentOnline && selectedAgent.telemetry_stalled && (
+                      <span
+                        className="badge warn"
+                        title={
+                          selectedAgent.last_telemetry_at
+                            ? `Last telemetry ${fmtDateTime(selectedAgent.last_telemetry_at)}`
+                            : "No telemetry received on this connection"
+                        }
+                      >
+                        No telemetry
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="status-bar">
                   <span title={fmtDateTime(selectedAgent.last_seen)}>
                     Last contact {fmtAgo(selectedAgent.last_seen)}
                   </span>
+                  {selectedAgent.last_telemetry_at && (
+                    <span title={fmtDateTime(selectedAgent.last_telemetry_at)}>
+                      Last telemetry {fmtAgo(selectedAgent.last_telemetry_at)}
+                    </span>
+                  )}
                 </div>
               </header>
             )}

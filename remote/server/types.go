@@ -106,8 +106,18 @@ type UIConfigUpdate struct {
 }
 
 type AgentSummary struct {
-	Agent               AgentDescriptor              `json:"agent"`
-	LastSeen            time.Time                    `json:"last_seen"`
+	Agent    AgentDescriptor `json:"agent"`
+	LastSeen time.Time       `json:"last_seen"`
+
+	// LastTelemetryAt and TelemetryStalled describe the telemetry stream on its own.
+	// LastSeen is refreshed by the 30s heartbeat as well, so it cannot distinguish a
+	// healthy agent from one whose telemetry has gone silent. It is a pointer so an
+	// agent that has sent no telemetry omits the field entirely: a zero time.Time
+	// serializes as year 1 and renders as a real (absurd) date in the UI.
+	LastTelemetryAt  *time.Time `json:"last_telemetry_at,omitempty"`
+	TelemetryFrames  uint64     `json:"telemetry_frames"`
+	TelemetryStalled bool       `json:"telemetry_stalled"`
+
 	Telemetry           map[string]TelemetrySnapshot `json:"telemetry"`
 	ScheduleGoalReached map[string]time.Time         `json:"schedule_goal_reached,omitempty"`
 }

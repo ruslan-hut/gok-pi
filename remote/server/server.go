@@ -72,6 +72,11 @@ type Server struct {
 	sessions    *SessionTracker
 	priceLimits *PriceLimitsStore
 
+	// db is the raw session/history store. sessions wraps it for session tracking;
+	// telemetry history is written and queried directly.
+	db        *sessiondb.Store
+	telemetry *telemetryRecorder
+
 	chargerLinks    *ChargerLinkStore
 	chargerSessions *chargerSessionStore
 
@@ -135,9 +140,17 @@ func New(cfg Config, log *slog.Logger) *Server {
 		prices:      prices,
 		sessions:    sessions,
 		priceLimits: priceLimitsStore,
+		db:          sessDB,
 
 		chargerLinks:    NewChargerLinkStore(chargerLinksPath),
 		chargerSessions: newChargerSessionStore(chargerSessionsPath),
+	}
+
+	if sessDB != nil {
+		srv.telemetry = newTelemetryRecorder(log, sessDB)
+		log.Info("telemetry history recorder started")
+	} else {
+		log.Warn("telemetry history disabled: no database available")
 	}
 
 	if strings.TrimSpace(cfg.ChargerWebhookToken) == "" {
@@ -218,6 +231,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	go s.runAutoScheduler(ctx)
 	go s.runSessionCleanup(ctx)
 	go s.runChargerSweeper(ctx)
+	go s.runTelemetryRecorder(ctx)
 	if s.emailScheduler != nil {
 		go s.emailScheduler.Run(ctx)
 	}
@@ -237,6 +251,9 @@ func (s *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/prices/export", s.handlePricesExport)
 	mux.HandleFunc("/api/price-limits", s.requireAuthForWrites(s.handlePriceLimits))
 	mux.HandleFunc("/api/sessions", s.handleSessions)
+	// History is read-only telemetry, same visibility as live telemetry and prices.
+	mux.HandleFunc("/api/history", s.handleHistory)
+	mux.HandleFunc("/api/history/coverage", s.handleHistoryCoverage)
 	mux.HandleFunc("/api/db-stats", s.handleDBStats)
 	mux.HandleFunc("/api/db/records", s.requireAuth(s.handleDBRecords))
 	mux.HandleFunc("/api/email/status", s.handleEmailStatus)
@@ -552,6 +569,7 @@ func (s *Server) unregisterAgent(ac *agentConnection) {
 	s.agentsMu.Unlock()
 
 	s.log.With(slog.String("agent", ac.id)).Info("agent disconnected")
+	s.telemetry.Forget(ac.id)
 	s.broadcastAgentRemoved(ac.id)
 }
 
@@ -582,7 +600,53 @@ func (s *Server) onTelemetry(agentID string, snapshot TelemetrySnapshot) {
 	if s.sessions != nil {
 		s.sessions.OnTelemetry(agentID, snapshot)
 	}
+	s.telemetry.Observe(agentID, snapshot, time.Now())
 	s.broadcastTelemetry(agentID, snapshot)
+}
+
+// runTelemetryRecorder flushes buffered history and re-checks whether connected
+// agents are still delivering telemetry.
+func (s *Server) runTelemetryRecorder(ctx context.Context) {
+	ticker := time.NewTicker(telemetryTick)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			s.telemetry.Flush(time.Now())
+			return
+		case now := <-ticker.C:
+			s.telemetry.Flush(now)
+			s.checkTelemetryStalls(now)
+		}
+	}
+}
+
+// checkTelemetryStalls logs and broadcasts the transition when a connected agent
+// stops (or starts) delivering telemetry. Only connected agents are considered: a
+// disconnect is already reported on its own, and reporting it twice would bury the
+// case this exists for — a live connection whose telemetry silently stopped.
+func (s *Server) checkTelemetryStalls(now time.Time) {
+	s.agentsMu.RLock()
+	agents := make([]*agentConnection, 0, len(s.agents))
+	for _, agent := range s.agents {
+		agents = append(agents, agent)
+	}
+	s.agentsMu.RUnlock()
+
+	for _, agent := range agents {
+		stalled, changed, since := agent.evaluateTelemetryStall(now, telemetryStallAfter)
+		if !changed {
+			continue
+		}
+		if stalled {
+			agent.log().With(
+				slog.Time("last_telemetry_at", since),
+				slog.Duration("quiet_for", now.Sub(since).Truncate(time.Second)),
+			).Error("agent connected but telemetry stopped arriving")
+		}
+		s.broadcastAgentSnapshot(agent.summary())
+	}
 }
 
 func (s *Server) onAgentSummary(agentID string) {
@@ -1122,6 +1186,144 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleHistory serves minute-resolution battery history: SoC, house load and
+// battery power over a time window. Query params: agent_id, battery, since/until
+// (RFC3339) or hours (default 24), limit.
+func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.db == nil {
+		writeJSON(w, s.log, struct {
+			Points []sessiondb.TelemetryPoint `json:"points"`
+		}{Points: []sessiondb.TelemetryPoint{}})
+		return
+	}
+
+	since, until, err := parseWindow(r, 24*time.Hour)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Flush first so the newest minute is present: without it the chart's right edge
+	// is always up to one tick stale.
+	s.telemetry.Flush(time.Now())
+
+	q := sessiondb.HistoryQuery{
+		AgentID:     r.URL.Query().Get("agent_id"),
+		BatteryName: r.URL.Query().Get("battery"),
+		Since:       since,
+		Until:       until,
+		Limit:       20000, // ~2 weeks of one battery at minute resolution
+	}
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if limit, convErr := strconv.Atoi(limitStr); convErr == nil && limit > 0 {
+			q.Limit = limit
+		}
+	}
+
+	points, err := s.db.QueryTelemetryHistory(q)
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("query telemetry history")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if points == nil {
+		points = []sessiondb.TelemetryPoint{}
+	}
+
+	// until is a pointer so an open-ended window omits it: omitempty does not apply
+	// to a time.Time value, which would otherwise serialize as year 1.
+	var untilOut *time.Time
+	if !until.IsZero() {
+		untilOut = &until
+	}
+
+	writeJSON(w, s.log, struct {
+		Points []sessiondb.TelemetryPoint `json:"points"`
+		Since  time.Time                  `json:"since"`
+		Until  *time.Time                 `json:"until,omitempty"`
+	}{Points: points, Since: since, Until: untilOut})
+}
+
+// handleHistoryCoverage reports how complete the stored history is, per hour. It
+// answers "did telemetry actually arrive during that window" — a complete hour is
+// 60 buckets and 360 samples per battery at the agent's 10s poll interval.
+func (s *Server) handleHistoryCoverage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.db == nil {
+		writeJSON(w, s.log, struct {
+			Hours []sessiondb.HourCoverage `json:"hours"`
+		}{Hours: []sessiondb.HourCoverage{}})
+		return
+	}
+
+	since, until, err := parseWindow(r, 48*time.Hour)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	hours, err := s.db.TelemetryCoverage(r.URL.Query().Get("agent_id"), since, until)
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("query telemetry coverage")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if hours == nil {
+		hours = []sessiondb.HourCoverage{}
+	}
+
+	writeJSON(w, s.log, struct {
+		Hours           []sessiondb.HourCoverage `json:"hours"`
+		ExpectedBuckets int                      `json:"expected_buckets"` // per hour, per battery
+		ExpectedSamples int                      `json:"expected_samples"`
+	}{Hours: hours, ExpectedBuckets: 60, ExpectedSamples: 360})
+}
+
+// parseWindow reads a since/until or hours window from the query string.
+func parseWindow(r *http.Request, defaultSpan time.Duration) (since, until time.Time, err error) {
+	query := r.URL.Query()
+
+	if sinceStr := query.Get("since"); sinceStr != "" {
+		since, err = time.Parse(time.RFC3339, sinceStr)
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid 'since' format, use RFC3339")
+		}
+		if untilStr := query.Get("until"); untilStr != "" {
+			until, err = time.Parse(time.RFC3339, untilStr)
+			if err != nil {
+				return time.Time{}, time.Time{}, fmt.Errorf("invalid 'until' format, use RFC3339")
+			}
+		}
+		return since, until, nil
+	}
+
+	span := defaultSpan
+	if hoursStr := query.Get("hours"); hoursStr != "" {
+		if hours, convErr := strconv.Atoi(hoursStr); convErr == nil && hours > 0 {
+			span = time.Duration(hours) * time.Hour
+		}
+	}
+	return time.Now().UTC().Add(-span), time.Time{}, nil
+}
+
+// writeJSON encodes a response body, logging (but not surfacing) an encode failure:
+// the status line is already on the wire by then.
+func writeJSON(w http.ResponseWriter, log *slog.Logger, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		log.With(slog.Any("error", err)).Error("encode response")
+	}
+}
+
 func (s *Server) handleDBStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1299,6 +1501,14 @@ func (s *Server) runSessionCleanup(ctx context.Context) {
 					s.log.Warn("computed schedule cleanup failed", slog.Any("error", err))
 				} else if n > 0 {
 					s.log.Info("cleaned up old computed schedules", slog.Int64("deleted", n))
+				}
+				// Minute-resolution history is ~1440 rows per battery per day, so a
+				// quarter of a year stays small while covering any question an
+				// operator asks about "what happened back then".
+				if n, err := store.CleanupHistory(historyRetention); err != nil {
+					s.log.Warn("telemetry history cleanup failed", slog.Any("error", err))
+				} else if n > 0 {
+					s.log.Info("cleaned up old telemetry history", slog.Int64("deleted", n))
 				}
 			}
 		}
