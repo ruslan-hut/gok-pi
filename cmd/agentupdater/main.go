@@ -20,15 +20,15 @@ import (
 )
 
 const (
-	envVersionURL      = "GOK_UPDATE_VERSION_URL"
-	envBinaryURL       = "GOK_UPDATE_BINARY_URL"
-	envAgentRoot       = "GOK_UPDATE_AGENT_ROOT"
-	envBinaryName      = "GOK_UPDATE_BINARY_NAME"
-	envTimeout         = "GOK_UPDATE_TIMEOUT"
-	envLogEnv          = "GOK_UPDATE_LOG_ENV"
-	envLogDir          = "GOK_UPDATE_LOG_DIR"
-	envRestartService  = "GOK_UPDATE_RESTART_SERVICE"
-	envRestartEnabled  = "GOK_UPDATE_RESTART_ENABLED"
+	envVersionURL     = "GOK_UPDATE_VERSION_URL"
+	envBinaryURL      = "GOK_UPDATE_BINARY_URL"
+	envAgentRoot      = "GOK_UPDATE_AGENT_ROOT"
+	envBinaryName     = "GOK_UPDATE_BINARY_NAME"
+	envTimeout        = "GOK_UPDATE_TIMEOUT"
+	envLogEnv         = "GOK_UPDATE_LOG_ENV"
+	envLogDir         = "GOK_UPDATE_LOG_DIR"
+	envRestartService = "GOK_UPDATE_RESTART_SERVICE"
+	envRestartEnabled = "GOK_UPDATE_RESTART_ENABLED"
 )
 
 func main() {
