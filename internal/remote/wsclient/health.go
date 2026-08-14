@@ -133,6 +133,17 @@ type SpoolHealth struct {
 	LastError               string     `json:"last_error,omitempty"`
 }
 
+// DiagResponse is the reply to a diagnostics request. It is a named type rather
+// than an anonymous struct so the control server's matching type can be checked
+// against it in a test: the two are deliberately separate declarations, and the
+// only thing holding them together is the JSON field names.
+type DiagResponse struct {
+	Type      string      `json:"type"`
+	RequestID string      `json:"request_id"`
+	Diag      Diagnostics `json:"diagnostics"`
+	SentAt    time.Time   `json:"sent_at"`
+}
+
 // Diagnostics is the full on-demand picture returned by the diagnostics RPC.
 type Diagnostics struct {
 	Agent      AgentInfo            `json:"agent"`

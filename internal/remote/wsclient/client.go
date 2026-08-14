@@ -813,12 +813,7 @@ func (c *Client) handleDiagRequest(ctx context.Context, conn *websocket.Conn, ra
 		return
 	}
 
-	resp := struct {
-		Type      string      `json:"type"`
-		RequestID string      `json:"request_id"`
-		Diag      Diagnostics `json:"diagnostics"`
-		SentAt    time.Time   `json:"sent_at"`
-	}{
+	resp := DiagResponse{
 		Type:      messageTypeDiagResponse,
 		RequestID: req.RequestID,
 		Diag:      c.diagnostics(),
