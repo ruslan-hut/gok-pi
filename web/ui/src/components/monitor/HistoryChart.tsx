@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TelemetryPoint } from "../../types";
 
 /**
@@ -18,7 +18,19 @@ import type { TelemetryPoint } from "../../types";
  * line against a filled area.
  */
 
-const WIDTH = 1000;
+/**
+ * The chart is drawn in viewBox units, so its aspect ratio is fixed by these
+ * numbers and everything — including text — scales with the container. A single
+ * wide geometry squeezed onto a phone therefore ends up both too short to read
+ * and too small to label, which is why there are two: the narrow one keeps the
+ * same panel heights over a shorter width, so the plot gets proportionally
+ * taller and the type proportionally bigger.
+ */
+const WIDE_WIDTH = 1000;
+const NARROW_WIDTH = 520;
+/** Below this rendered width the narrow geometry is used. */
+const NARROW_BREAKPOINT = 560;
+
 const PAD = { top: 16, right: 16, bottom: 20, left: 46 };
 const SOC_H = 96;
 const POWER_H = 116;
@@ -38,6 +50,13 @@ interface Sample extends TelemetryPoint {
 
 export function HistoryChart({ points, from, to }: HistoryChartProps) {
   const [hoverT, setHoverT] = useState<number | null>(null);
+  const [container, containerWidth] = useContainerWidth();
+
+  // Until the container has been measured, assume the wide geometry: it is what
+  // desktop gets, and one frame of the wrong aspect ratio is less jarring than
+  // starting narrow and snapping wider.
+  const compact = containerWidth > 0 && containerWidth < NARROW_BREAKPOINT;
+  const WIDTH = compact ? NARROW_WIDTH : WIDE_WIDTH;
 
   const samples: Sample[] = points
     .map((p) => ({ ...p, t: new Date(p.bucket).getTime() }))
@@ -67,14 +86,14 @@ export function HistoryChart({ points, from, to }: HistoryChartProps) {
   // A run is a stretch of consecutive minutes. Splitting on gaps keeps the line
   // from bridging an outage with a straight segment that never happened.
   const runs = splitRuns(samples);
-  const ticks = timeTicks(from, to);
+  const ticks = timeTicks(from, to, compact);
 
   const hovered = hoverT === null ? null : nearest(samples, hoverT);
   const hoverX = hovered ? x(hovered.t) : null;
 
   return (
     <div className="history-chart">
-      <div className="history-chart-scroll">
+      <div className="history-chart-scroll" ref={container}>
         <svg
           viewBox={`0 0 ${WIDTH} ${height}`}
           className="history-chart-svg"
@@ -357,10 +376,17 @@ function nearest(samples: Sample[], t: number): Sample | null {
   return bestDist <= 5 * 60 * 1000 ? best : null;
 }
 
-function timeTicks(from: number, to: number): { t: number; label: string }[] {
+function timeTicks(
+  from: number,
+  to: number,
+  compact: boolean,
+): { t: number; label: string }[] {
   const span = to - from;
   const hours = span / 3_600_000;
-  const stepH = hours <= 6 ? 1 : hours <= 30 ? 3 : hours <= 96 ? 12 : 24;
+  let stepH = hours <= 6 ? 1 : hours <= 30 ? 3 : hours <= 96 ? 12 : 24;
+  // Half as many labels on a narrow chart: the same count would collide once the
+  // type is scaled up.
+  if (compact) stepH *= 2;
   const step = stepH * 3_600_000;
 
   const first = new Date(from);
@@ -391,6 +417,31 @@ function clockLabel(t: number): string {
     d.getMonth() === today.getMonth() &&
     d.getDate() === today.getDate();
   return sameDay ? time : `${d.getDate()}/${d.getMonth() + 1} ${time}`;
+}
+
+/**
+ * useContainerWidth reports the rendered width of an element, so the chart can
+ * pick its geometry from the space it actually has rather than from a CSS
+ * breakpoint that knows nothing about the panel it sits in.
+ */
+function useContainerWidth(): [(node: HTMLDivElement | null) => void, number] {
+  const [width, setWidth] = useState(0);
+  const observer = useRef<ResizeObserver | null>(null);
+
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    observer.current?.disconnect();
+    if (!node) return;
+
+    setWidth(node.clientWidth);
+    observer.current = new ResizeObserver((entries) => {
+      for (const entry of entries) setWidth(entry.contentRect.width);
+    });
+    observer.current.observe(node);
+  }, []);
+
+  useEffect(() => () => observer.current?.disconnect(), []);
+
+  return [ref, width];
 }
 
 function clamp(v: number, min: number, max: number): number {

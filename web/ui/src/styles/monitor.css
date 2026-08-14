@@ -467,7 +467,10 @@
   width: 100%;
   height: auto;
   overflow: visible;
-  touch-action: pan-y;
+  /* Both axes: pan-y alone let the page scroll vertically over the chart but
+     blocked the horizontal drag that scrolls the chart itself, so on a phone
+     any overflow was unreachable. */
+  touch-action: pan-x pan-y;
 }
 
 .history-grid {
@@ -704,12 +707,6 @@
 
   .system-summary-item {
     min-width: calc(50% - var(--space-md));
-  }
-
-  /* The chart keeps a usable aspect ratio on a phone by scrolling sideways
-     rather than compressing 24 hours into 320px. */
-  .history-chart-svg {
-    min-width: 560px;
   }
 
   .history-readout,
