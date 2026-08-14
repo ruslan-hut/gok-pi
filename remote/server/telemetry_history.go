@@ -26,6 +26,11 @@ const (
 
 	// historyRetention is how long minute buckets are kept.
 	historyRetention = 90 * 24 * time.Hour
+
+	// agentBacklogWarnAfter is how old an agent's own undelivered backlog may get
+	// before the server says so. It matches the agent's watchdog threshold, so the
+	// two sides agree on what "not draining" means.
+	agentBacklogWarnAfter = 15 * time.Minute
 )
 
 // streamKey identifies one telemetry stream: a single battery on a single agent.

@@ -20,6 +20,13 @@ const RANGES = [
 
 const REFRESH_MS = 60 * 1000; // one bucket
 
+/**
+ * minSpanForVerdictMin is how much recorded history is needed before the panel
+ * will call a window complete or incomplete. Half an hour is enough that a single
+ * partial minute cannot swing the verdict.
+ */
+const minSpanForVerdictMin = 30;
+
 interface HistoryPanelProps {
   agentId: string;
   batteryNames: string[];
@@ -75,15 +82,7 @@ export function HistoryPanel({ agentId, batteryNames }: HistoryPanelProps) {
       <div className="history-panel-header">
         <div className="history-panel-title">
           <h2>History</h2>
-          {stats && (
-            <span
-              className={`history-panel-subtitle${stats.missingMinutes > 0 ? " warn" : ""}`}
-            >
-              {stats.missingMinutes > 0
-                ? `${fmtDuration(stats.missingMinutes * 60)} of telemetry missing · ${stats.deliveredPct.toFixed(0)}% recorded`
-                : "Telemetry complete — no gaps"}
-            </span>
-          )}
+          {stats && <HistorySubtitle stats={stats} />}
         </div>
 
         <div className="history-panel-controls">
@@ -141,6 +140,42 @@ export function HistoryPanel({ agentId, batteryNames }: HistoryPanelProps) {
 }
 
 /**
+ * HistorySubtitle says how trustworthy the window below it is.
+ *
+ * Over a short span the completeness figure is not wrong so much as unfounded:
+ * one partial minute out of three is "33% recorded", and a freshly deployed
+ * server would announce a fault it has no evidence for. Below the threshold the
+ * line states only what is certain — how much history exists — and makes no claim
+ * about loss in either direction.
+ */
+function HistorySubtitle({ stats }: { stats: HistoryStats }) {
+  if (stats.spanMinutes < minSpanForVerdictMin) {
+    return (
+      <span className="history-panel-subtitle">
+        {fmtDuration(stats.spanMinutes * 60)} of telemetry recorded so far
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`history-panel-subtitle${stats.missingMinutes > 0 ? " warn" : ""}`}
+    >
+      {stats.missingMinutes > 0
+        ? `${fmtDuration(stats.missingMinutes * 60)} of telemetry missing · ${stats.deliveredPct.toFixed(0)}% recorded`
+        : "Telemetry complete — no gaps"}
+    </span>
+  );
+}
+
+interface HistoryStats {
+  /** Minutes between the first and last recorded bucket, gaps included. */
+  spanMinutes: number;
+  deliveredPct: number;
+  missingMinutes: number;
+}
+
+/**
  * summarize reports how much telemetry actually landed, measured between the
  * first and last recorded minute rather than across the whole selected window —
  * a 7-day window on a server that has only been recording for a day would
@@ -149,19 +184,18 @@ export function HistoryPanel({ agentId, batteryNames }: HistoryPanelProps) {
  * Six frames is a complete minute at the agent's 10s poll interval, so a minute
  * with fewer counts as partially missing.
  */
-function summarize(
-  points: TelemetryPoint[],
-): { deliveredPct: number; missingMinutes: number } | null {
+function summarize(points: TelemetryPoint[]): HistoryStats | null {
   if (!points.length) return null;
 
   const first = new Date(points[0].bucket).getTime();
   const last = new Date(points[points.length - 1].bucket).getTime();
-  if (Number.isNaN(first) || Number.isNaN(last) || last <= first) return null;
+  if (Number.isNaN(first) || Number.isNaN(last) || last < first) return null;
 
   const expectedMinutes = Math.round((last - first) / 60_000) + 1;
   const expected = expectedMinutes * 6;
   const received = points.reduce((sum, p) => sum + Math.min(p.samples, 6), 0);
   return {
+    spanMinutes: expectedMinutes,
     deliveredPct: Math.min((received / expected) * 100, 100),
     missingMinutes: Math.round((expected - received) / 6),
   };

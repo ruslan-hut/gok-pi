@@ -21,7 +21,7 @@ func TestHandleConfigPush(t *testing.T) {
 		"type":     "server.config.push",
 		"agent_id": "agent-1",
 		"config": map[string]interface{}{
-			"revision":  2,
+			"revision":   2,
 			"updated_at": time.Now().UTC().Format(time.RFC3339),
 			"batteries": []map[string]interface{}{
 				{
@@ -68,4 +68,3 @@ func TestHandleConfigPush(t *testing.T) {
 		t.Fatal("expected config update to be enqueued")
 	}
 }
-

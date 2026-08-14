@@ -66,9 +66,10 @@ type AgentTelemetry struct {
 }
 
 type AgentHeartbeat struct {
-	Type      string          `json:"type"`
-	Timestamp time.Time       `json:"timestamp"`
-	Agent     AgentDescriptor `json:"agent"`
+	Type      string            `json:"type"`
+	Timestamp time.Time         `json:"timestamp"`
+	Agent     AgentDescriptor   `json:"agent"`
+	Spool     *AgentSpoolHealth `json:"spool,omitempty"`
 }
 
 type AgentMessage struct {
@@ -117,6 +118,10 @@ type AgentSummary struct {
 	LastTelemetryAt  *time.Time `json:"last_telemetry_at,omitempty"`
 	TelemetryFrames  uint64     `json:"telemetry_frames"`
 	TelemetryStalled bool       `json:"telemetry_stalled"`
+
+	// Spool is the agent's own view of its uplink, as of its last heartbeat: a
+	// backlog here means the agent is recording telemetry it cannot deliver.
+	Spool *AgentSpoolHealth `json:"spool,omitempty"`
 
 	Telemetry           map[string]TelemetrySnapshot `json:"telemetry"`
 	ScheduleGoalReached map[string]time.Time         `json:"schedule_goal_reached,omitempty"`
@@ -172,6 +177,31 @@ type AgentLogResponse struct {
 type LogRequest struct {
 	Lines  int    `json:"lines,omitempty"`
 	Stream string `json:"stream,omitempty"` // "agent" or "updater"
+}
+
+// AgentDiagResponse carries the agent's self-reported health. Diagnostics is kept
+// as raw JSON: the agent owns the shape, and a control server that insists on
+// parsing it would reject a newer agent reporting a field it has not been taught
+// about — exactly the agent you most want to hear from.
+type AgentDiagResponse struct {
+	Type        string          `json:"type"`
+	RequestID   string          `json:"request_id"`
+	Diagnostics json.RawMessage `json:"diagnostics"`
+	Error       string          `json:"error,omitempty"`
+	SentAt      time.Time       `json:"sent_at"`
+}
+
+// AgentSpoolHealth is the uplink summary carried on every agent heartbeat. It
+// mirrors wsclient.SpoolHealth; the two are separate so the agent can add fields
+// without the server failing to decode the message.
+type AgentSpoolHealth struct {
+	Pending                 int64      `json:"pending"`
+	OldestUndeliveredAgeSec int64      `json:"oldest_undelivered_age_sec,omitempty"`
+	Appended                uint64     `json:"appended"`
+	Delivered               uint64     `json:"delivered"`
+	FlushErrors             uint64     `json:"flush_errors,omitempty"`
+	LastDeliveryAt          *time.Time `json:"last_delivery_at,omitempty"`
+	LastError               string     `json:"last_error,omitempty"`
 }
 
 // PriceLimits defines absolute price thresholds for auto-schedule filtering.

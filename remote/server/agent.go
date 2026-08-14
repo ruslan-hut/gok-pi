@@ -19,20 +19,24 @@ import (
 //   - agent.heartbeat:    Keep-alive signal (sent every 30s)
 //   - agent.config:       Agent's current config snapshot (batteries + schedules)
 //   - agent.log.response: Response to a log request with log file contents
+//   - agent.diag.response: Response to a diagnostics request with agent health
 //
 // Server → Agent messages:
 //   - server.config.push:  Push updated config (batteries, schedules, limits) to agent
 //   - server.log.request:  Request agent to send back its log file contents
+//   - server.diag.request: Request agent to report its uplink/spool/battery health
 const (
-	agentMessageHello       = "agent.hello"
-	agentMessageTelemetry   = "agent.telemetry"
-	agentMessageHeartbeat   = "agent.heartbeat"
-	agentMessageCommand     = "agent.command"
-	agentMessageConfig      = "agent.config"
-	agentMessageLogResponse = "agent.log.response"
+	agentMessageHello        = "agent.hello"
+	agentMessageTelemetry    = "agent.telemetry"
+	agentMessageHeartbeat    = "agent.heartbeat"
+	agentMessageCommand      = "agent.command"
+	agentMessageConfig       = "agent.config"
+	agentMessageLogResponse  = "agent.log.response"
+	agentMessageDiagResponse = "agent.diag.response"
 
-	serverMessageConfigPush = "server.config.push"
-	serverMessageLogRequest = "server.log.request"
+	serverMessageConfigPush  = "server.config.push"
+	serverMessageLogRequest  = "server.log.request"
+	serverMessageDiagRequest = "server.diag.request"
 )
 
 // WebSocket liveness tuning. The server pings agents every pingPeriod and requires
@@ -74,19 +78,23 @@ type agentConnection struct {
 	telemetry           map[string]TelemetrySnapshot // Latest telemetry per battery name
 	scheduleGoalReached map[string]time.Time         // Goal reached timestamps per schedule name
 
-	logRequestsMu sync.RWMutex                     // Guards logRequests map
-	logRequests   map[string]chan AgentLogResponse // Pending log request-response pairs by request ID
+	spool *AgentSpoolHealth // agent's self-reported uplink health, from its last heartbeat
+
+	// In-flight server→agent requests, keyed by request ID.
+	logRequests  *pendingRequests[AgentLogResponse]
+	diagRequests *pendingRequests[AgentDiagResponse]
 }
 
 func newAgentConnection(conn *websocket.Conn, r *http.Request, s *Server) *agentConnection {
 	return &agentConnection{
-		conn:        conn,
-		req:         r,
-		s:           s,
-		send:        make(chan interface{}, 32),
-		done:        make(chan struct{}),
-		telemetry:   make(map[string]TelemetrySnapshot),
-		logRequests: make(map[string]chan AgentLogResponse),
+		conn:         conn,
+		req:          r,
+		s:            s,
+		send:         make(chan interface{}, 32),
+		done:         make(chan struct{}),
+		telemetry:    make(map[string]TelemetrySnapshot),
+		logRequests:  newPendingRequests[AgentLogResponse](),
+		diagRequests: newPendingRequests[AgentDiagResponse](),
 	}
 }
 
@@ -243,7 +251,14 @@ func (a *agentConnection) handleMessage(message []byte) {
 			a.log().With(slog.Any("error", err)).Warn("decode log response")
 			return
 		}
-		a.handleLogResponse(logResp)
+		a.logRequests.resolve(logResp.RequestID, logResp)
+	case agentMessageDiagResponse:
+		var diagResp AgentDiagResponse
+		if err := json.Unmarshal(message, &diagResp); err != nil {
+			a.log().With(slog.Any("error", err)).Warn("decode diagnostics response")
+			return
+		}
+		a.diagRequests.resolve(diagResp.RequestID, diagResp)
 	default:
 		a.log().With(slog.String("type", base.Type)).Debug("received unhandled agent message")
 	}
@@ -273,10 +288,28 @@ func (a *agentConnection) updateTelemetry(msg AgentTelemetry) {
 	a.s.onTelemetry(a.id, msg.Snapshot)
 }
 
-func (a *agentConnection) updateHeartbeat(_ AgentHeartbeat) {
+func (a *agentConnection) updateHeartbeat(msg AgentHeartbeat) {
 	a.mu.Lock()
 	a.lastSeen = time.Now()
+	previous := a.spool
+	if msg.Spool != nil {
+		a.spool = msg.Spool
+	}
 	a.mu.Unlock()
+
+	// The agent reports its own backlog, so a uplink that is recording telemetry
+	// it cannot deliver says so here — the case where the server sees nothing
+	// arriving and cannot otherwise tell a dead agent from a stuck one.
+	if msg.Spool != nil && msg.Spool.OldestUndeliveredAgeSec >= int64(agentBacklogWarnAfter.Seconds()) {
+		if previous == nil || previous.OldestUndeliveredAgeSec < int64(agentBacklogWarnAfter.Seconds()) {
+			a.log().With(
+				slog.Int64("pending", msg.Spool.Pending),
+				slog.Int64("oldest_undelivered_age_sec", msg.Spool.OldestUndeliveredAgeSec),
+				slog.String("last_error", msg.Spool.LastError),
+			).Error("agent reports an undelivered telemetry backlog")
+		}
+	}
+
 	a.s.onAgentSummary(a.id)
 }
 
@@ -334,6 +367,7 @@ func (a *agentConnection) summary() AgentSummary {
 		LastTelemetryAt:     lastTelemetry,
 		TelemetryFrames:     a.telemetryFrames,
 		TelemetryStalled:    a.telemetryStalled,
+		Spool:               a.spool,
 		Telemetry:           telemetry,
 		ScheduleGoalReached: goalReached,
 	}
@@ -386,11 +420,6 @@ func (a *agentConnection) sendCommand(req CommandRequest) error {
 func (a *agentConnection) requestLogs(req LogRequest, timeout time.Duration) (AgentLogResponse, error) {
 	requestID := fmt.Sprintf("%s-logs-%d", a.id, time.Now().UnixNano())
 
-	ch := make(chan AgentLogResponse, 1)
-	a.logRequestsMu.Lock()
-	a.logRequests[requestID] = ch
-	a.logRequestsMu.Unlock()
-
 	payload := struct {
 		Type      string    `json:"type"`
 		RequestID string    `json:"request_id"`
@@ -405,55 +434,25 @@ func (a *agentConnection) requestLogs(req LogRequest, timeout time.Duration) (Ag
 		SentAt:    time.Now().UTC(),
 	}
 
-	select {
-	case <-a.done:
-		a.logRequestsMu.Lock()
-		delete(a.logRequests, requestID)
-		close(ch)
-		a.logRequestsMu.Unlock()
-		return AgentLogResponse{}, fmt.Errorf("agent connection closed")
-	case a.send <- payload:
-		// Wait for response with timeout
-		select {
-		case resp := <-ch:
-			return resp, nil
-		case <-time.After(timeout):
-			a.logRequestsMu.Lock()
-			delete(a.logRequests, requestID)
-			close(ch)
-			a.logRequestsMu.Unlock()
-			return AgentLogResponse{}, fmt.Errorf("log request timed out")
-		case <-a.done:
-			a.logRequestsMu.Lock()
-			delete(a.logRequests, requestID)
-			close(ch)
-			a.logRequestsMu.Unlock()
-			return AgentLogResponse{}, fmt.Errorf("agent connection closed")
-		}
-	default:
-		a.logRequestsMu.Lock()
-		delete(a.logRequests, requestID)
-		close(ch)
-		a.logRequestsMu.Unlock()
-		return AgentLogResponse{}, fmt.Errorf("agent send buffer full")
-	}
+	return awaitAgentResponse(a, a.logRequests, requestID, payload, timeout, "log")
 }
 
-func (a *agentConnection) handleLogResponse(resp AgentLogResponse) {
-	a.logRequestsMu.Lock()
-	ch, ok := a.logRequests[resp.RequestID]
-	if ok {
-		delete(a.logRequests, resp.RequestID)
-	}
-	a.logRequestsMu.Unlock()
+// requestDiagnostics asks the agent for its current health. It is read-only on
+// the agent side: nothing is polled, commanded, or reset by answering it.
+func (a *agentConnection) requestDiagnostics(timeout time.Duration) (AgentDiagResponse, error) {
+	requestID := fmt.Sprintf("%s-diag-%d", a.id, time.Now().UnixNano())
 
-	if ok {
-		select {
-		case ch <- resp:
-		default:
-		}
-		close(ch)
+	payload := struct {
+		Type      string    `json:"type"`
+		RequestID string    `json:"request_id"`
+		SentAt    time.Time `json:"sent_at"`
+	}{
+		Type:      serverMessageDiagRequest,
+		RequestID: requestID,
+		SentAt:    time.Now().UTC(),
 	}
+
+	return awaitAgentResponse(a, a.diagRequests, requestID, payload, timeout, "diagnostics")
 }
 
 func (a *agentConnection) log() *slog.Logger {

@@ -7,6 +7,7 @@
 package spool
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -112,6 +113,56 @@ func (s *Spool) MarkDelivered(maxID int64) error {
 		return fmt.Errorf("mark delivered: %w", err)
 	}
 	return nil
+}
+
+// Stats is a point-in-time picture of the buffer. OldestUndelivered is the whole
+// diagnosis when telemetry stops reaching the server: a backlog that keeps growing
+// while its oldest row keeps ageing means the uplink is not draining, which is
+// invisible from the agent log alone.
+type Stats struct {
+	Total             int64      `json:"total"`
+	Pending           int64      `json:"pending"`
+	OldestUndelivered *time.Time `json:"oldest_undelivered,omitempty"`
+	NewestRecorded    *time.Time `json:"newest_recorded,omitempty"`
+}
+
+// Stats reports the buffer's size and the age of its backlog in one pass.
+func (s *Spool) Stats() (Stats, error) {
+	var row struct {
+		Total   int64          `db:"total"`
+		Pending int64          `db:"pending"`
+		Oldest  sql.NullString `db:"oldest"`
+		Newest  sql.NullString `db:"newest"`
+	}
+	err := s.db.Get(&row, `
+		SELECT COUNT(*) AS total,
+		       COALESCE(SUM(CASE WHEN delivered = 0 THEN 1 ELSE 0 END), 0) AS pending,
+		       MIN(CASE WHEN delivered = 0 THEN recorded_at END) AS oldest,
+		       MAX(recorded_at) AS newest
+		FROM telemetry`)
+	if err != nil {
+		return Stats{}, fmt.Errorf("spool stats: %w", err)
+	}
+
+	stats := Stats{Total: row.Total, Pending: row.Pending}
+	if t, ok := parseStamp(row.Oldest); ok {
+		stats.OldestUndelivered = &t
+	}
+	if t, ok := parseStamp(row.Newest); ok {
+		stats.NewestRecorded = &t
+	}
+	return stats, nil
+}
+
+func parseStamp(v sql.NullString) (time.Time, bool) {
+	if !v.Valid || v.String == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339Nano, v.String)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 // PendingCount returns the number of undelivered snapshots.

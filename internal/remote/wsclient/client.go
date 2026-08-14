@@ -64,10 +64,12 @@ const (
 )
 
 const (
-	messageTypeConfigPush  = "server.config.push"
-	messageTypeAgentConfig = "agent.config"
-	messageTypeLogRequest  = "server.log.request"
-	messageTypeLogResponse = "agent.log.response"
+	messageTypeConfigPush   = "server.config.push"
+	messageTypeAgentConfig  = "agent.config"
+	messageTypeLogRequest   = "server.log.request"
+	messageTypeLogResponse  = "agent.log.response"
+	messageTypeDiagRequest  = "server.diag.request"
+	messageTypeDiagResponse = "agent.diag.response"
 )
 
 type AgentMetadata struct {
@@ -106,9 +108,10 @@ type helloMessage struct {
 }
 
 type heartbeatMessage struct {
-	Type      string    `json:"type"`
-	Timestamp time.Time `json:"timestamp"`
-	Agent     AgentInfo `json:"agent"`
+	Type      string       `json:"type"`
+	Timestamp time.Time    `json:"timestamp"`
+	Agent     AgentInfo    `json:"agent"`
+	Spool     *SpoolHealth `json:"spool,omitempty"`
 }
 
 type telemetryEnvelope struct {
@@ -129,6 +132,7 @@ type Client struct {
 	telemetryCh     chan observers.Snapshot
 	spool           *spool.Spool  // durable telemetry buffer; nil = in-memory only
 	spoolSignal     chan struct{} // wakes the write loop when new spool data is appended
+	health          *uplinkHealth // counters behind the heartbeat and diagnostics RPC
 	commands        chan Command
 	configs         chan ConfigUpdate
 	configSync      chan configSnapshot
@@ -158,6 +162,7 @@ func New(cfg config.RemoteControl, meta AgentMetadata, log *slog.Logger) *Client
 		},
 		telemetryCh: make(chan observers.Snapshot, 64),
 		spoolSignal: make(chan struct{}, 1),
+		health:      newUplinkHealth(),
 		commands:    make(chan Command, 32),
 		configs:     make(chan ConfigUpdate, 8),
 		configSync:  make(chan configSnapshot, 4),
@@ -247,6 +252,7 @@ func (c *Client) run(ctx context.Context) {
 		backoff = initialBackoff
 		connected = true
 		if everConnected {
+			c.health.recordReconnect()
 			c.log.Info("control server connection restored", slog.String("url", c.cfg.ServerURL))
 		} else {
 			c.log.Info("control server connection established", slog.String("url", c.cfg.ServerURL))
@@ -295,10 +301,24 @@ func (c *Client) spoolMaintenance(ctx context.Context) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
-		if deleted, err := c.spool.Prune(deliveredRetention, hardRetention); err != nil {
-			c.log.With(sl.Err(err)).Warn("prune telemetry spool")
-		} else if deleted > 0 {
-			c.log.Info("pruned telemetry spool", slog.Int64("deleted", deleted))
+		// Logged every hour whatever the outcome, with the backlog alongside.
+		// "deleted=0 pending=4200 oldest=9h" is the line that would have made a
+		// stalled uplink obvious; "deleted=360" alone said nothing, and silence
+		// when nothing was deleted said less.
+		deleted, err := c.spool.Prune(deliveredRetention, hardRetention)
+		if err != nil {
+			c.log.With(sl.Err(err)).Error("prune telemetry spool")
+		} else {
+			c.health.recordPrune(deleted)
+			log := c.log.With(slog.Int64("deleted", deleted))
+			if stats, statsErr := c.spool.Stats(); statsErr == nil {
+				log = log.With(slog.Int64("pending", stats.Pending), slog.Int64("total", stats.Total))
+				if stats.OldestUndelivered != nil {
+					log = log.With(slog.Duration("oldest_undelivered",
+						time.Since(*stats.OldestUndelivered).Truncate(time.Second)))
+				}
+			}
+			log.Info("pruned telemetry spool")
 		}
 		select {
 		case <-ctx.Done():
@@ -316,8 +336,10 @@ func (c *Client) enqueueSnapshot(snapshot observers.Snapshot) {
 	// Durable path: persist every snapshot to disk, then nudge the write loop.
 	// Nothing is dropped here — the spool survives disconnects and restarts.
 	if c.spool != nil {
-		if err := c.spool.Append(snapshot); err != nil {
-			c.log.With(sl.Err(err)).Warn("failed to spool telemetry snapshot")
+		err := c.spool.Append(snapshot)
+		c.health.recordAppend(err)
+		if err != nil {
+			c.log.With(sl.Err(err)).Error("failed to spool telemetry snapshot")
 			return
 		}
 		select {
@@ -420,6 +442,8 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn) error {
 			c.handleConfigPush(raw)
 		case messageTypeLogRequest:
 			c.handleLogRequest(ctx, conn, raw)
+		case messageTypeDiagRequest:
+			c.handleDiagRequest(ctx, conn, raw)
 		default:
 			var msg IncomingMessage
 			if err := json.Unmarshal(raw, &msg); err != nil {
@@ -444,6 +468,8 @@ func (c *Client) writeLoop(ctx context.Context, conn *websocket.Conn) error {
 		}
 		spoolTicker := time.NewTicker(defaultSpoolFlushInterval)
 		defer spoolTicker.Stop()
+		backlogTicker := time.NewTicker(backlogCheckInterval)
+		defer backlogTicker.Stop()
 
 		for {
 			select {
@@ -455,6 +481,14 @@ func (c *Client) writeLoop(ctx context.Context, conn *websocket.Conn) error {
 				}
 			case <-spoolTicker.C:
 				if err := c.flushSpool(ctx, conn); err != nil {
+					return err
+				}
+			case <-backlogTicker.C:
+				if err := c.checkBacklog(); err != nil {
+					// Returning tears the connection down so run() redials. A
+					// backlog this old means the write path is not draining even
+					// though the socket still reads, and only a fresh connection
+					// (and a fresh write loop) has been seen to clear it.
 					return err
 				}
 			case cfg := <-c.configSync:
@@ -518,9 +552,11 @@ func (c *Client) flushSpool(ctx context.Context, conn *websocket.Conn) error {
 		}
 		entries, err := c.spool.Undelivered(spoolBatchSize)
 		if err != nil {
-			// Treat a read failure as transient: log and stop this pass without
-			// dropping the connection. The next signal/tick retries.
-			c.log.With(sl.Err(err)).Warn("read telemetry spool")
+			// A read failure does not drop the connection — the next signal/tick
+			// retries — but it is counted and surfaced, because repeated failures
+			// here stop delivery entirely while the link still looks healthy.
+			c.health.recordReadError(err)
+			c.log.With(sl.Err(err)).Error("read telemetry spool")
 			return nil
 		}
 		if len(entries) == 0 {
@@ -528,14 +564,20 @@ func (c *Client) flushSpool(ctx context.Context, conn *websocket.Conn) error {
 		}
 		for _, e := range entries {
 			if err := c.writeTelemetry(ctx, conn, e.Snapshot); err != nil {
+				c.health.recordFlushError(err)
 				return err
 			}
 		}
 		lastID := entries[len(entries)-1].ID
 		if err := c.spool.MarkDelivered(lastID); err != nil {
-			c.log.With(sl.Err(err)).Warn("mark telemetry delivered")
+			// Rows were sent but not marked, so they will be resent. Left
+			// unreported this is silent duplication now and a spool that never
+			// prunes later.
+			c.health.recordMarkError(err)
+			c.log.With(sl.Err(err)).Error("mark telemetry delivered")
 			return nil
 		}
+		c.health.recordDelivered(len(entries))
 		if len(entries) < spoolBatchSize {
 			return nil
 		}
@@ -584,11 +626,61 @@ func (c *Client) sendInitialSnapshots(ctx context.Context, conn *websocket.Conn)
 	return nil
 }
 
+// checkBacklog fails the connection when the oldest undelivered snapshot has
+// aged past backlogStallAfter. Telemetry is flushed within seconds of being
+// appended, so a backlog measured in quarter-hours is a stuck write path, not a
+// slow one — and it produces no error of its own, which is precisely why it can
+// run for hours unnoticed.
+func (c *Client) checkBacklog() error {
+	if c.spool == nil {
+		return nil
+	}
+
+	stats, err := c.spool.Stats()
+	if err != nil {
+		c.health.recordReadError(err)
+		c.log.With(sl.Err(err)).Warn("read telemetry spool stats")
+		return nil
+	}
+	if stats.OldestUndelivered == nil {
+		return nil
+	}
+
+	age := time.Since(*stats.OldestUndelivered)
+	if age < backlogStallAfter {
+		return nil
+	}
+
+	c.health.recordForcedRedial()
+	c.log.With(
+		slog.Int64("pending", stats.Pending),
+		slog.Duration("oldest_undelivered", age.Truncate(time.Second)),
+	).Error("telemetry backlog is not draining; dropping the connection to retry")
+
+	return fmt.Errorf("telemetry backlog stalled: %d pending, oldest %s", stats.Pending, age.Truncate(time.Second))
+}
+
+// spoolHealth builds the heartbeat's uplink summary, tolerating a spool that is
+// disabled or momentarily unreadable.
+func (c *Client) spoolHealth() *SpoolHealth {
+	var stats *spool.Stats
+	if c.spool != nil {
+		if s, err := c.spool.Stats(); err == nil {
+			stats = &s
+		} else {
+			c.health.recordReadError(err)
+		}
+	}
+	health := c.health.spoolHealth(stats, time.Now())
+	return &health
+}
+
 func (c *Client) writeHeartbeat(ctx context.Context, conn *websocket.Conn) error {
 	msg := heartbeatMessage{
 		Type:      "agent.heartbeat",
 		Timestamp: time.Now().UTC(),
 		Agent:     c.agent,
+		Spool:     c.spoolHealth(),
 	}
 	if err := c.writeJSON(ctx, conn, msg); err != nil {
 		return fmt.Errorf("send heartbeat: %w", err)
@@ -706,6 +798,70 @@ func (c *Client) handleLogRequest(ctx context.Context, conn *websocket.Conn, raw
 	if err := c.writeJSON(ctx, conn, resp); err != nil {
 		c.log.With(sl.Err(err)).Error("send log response")
 	}
+}
+
+// handleDiagRequest answers an on-demand health request. It is read-only: it
+// reports what the agent has been doing without touching the battery, the
+// schedules, or the connection.
+func (c *Client) handleDiagRequest(ctx context.Context, conn *websocket.Conn, raw json.RawMessage) {
+	var req struct {
+		Type      string `json:"type"`
+		RequestID string `json:"request_id"`
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		c.log.With(sl.Err(err)).Error("decode diagnostics request")
+		return
+	}
+
+	resp := struct {
+		Type      string      `json:"type"`
+		RequestID string      `json:"request_id"`
+		Diag      Diagnostics `json:"diagnostics"`
+		SentAt    time.Time   `json:"sent_at"`
+	}{
+		Type:      messageTypeDiagResponse,
+		RequestID: req.RequestID,
+		Diag:      c.diagnostics(),
+		SentAt:    time.Now().UTC(),
+	}
+
+	if err := c.writeJSON(ctx, conn, resp); err != nil {
+		c.log.With(sl.Err(err)).Error("send diagnostics response")
+	}
+}
+
+// diagnostics gathers the agent's current health. The battery readings come from
+// the observers rather than a fresh poll, so asking for diagnostics never adds
+// load to the battery API or perturbs what is being diagnosed.
+func (c *Client) diagnostics() Diagnostics {
+	now := time.Now()
+
+	diag := Diagnostics{
+		Agent:      c.agent,
+		UptimeSec:  int64(c.health.uptime(now).Seconds()),
+		Goroutines: goroutineCount(),
+		Uplink:     c.health.snapshot(),
+		Batteries:  observers.GetSnapshots(),
+	}
+
+	if c.spool != nil {
+		if stats, err := c.spool.Stats(); err != nil {
+			diag.SpoolError = err.Error()
+		} else {
+			diag.Spool = &stats
+		}
+	}
+
+	c.initialConfigMu.RLock()
+	if cfg := c.initialConfig; cfg != nil {
+		diag.Config = ConfigDiagnostics{
+			Batteries: len(cfg.Batteries),
+			Schedules: len(cfg.Schedules),
+		}
+	}
+	c.initialConfigMu.RUnlock()
+
+	return diag
 }
 
 func (c *Client) readLogs(stream string, lines int) (string, error) {

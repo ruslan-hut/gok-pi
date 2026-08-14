@@ -15,6 +15,7 @@ import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { useServiceWorker } from "./hooks/useServiceWorker";
 import { useTheme } from "./hooks/useTheme";
 import type { AppPage } from "./types";
+import { AgentStatusBadges } from "./components/layout/AgentStatusBadges";
 import { TopNav } from "./components/layout/TopNav";
 import { TabBar } from "./components/layout/TabBar";
 import { BottomNav } from "./components/layout/BottomNav";
@@ -215,29 +216,10 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, b
               <header>
                 <div className="agent-header">
                   <h2>{deviceName}</h2>
-                  <div className="agent-header-badges">
-                    <span
-                      className={`badge ${selectedAgentOnline ? "ok" : "fault"}`}
-                    >
-                      {selectedAgentOnline ? "Connected" : "Offline"}
-                    </span>
-                    {/* A connected agent whose telemetry stopped looks perfectly
-                        healthy from "Last contact" alone: the 30s heartbeat keeps
-                        that fresh. This badge is the only place the difference
-                        shows. */}
-                    {selectedAgentOnline && selectedAgent.telemetry_stalled && (
-                      <span
-                        className="badge warn"
-                        title={
-                          selectedAgent.last_telemetry_at
-                            ? `Last telemetry ${fmtDateTime(selectedAgent.last_telemetry_at)}`
-                            : "No telemetry received on this connection"
-                        }
-                      >
-                        No telemetry
-                      </span>
-                    )}
-                  </div>
+                  <AgentStatusBadges
+                    agent={selectedAgent}
+                    online={selectedAgentOnline}
+                  />
                 </div>
                 <div className="status-bar">
                   <span title={fmtDateTime(selectedAgent.last_seen)}>

@@ -408,6 +408,15 @@ func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if len(segments) == 2 && segments[1] == "diag" {
+		if r.Method != http.MethodGet && r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleAgentDiag(w, r, agentID)
+		return
+	}
+
 	if len(segments) == 2 && segments[1] == "logs" {
 		if r.Method != http.MethodGet && r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1567,6 +1576,40 @@ func (s *Server) handleDBRecords(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		s.log.With(slog.Any("error", err)).Error("encode db records response")
+	}
+}
+
+// handleAgentDiag asks a connected agent for its current health and returns it
+// verbatim. The agent's report is passed through unparsed so a newer agent can
+// add fields without this server needing to know about them.
+func (s *Server) handleAgentDiag(w http.ResponseWriter, _ *http.Request, agentID string) {
+	s.agentsMu.RLock()
+	agent, ok := s.agents[agentID]
+	s.agentsMu.RUnlock()
+
+	if !ok {
+		http.Error(w, "agent not connected", http.StatusNotFound)
+		return
+	}
+
+	resp, err := agent.requestDiagnostics(10 * time.Second)
+	if err != nil {
+		s.log.With(slog.String("agent", agentID), slog.Any("error", err)).Error("requesting diagnostics from agent")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if resp.Error != "" {
+		http.Error(w, resp.Error, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if len(resp.Diagnostics) == 0 {
+		_, _ = w.Write([]byte("{}"))
+		return
+	}
+	if _, err := w.Write(resp.Diagnostics); err != nil {
+		s.log.With(slog.Any("error", err)).Error("write diagnostics response")
 	}
 }
 

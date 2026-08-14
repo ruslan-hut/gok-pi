@@ -111,14 +111,14 @@ export function HistoryChart({ points, from, to }: HistoryChartProps) {
                 y2={socY(v)}
                 className="history-grid"
               />
+              {/* The unit rides the top tick rather than sitting on its own line
+                  above it: at this scale the two stack close enough to read as
+                  one label broken across two lines. */}
               <text x={PAD.left - 6} y={socY(v) + 3} textAnchor="end" className="history-axis-label">
-                {v}
+                {v === 100 ? "100%" : v}
               </text>
             </g>
           ))}
-          <text x={PAD.left - 6} y={socTop - 5} textAnchor="end" className="history-axis-unit">
-            %
-          </text>
 
           {runs.map((run, i) => (
             <g key={`soc-run-${i}`}>
@@ -143,12 +143,9 @@ export function HistoryChart({ points, from, to }: HistoryChartProps) {
               textAnchor="end"
               className="history-axis-label"
             >
-              {fmtScale(v)}
+              {v > 0 ? `${fmtScale(v)}W` : fmtScale(v)}
             </text>
           ))}
-          <text x={PAD.left - 6} y={powerTop - 5} textAnchor="end" className="history-axis-unit">
-            W
-          </text>
 
           {/* Battery power splits at the baseline: out (discharging) above,
               in (charging) below, matching the "out"/"in" wording used on the

@@ -487,12 +487,6 @@
   font-family: var(--font-mono), monospace;
 }
 
-.history-axis-unit {
-  fill: var(--color-text-dim);
-  font-size: 9px;
-  letter-spacing: 0.04em;
-}
-
 /* Charge level: a filled level reads as a quantity in a container. */
 .history-soc-area {
   fill: var(--color-primary);

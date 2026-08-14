@@ -787,15 +787,34 @@ func (c *Controller) stopOperation() error {
 			return err
 		}
 
+		releasedManual := false
 		if c.status != nil {
 			err = c.switchToAuto()
 			if err != nil {
 				return err
 			}
+			releasedManual = true
 		}
 
+		wasActive := c.active
 		c.active = false
 		c.lastTransition = time.Now()
+
+		// Every stop is logged here, including the ordinary end-of-window one that
+		// no branch above announces. Without it the log shows a discharge starting
+		// and never ending, and whether the battery was handed back cannot be
+		// established after the fact.
+		//
+		// released_manual is this controller's claim on manual mode, not the
+		// battery's resulting mode: the coordinator keeps the battery in manual
+		// while the opposite direction is still running, so promising "returned to
+		// auto" here would sometimes be a lie.
+		c.log.With(
+			slog.Bool("was_active", wasActive),
+			slog.Bool("released_manual", releasedManual),
+			slog.Float64("usoc", c.soc),
+			slog.Float64("soc_limit", c.socLimit),
+		).Info("stopped " + c.dir.Name)
 	}
 	return nil
 }

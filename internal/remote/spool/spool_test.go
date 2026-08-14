@@ -120,3 +120,64 @@ func TestSpoolPrune(t *testing.T) {
 		t.Fatalf("expected 1 pending after prune, got %d", pending)
 	}
 }
+
+func TestSpoolStatsReportsBacklogAge(t *testing.T) {
+	sp := newTestSpool(t)
+	base := time.Date(2026, 6, 27, 10, 0, 0, 0, time.UTC)
+
+	for i := 0; i < 5; i++ {
+		if err := sp.Append(snap("BAT-001", base.Add(time.Duration(i)*time.Minute))); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+	}
+
+	stats, err := sp.Stats()
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if stats.Total != 5 || stats.Pending != 5 {
+		t.Fatalf("expected 5 total and 5 pending, got total=%d pending=%d", stats.Total, stats.Pending)
+	}
+	if stats.OldestUndelivered == nil || !stats.OldestUndelivered.Equal(base) {
+		t.Fatalf("expected the oldest undelivered row to be %s, got %v", base, stats.OldestUndelivered)
+	}
+	if stats.NewestRecorded == nil || !stats.NewestRecorded.Equal(base.Add(4*time.Minute)) {
+		t.Fatalf("expected the newest row to be %s, got %v", base.Add(4*time.Minute), stats.NewestRecorded)
+	}
+
+	// Delivering the head of the queue must move the backlog's age forward: this
+	// is the number the watchdog and the heartbeat both read.
+	entries, err := sp.Undelivered(3)
+	if err != nil {
+		t.Fatalf("undelivered: %v", err)
+	}
+	if err := sp.MarkDelivered(entries[len(entries)-1].ID); err != nil {
+		t.Fatalf("mark delivered: %v", err)
+	}
+
+	stats, err = sp.Stats()
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if stats.Pending != 2 {
+		t.Fatalf("expected 2 pending after delivering 3, got %d", stats.Pending)
+	}
+	if stats.OldestUndelivered == nil || !stats.OldestUndelivered.Equal(base.Add(3*time.Minute)) {
+		t.Fatalf("expected the backlog to start at %s, got %v", base.Add(3*time.Minute), stats.OldestUndelivered)
+	}
+}
+
+func TestSpoolStatsOnEmptyBuffer(t *testing.T) {
+	sp := newTestSpool(t)
+
+	stats, err := sp.Stats()
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if stats.Total != 0 || stats.Pending != 0 {
+		t.Fatalf("expected an empty spool, got total=%d pending=%d", stats.Total, stats.Pending)
+	}
+	if stats.OldestUndelivered != nil || stats.NewestRecorded != nil {
+		t.Fatal("expected no timestamps for an empty spool")
+	}
+}

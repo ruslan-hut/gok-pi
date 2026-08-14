@@ -66,9 +66,30 @@ export interface AgentSummary {
   last_telemetry_at?: string;
   telemetry_frames?: number;
   telemetry_stalled?: boolean;
+  // The agent's own view of its uplink, from its last heartbeat. Where
+  // telemetry_stalled says the server is receiving nothing, this says whether the
+  // agent is holding telemetry it cannot deliver — the two have different fixes.
+  spool?: AgentSpoolHealth;
   telemetry: Record<string, TelemetrySnapshot>;
   schedule_goal_reached?: Record<string, string>;
   connected?: boolean;
+}
+
+/**
+ * AgentSpoolHealth is the agent's durable telemetry buffer as of its last
+ * heartbeat. pending is normally a handful of snapshots in flight;
+ * oldest_undelivered_age_sec is the one that matters — telemetry is flushed
+ * within seconds of being recorded, so a backlog measured in minutes means the
+ * uplink has stopped draining.
+ */
+export interface AgentSpoolHealth {
+  pending: number;
+  oldest_undelivered_age_sec?: number;
+  appended: number;
+  delivered: number;
+  flush_errors?: number;
+  last_delivery_at?: string;
+  last_error?: string;
 }
 
 /**
