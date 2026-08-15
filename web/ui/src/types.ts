@@ -158,10 +158,12 @@ export interface EmailRecipient {
 export interface EmailReportsConfig {
   enabled: boolean;
   recipients: EmailRecipient[];
-  daily: boolean;
-  weekly: boolean;
-  monthly: boolean;
   send_hour: number;
+  /** Legacy agent-wide report switches; the server keeps them only to migrate
+   *  older stored configs and no longer consults them when sending. */
+  daily?: boolean;
+  weekly?: boolean;
+  monthly?: boolean;
 }
 
 export interface AgentConfig {

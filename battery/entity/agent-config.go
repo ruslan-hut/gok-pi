@@ -57,15 +57,20 @@ func (r EmailRecipient) WantsKind(kind string) bool {
 
 // EmailReportsConfig holds per-agent email delivery settings, edited from the web UI
 // and consumed by the control server's email scheduler. The agent ignores this field.
-// Enabled and the Daily/Weekly/Monthly flags are the master switches for the agent;
-// each recipient then opts in to the kinds they want.
+// Enabled is the master switch for the agent; what is actually sent, and to whom, is
+// each recipient's own subscription.
 type EmailReportsConfig struct {
 	Enabled    bool             `json:"enabled"`
 	Recipients []EmailRecipient `json:"recipients"`
-	Daily      bool             `json:"daily"`
-	Weekly     bool             `json:"weekly"`    // sent Monday for Mon–Sun prior
-	Monthly    bool             `json:"monthly"`   // sent on day 1 for previous month
 	SendHour   int              `json:"send_hour"` // 0–23, in agent timezone
+
+	// Daily, Weekly and Monthly were agent-wide report switches before
+	// subscriptions were per recipient. They are still read so a stored config
+	// written back then migrates its plain-string recipients to the right
+	// subscriptions, and are no longer consulted when sending.
+	Daily   bool `json:"daily,omitempty"`
+	Weekly  bool `json:"weekly,omitempty"`
+	Monthly bool `json:"monthly,omitempty"`
 }
 
 // UnmarshalJSON accepts both the current recipient objects and the original

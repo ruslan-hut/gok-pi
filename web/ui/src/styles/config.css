@@ -578,10 +578,18 @@
 }
 
 /* Recipient subscriptions: one row per address, one column per delivery, so who
-   gets what is readable at a glance instead of inferred from a list of emails. */
+   gets what is readable at a glance. The block sits outside the auto-fit form
+   grid — inside it the table landed in a 200px column and every checkbox scrolled
+   out of sight. */
+.email-recipients {
+  margin-top: var(--space-lg);
+}
+
 .recipients-table {
   overflow-x: auto;
   margin-top: var(--space-sm);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--radius-md);
 }
 
 .recipients-table table {
@@ -592,7 +600,7 @@
 
 .recipients-table th {
   text-align: left;
-  padding: var(--space-xs) var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
   font-size: 0.7rem;
   color: var(--color-text-muted);
   text-transform: uppercase;
@@ -603,24 +611,33 @@
 }
 
 .recipients-table td {
-  padding: var(--space-xs) var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
   border-bottom: 1px solid var(--border-color-subtle);
   vertical-align: middle;
+}
+
+.recipients-table tr:last-child td {
+  border-bottom: none;
 }
 
 .recipients-table th.sub,
 .recipients-table td.sub {
   text-align: center;
   width: 1%;
+  padding-left: var(--space-sm);
+  padding-right: var(--space-sm);
 }
 
 .recipients-table td input[type="email"] {
   width: 100%;
-  min-width: 14rem;
+  min-width: 12rem;
 }
 
 .recipients-table input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
   cursor: pointer;
+  accent-color: var(--color-primary);
 }
 
 .recipients-table input[type="checkbox"]:disabled {
@@ -639,7 +656,7 @@
   display: flex;
   gap: var(--space-sm);
   flex-wrap: wrap;
-  margin-top: var(--space-sm);
+  margin-top: var(--space-md);
 }
 
 .recipient-remove {
@@ -666,4 +683,24 @@
 
 .input-invalid {
   border-color: var(--color-danger) !important;
+}
+
+/* Narrow screens: the address keeps the row, the ticks compress rather than
+   scrolling away behind a horizontal bar nobody notices. */
+@media (max-width: 640px) {
+  .recipients-table th,
+  .recipients-table td {
+    padding-left: var(--space-xs);
+    padding-right: var(--space-xs);
+  }
+
+  .recipients-table th {
+    font-size: 0.6rem;
+    letter-spacing: 0;
+  }
+
+  .recipients-table td input[type="email"] {
+    min-width: 9rem;
+    font-size: 0.8rem;
+  }
 }

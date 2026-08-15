@@ -109,15 +109,18 @@ func (s *Scheduler) processAgent(ctx context.Context, job AgentJob) {
 		return
 	}
 
+	// A report is produced when somebody is subscribed to it. The subscriptions
+	// are the only switch: an agent-level toggle on top of them meant a report
+	// could be silently withheld from a recipient who had asked for it.
+
 	// Daily — covers the previous local day.
-	if job.Reports.Daily && len(job.Reports.RecipientsFor(entity.EmailKindDaily)) > 0 {
+	if len(job.Reports.RecipientsFor(entity.EmailKindDaily)) > 0 {
 		yesterday := LocalDay(job.Timezone, now.AddDate(0, 0, -1))
 		s.maybeSendDaily(ctx, job, yesterday)
 	}
 
 	// Weekly — only on Mondays, covers the previous Mon..Sun.
-	if job.Reports.Weekly && now.Weekday() == time.Monday &&
-		len(job.Reports.RecipientsFor(entity.EmailKindWeekly)) > 0 {
+	if now.Weekday() == time.Monday && len(job.Reports.RecipientsFor(entity.EmailKindWeekly)) > 0 {
 		thisMonday := MondayOfWeek(now)
 		start := thisMonday.AddDate(0, 0, -7)
 		end := thisMonday
@@ -125,8 +128,7 @@ func (s *Scheduler) processAgent(ctx context.Context, job AgentJob) {
 	}
 
 	// Monthly — only on day 1, covers the previous month.
-	if job.Reports.Monthly && now.Day() == 1 &&
-		len(job.Reports.RecipientsFor(entity.EmailKindMonthly)) > 0 {
+	if now.Day() == 1 && len(job.Reports.RecipientsFor(entity.EmailKindMonthly)) > 0 {
 		thisMonth := FirstOfMonth(now)
 		start := thisMonth.AddDate(0, -1, 0)
 		end := thisMonth
