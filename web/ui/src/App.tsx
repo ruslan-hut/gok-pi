@@ -314,6 +314,8 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, b
                       onStreamChange={logs.setLogStream}
                       onLinesChange={logs.setLogLines}
                       logsDisabled={!selectedAgentOnline}
+                      agentOnline={selectedAgentOnline}
+                      readonly={readonly}
                     />
                   )}
                 </>

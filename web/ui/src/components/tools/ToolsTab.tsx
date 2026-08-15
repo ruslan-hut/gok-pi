@@ -1,5 +1,6 @@
 import { StatusMessagePreview } from "./StatusMessagePreview";
 import { LogViewer } from "./LogViewer";
+import { AgentMaintenance } from "./AgentMaintenance";
 
 interface ToolsTabProps {
   // Status message
@@ -21,6 +22,9 @@ interface ToolsTabProps {
   onStreamChange: (stream: string) => void;
   onLinesChange: (lines: number) => void;
   logsDisabled: boolean;
+  // Agent process
+  agentOnline: boolean;
+  readonly: boolean;
 }
 
 export function ToolsTab({
@@ -41,6 +45,8 @@ export function ToolsTab({
   onStreamChange,
   onLinesChange,
   logsDisabled,
+  agentOnline,
+  readonly,
 }: ToolsTabProps) {
   return (
     <>
@@ -64,6 +70,9 @@ export function ToolsTab({
         onLinesChange={onLinesChange}
         disabled={logsDisabled}
       />
+      {/* Restarting is a write, so it is shown to logged-in users only — the
+          same line the database inspector and the config forms draw. */}
+      {!readonly && <AgentMaintenance agentId={agentId} online={agentOnline} />}
     </>
   );
 }

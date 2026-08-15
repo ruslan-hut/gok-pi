@@ -368,3 +368,25 @@ export async function fetchDBRecords(query: DBRecordsQuery): Promise<DBRecordsRe
   return (await res.json()) as DBRecordsResponse;
 }
 
+
+/**
+ * restartAgent asks the agent to shut down and let systemd start it again. The
+ * server answers as soon as the command is queued — there is no reply to wait
+ * for, since a successful restart looks exactly like the socket dropping.
+ */
+export async function restartAgent(agentId: string): Promise<void> {
+  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/restart`, {
+    method: "POST",
+    headers: { ...getAuthHeaders() },
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("Login required to restart the agent.");
+    }
+    if (res.status === 404) {
+      throw new Error("Agent is not connected.");
+    }
+    const text = await res.text();
+    throw new Error(text || `Restart failed: ${res.statusText}`);
+  }
+}
