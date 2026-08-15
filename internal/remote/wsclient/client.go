@@ -26,7 +26,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"gok-pi/battery/entity"
 	"gok-pi/internal/config"
@@ -55,6 +54,12 @@ const (
 	defaultHeartbeatInterval = 30 * time.Second
 	defaultDialTimeout       = 10 * time.Second
 	defaultWriteTimeout      = 10 * time.Second
+
+	// defaultReplyWriteTimeout bounds request/response replies (logs, diagnostics).
+	// A log response can carry thousands of lines, which on a slow uplink takes far
+	// longer than a telemetry frame; sharing the 10s budget made a large reply time
+	// out and take the connection down with it.
+	defaultReplyWriteTimeout = 60 * time.Second
 
 	// defaultSpoolFlushInterval bounds how long buffered telemetry can wait if an
 	// append signal is missed; live appends normally wake the loop immediately.
@@ -114,6 +119,16 @@ type heartbeatMessage struct {
 	Spool     *SpoolHealth `json:"spool,omitempty"`
 }
 
+// outboundMessage is a reply handed to the write loop. Replies are produced by
+// the read loop but must not be written there: the connection serialises writes
+// behind a single lock, so a slow reply and a telemetry frame would each be
+// waiting on the other's deadline.
+type outboundMessage struct {
+	payload interface{}
+	timeout time.Duration
+	what    string
+}
+
 type telemetryEnvelope struct {
 	Type      string             `json:"type"`
 	Timestamp time.Time          `json:"timestamp"`
@@ -130,9 +145,10 @@ type Client struct {
 	startOnce       sync.Once
 	onConnected     func() // invoked once a connection is fully established (resets backoff)
 	telemetryCh     chan observers.Snapshot
-	spool           *spool.Spool  // durable telemetry buffer; nil = in-memory only
-	spoolSignal     chan struct{} // wakes the write loop when new spool data is appended
-	health          *uplinkHealth // counters behind the heartbeat and diagnostics RPC
+	outbound        chan outboundMessage // replies queued by the read loop, written by the write loop
+	spool           *spool.Spool         // durable telemetry buffer; nil = in-memory only
+	spoolSignal     chan struct{}        // wakes the write loop when new spool data is appended
+	health          *uplinkHealth        // counters behind the heartbeat and diagnostics RPC
 	commands        chan Command
 	configs         chan ConfigUpdate
 	configSync      chan configSnapshot
@@ -161,6 +177,7 @@ func New(cfg config.RemoteControl, meta AgentMetadata, log *slog.Logger) *Client
 			Version:  detectVersion(),
 		},
 		telemetryCh: make(chan observers.Snapshot, 64),
+		outbound:    make(chan outboundMessage, 8),
 		spoolSignal: make(chan struct{}, 1),
 		health:      newUplinkHealth(),
 		commands:    make(chan Command, 32),
@@ -210,6 +227,23 @@ func (c *Client) PublishConfigSnapshot(batteries []entity.BatteryConfig, schedul
 
 func (c *Client) Run(ctx context.Context) {
 	c.startOnce.Do(func() {
+		// The telemetry listener and the spool janitor are bound to the process,
+		// not to the connection. Snapshots must keep reaching the spool while the
+		// uplink is down — that is what makes an outage replayable instead of a
+		// permanent hole in the history — so nothing here may stop when a
+		// connection does.
+		cancelObserver := observers.RegisterListener(func(snapshot observers.Snapshot) {
+			c.enqueueSnapshot(snapshot)
+		})
+		go func() {
+			<-ctx.Done()
+			cancelObserver()
+		}()
+
+		if c.spool != nil {
+			go c.spoolMaintenance(ctx)
+		}
+
 		go c.run(ctx)
 	})
 }
@@ -219,18 +253,22 @@ func (c *Client) Run(ctx context.Context) {
 // Backoff doubles on each failure (e.g., 5s → 10s → 20s → ... → max) and resets
 // to the initial value once a connection is successfully established, so a link
 // that flaps and then stabilizes does not stay pinned at the maximum delay.
+//
+// It returns only when ctx is cancelled. Every connection error — including a
+// deadline from a per-write timeout — is retryable: treating those as a shutdown
+// signal once left an agent with a live process, a working battery loop and no
+// uplink at all until the next restart, silently, for thirteen hours.
 func (c *Client) run(ctx context.Context) {
 	defer close(c.commands)
 	defer close(c.configs)
 
-	cancelObserver := observers.RegisterListener(func(snapshot observers.Snapshot) {
-		c.enqueueSnapshot(snapshot)
-	})
-	defer cancelObserver()
-
-	if c.spool != nil {
-		go c.spoolMaintenance(ctx)
-	}
+	// Belt and braces: the loop below has no non-ctx exit, so if this ever fires
+	// the reason must be in the log rather than inferred from missing telemetry.
+	defer func() {
+		if ctx.Err() == nil {
+			c.log.Error("remote control loop exited while the agent is still running; uplink is down until restart")
+		}
+	}()
 
 	initialBackoff := time.Duration(c.cfg.Reconnect.InitialSeconds) * time.Second
 	if initialBackoff <= 0 {
@@ -265,7 +303,7 @@ func (c *Client) run(ctx context.Context) {
 		wasConnected := connected
 		connected = false
 
-		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		if ctx.Err() != nil {
 			return
 		}
 
@@ -390,6 +428,10 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 		_ = conn.Close(code, reason)
 	}(conn, websocket.StatusInternalError, "internal error")
 
+	// Replies queued against the previous connection answer request IDs the server
+	// has already abandoned; sending them wastes the uplink a reconnect just got back.
+	c.drainOutbound()
+
 	if err := c.sendHello(ctx, conn); err != nil {
 		return err
 	}
@@ -441,9 +483,9 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn) error {
 		case messageTypeConfigPush:
 			c.handleConfigPush(raw)
 		case messageTypeLogRequest:
-			c.handleLogRequest(ctx, conn, raw)
+			c.handleLogRequest(raw)
 		case messageTypeDiagRequest:
-			c.handleDiagRequest(ctx, conn, raw)
+			c.handleDiagRequest(raw)
 		default:
 			var msg IncomingMessage
 			if err := json.Unmarshal(raw, &msg); err != nil {
@@ -495,6 +537,10 @@ func (c *Client) writeLoop(ctx context.Context, conn *websocket.Conn) error {
 				if err := c.writeConfigSnapshot(ctx, conn, cfg); err != nil {
 					return err
 				}
+			case msg := <-c.outbound:
+				if err := c.writeReply(ctx, conn, msg); err != nil {
+					return err
+				}
 			case <-heartbeatTicker.C:
 				if err := c.writeHeartbeat(ctx, conn); err != nil {
 					return err
@@ -519,6 +565,10 @@ func (c *Client) writeLoop(ctx context.Context, conn *websocket.Conn) error {
 			}
 		case cfg := <-c.configSync:
 			if err := c.writeConfigSnapshot(ctx, conn, cfg); err != nil {
+				return err
+			}
+		case msg := <-c.outbound:
+			if err := c.writeReply(ctx, conn, msg); err != nil {
 				return err
 			}
 		case <-heartbeatTicker.C:
@@ -585,11 +635,50 @@ func (c *Client) flushSpool(ctx context.Context, conn *websocket.Conn) error {
 }
 
 // writeJSON writes a message bounded by defaultWriteTimeout so a stalled socket
-// cannot block the caller indefinitely.
+// cannot block the caller indefinitely. A deadline here fails the connection, not
+// the client: run() redials.
 func (c *Client) writeJSON(ctx context.Context, conn *websocket.Conn, v interface{}) error {
-	wctx, cancel := context.WithTimeout(ctx, defaultWriteTimeout)
+	return c.writeJSONTimeout(ctx, conn, v, defaultWriteTimeout)
+}
+
+func (c *Client) writeJSONTimeout(ctx context.Context, conn *websocket.Conn, v interface{}, timeout time.Duration) error {
+	wctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return wsjson.Write(wctx, conn, v)
+}
+
+// writeReply sends a queued request/response reply from the write loop, so it
+// never contends with a telemetry frame for the connection's write lock.
+func (c *Client) writeReply(ctx context.Context, conn *websocket.Conn, msg outboundMessage) error {
+	timeout := msg.timeout
+	if timeout <= 0 {
+		timeout = defaultWriteTimeout
+	}
+	if err := c.writeJSONTimeout(ctx, conn, msg.payload, timeout); err != nil {
+		return fmt.Errorf("send %s: %w", msg.what, err)
+	}
+	return nil
+}
+
+func (c *Client) drainOutbound() {
+	for {
+		select {
+		case <-c.outbound:
+		default:
+			return
+		}
+	}
+}
+
+// enqueueReply hands a reply to the write loop. A full buffer drops the reply
+// rather than blocking the read loop: the server's request times out on its own,
+// and a blocked read loop would stop commands and config pushes entirely.
+func (c *Client) enqueueReply(what string, payload interface{}, timeout time.Duration) {
+	select {
+	case c.outbound <- outboundMessage{payload: payload, timeout: timeout, what: what}:
+	default:
+		c.log.With(slog.String("reply", what)).Warn("reply dropped; outbound buffer full")
+	}
 }
 
 func (c *Client) sendHello(ctx context.Context, conn *websocket.Conn) error {
@@ -762,7 +851,7 @@ func (c *Client) handleConfigPush(raw json.RawMessage) {
 	}
 }
 
-func (c *Client) handleLogRequest(ctx context.Context, conn *websocket.Conn, raw json.RawMessage) {
+func (c *Client) handleLogRequest(raw json.RawMessage) {
 	var req struct {
 		Type      string    `json:"type"`
 		RequestID string    `json:"request_id"`
@@ -795,15 +884,13 @@ func (c *Client) handleLogRequest(ctx context.Context, conn *websocket.Conn, raw
 		resp.Logs = logs
 	}
 
-	if err := c.writeJSON(ctx, conn, resp); err != nil {
-		c.log.With(sl.Err(err)).Error("send log response")
-	}
+	c.enqueueReply("log response", resp, defaultReplyWriteTimeout)
 }
 
 // handleDiagRequest answers an on-demand health request. It is read-only: it
 // reports what the agent has been doing without touching the battery, the
 // schedules, or the connection.
-func (c *Client) handleDiagRequest(ctx context.Context, conn *websocket.Conn, raw json.RawMessage) {
+func (c *Client) handleDiagRequest(raw json.RawMessage) {
 	var req struct {
 		Type      string `json:"type"`
 		RequestID string `json:"request_id"`
@@ -820,9 +907,7 @@ func (c *Client) handleDiagRequest(ctx context.Context, conn *websocket.Conn, ra
 		SentAt:    time.Now().UTC(),
 	}
 
-	if err := c.writeJSON(ctx, conn, resp); err != nil {
-		c.log.With(sl.Err(err)).Error("send diagnostics response")
-	}
+	c.enqueueReply("diagnostics response", resp, defaultWriteTimeout)
 }
 
 // diagnostics gathers the agent's current health. The battery readings come from
