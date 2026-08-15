@@ -585,9 +585,12 @@
   margin-top: var(--space-lg);
 }
 
+/* Capped so the ticks stay next to the address they belong to instead of
+   drifting to the far edge of a full-width panel. */
 .recipients-table {
   overflow-x: auto;
   margin-top: var(--space-sm);
+  max-width: 48rem;
   border: 1px solid var(--border-color-subtle);
   border-radius: var(--radius-md);
 }
@@ -620,6 +623,10 @@
   border-bottom: none;
 }
 
+.recipients-table tbody tr:hover td {
+  background: var(--color-bg-hover);
+}
+
 .recipients-table th.sub,
 .recipients-table td.sub {
   text-align: center;
@@ -645,6 +652,10 @@
   opacity: 0.4;
 }
 
+.recipients-table td.sub .button-icon {
+  margin: 0 auto;
+}
+
 .recipients-empty {
   margin: var(--space-sm) 0 0;
   font-size: 0.85rem;
@@ -659,34 +670,14 @@
   margin-top: var(--space-md);
 }
 
-.recipient-remove {
-  padding: 0 0.5rem;
-  background: transparent;
-  border: 1px solid var(--color-danger-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-danger);
-  font-size: 1rem;
-  line-height: 1.6;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.recipient-remove:hover:not(:disabled) {
-  background: var(--color-danger-bg);
+/* The :focus pair is what beats input:focus, which outranks a single class on
+   specificity — an address stays marked while it is being corrected. */
+.input-invalid,
+.input-invalid:focus {
   border-color: var(--color-danger);
 }
 
-.recipient-remove:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.input-invalid {
-  border-color: var(--color-danger) !important;
-}
-
-/* Narrow screens: the address keeps the row, the ticks compress rather than
-   scrolling away behind a horizontal bar nobody notices. */
+/* Narrow screens: the columns tighten first. */
 @media (max-width: 640px) {
   .recipients-table th,
   .recipients-table td {
@@ -702,5 +693,67 @@
   .recipients-table td input[type="email"] {
     min-width: 9rem;
     font-size: 0.8rem;
+  }
+}
+
+/* Phone: five columns do not fit any tightening, and a table that scrolls
+   sideways hides the last subscription behind an overlay scrollbar nobody
+   sees. Each recipient becomes a card instead, the column headers moving onto
+   the ticks themselves. */
+@media (max-width: 480px) {
+  .recipients-table {
+    overflow-x: visible;
+  }
+
+  .recipients-table thead {
+    display: none;
+  }
+
+  .recipients-table table,
+  .recipients-table tbody {
+    display: block;
+  }
+
+  .recipients-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-md);
+  }
+
+  .recipients-table tr + tr {
+    border-top: 1px solid var(--border-color-subtle);
+  }
+
+  .recipients-table td,
+  .recipients-table td.sub {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: auto;
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .recipients-table td:first-child {
+    flex: 1 0 100%;
+  }
+
+  .recipients-table td input[type="email"] {
+    min-width: 0;
+    font-size: 0.9rem;
+  }
+
+  .recipients-table td.sub[data-label]::before {
+    content: attr(data-label);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-text-muted);
+  }
+
+  .recipients-table td.sub:last-child {
+    margin-left: auto;
   }
 }

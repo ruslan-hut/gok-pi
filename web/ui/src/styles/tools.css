@@ -126,12 +126,6 @@
 
 /* Agent process actions. The confirm state is the only red thing in the panel,
    so the second click is visibly different from the first. */
-.agent-maintenance-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0;
-}
-
 .agent-maintenance {
   display: flex;
   flex-direction: column;
@@ -156,12 +150,11 @@
   margin: 0;
 }
 
-.agent-restart-confirm {
-  border-color: var(--color-danger) !important;
-  color: var(--color-danger) !important;
-  background: var(--color-danger-bg) !important;
-}
-
-.agent-maintenance-ok {
-  color: var(--color-success);
+/* The :hover pair is what beats the base button:hover, which outranks a single
+   class on specificity. */
+.agent-restart-confirm,
+.agent-restart-confirm:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
 }

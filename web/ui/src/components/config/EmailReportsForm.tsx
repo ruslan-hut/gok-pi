@@ -71,27 +71,24 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
   };
 
   const locked = disabled || readonly;
-  const rowsLocked = locked || !cfg.enabled;
+  const addresses = cfg.recipients.map((r) => r.address.trim());
   const dailySubscribers = cfg.recipients
-    .filter((r) => r.daily && r.address.trim() !== "")
-    .map((r) => r.address.trim());
-  const invalidAddresses = cfg.recipients
+    .filter((r) => r.daily)
     .map((r) => r.address.trim())
-    .filter((address) => address !== "" && !EMAIL_RE.test(address));
+    .filter((address) => address !== "" && EMAIL_RE.test(address));
+  const invalidAddresses = addresses.filter(
+    (address) => address !== "" && !EMAIL_RE.test(address),
+  );
+  const blankCount = addresses.filter((address) => address === "").length;
+  const duplicateAddresses = addresses.filter(
+    (address, index) =>
+      address !== "" &&
+      addresses.findIndex((other) => other.toLowerCase() === address.toLowerCase()) !== index,
+  );
+  const canSendTest = dailySubscribers.length > 0 && invalidAddresses.length === 0;
 
   const onSendTest = async () => {
     if (!agentId) return;
-    if (dailySubscribers.length === 0) {
-      setTestState({ busy: false, error: "Subscribe at least one recipient to the daily report first." });
-      return;
-    }
-    if (invalidAddresses.length > 0) {
-      setTestState({
-        busy: false,
-        error: `Invalid email${invalidAddresses.length > 1 ? "s" : ""}: ${invalidAddresses.join(", ")}`,
-      });
-      return;
-    }
     setTestState({ busy: true });
     try {
       const res = await sendEmailTest(agentId, dailySubscribers);
@@ -109,16 +106,16 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
 
   return (
     <div className="config-section">
-      <div className="config-section-header config-section-header-actions">
-        {status && (
+      {status && (
+        <div className="config-section-header config-section-header-actions">
           <span
             className={`badge ${status.enabled ? "ok" : "muted"}`}
             title={status.sender ? `Sender: ${status.sender}` : undefined}
           >
             Email provider: {status.enabled ? "active" : status.configured ? "configured" : "not configured"}
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="config-form-grid">
         <div className="form-field">
@@ -145,7 +142,7 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
             min={0}
             max={23}
             value={cfg.send_hour}
-            disabled={rowsLocked}
+            disabled={locked}
             onChange={(e) => update({ send_hour: Math.max(0, Math.min(23, Number(e.target.value) || 0)) })}
           />
           <small className="form-help-text">
@@ -198,7 +195,7 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
                           <input
                             type="checkbox"
                             checked={recipient[col.key]}
-                            disabled={rowsLocked}
+                            disabled={locked}
                             aria-label={`${col.label} for ${address || "this recipient"}`}
                             title={col.title}
                             onChange={(e) => updateRecipient(index, { [col.key]: e.target.checked })}
@@ -208,7 +205,7 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
                       <td className="sub">
                         <button
                           type="button"
-                          className="recipient-remove"
+                          className="button-icon"
                           disabled={locked}
                           aria-label={`Remove ${address || "recipient"}`}
                           title="Remove this recipient"
@@ -230,6 +227,16 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
             Invalid email{invalidAddresses.length > 1 ? "s" : ""}: {invalidAddresses.join(", ")}
           </small>
         )}
+        {duplicateAddresses.length > 0 && (
+          <small className="form-error">
+            Listed twice: {duplicateAddresses.join(", ")}. Each copy is sent separately.
+          </small>
+        )}
+        {blankCount > 0 && (
+          <small className="form-help-text">
+            {blankCount === 1 ? "The empty row is" : `${blankCount} empty rows are`} dropped on save.
+          </small>
+        )}
 
         <div className="recipients-actions">
           <button type="button" className="button-small" disabled={locked} onClick={addRecipient}>
@@ -241,18 +248,24 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
               type="button"
               className="button-small"
               onClick={onSendTest}
-              disabled={locked || testState.busy}
-              title="Send a [TEST] daily report for yesterday to the daily subscribers above."
+              disabled={locked || testState.busy || !canSendTest}
+              title={
+                canSendTest
+                  ? "Send a [TEST] daily report for yesterday to the daily subscribers above."
+                  : "Subscribe at least one valid address to the daily report first."
+              }
             >
               {testState.busy ? "Sending…" : "Send test email"}
             </button>
           )}
         </div>
 
-        {testState.message && (
-          <small className="form-help-text agent-maintenance-ok">{testState.message}</small>
-        )}
-        {testState.error && <small className="form-error">{testState.error}</small>}
+        <div className="form-status" aria-live="polite">
+          {testState.message && (
+            <small className="form-ok">{testState.message}</small>
+          )}
+          {testState.error && <small className="form-error">{testState.error}</small>}
+        </div>
         {agentId && status && !status.enabled && (
           <small className="form-help-text">
             Test sending is unavailable: server email provider is{" "}

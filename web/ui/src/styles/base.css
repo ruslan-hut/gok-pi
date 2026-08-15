@@ -302,6 +302,15 @@ select:focus {
   box-shadow: 0 0 0 3px var(--color-primary-glow), var(--shadow-glow-primary);
 }
 
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  border-color: var(--border-color-subtle);
+  background: var(--color-bg-disabled);
+}
+
 button:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;

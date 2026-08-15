@@ -45,7 +45,7 @@ export function AgentMaintenance({ agentId, online }: AgentMaintenanceProps) {
   return (
     <section className="config-panel">
       <div className="config-panel-header">
-        <h3 className="agent-maintenance-title">Agent process</h3>
+        <h3>Agent process</h3>
       </div>
 
       <div className="agent-maintenance">
@@ -76,8 +76,10 @@ export function AgentMaintenance({ agentId, online }: AgentMaintenanceProps) {
         {!online && (
           <div className="offline-warning">Agent is offline. It cannot be restarted from here.</div>
         )}
-        {message && <small className="form-help-text agent-maintenance-ok">{message}</small>}
-        {error && <small className="form-error">{error}</small>}
+        <div className="form-status" aria-live="polite">
+          {message && <small className="form-ok">{message}</small>}
+          {error && <small className="form-error">{error}</small>}
+        </div>
       </div>
     </section>
   );
