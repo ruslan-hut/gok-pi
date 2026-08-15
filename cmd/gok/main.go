@@ -34,6 +34,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	// Embed the IANA timezone database so schedule timezones resolve even on
 	// minimal Raspberry Pi images that ship no system zoneinfo (otherwise summer
@@ -41,7 +42,17 @@ import (
 	_ "time/tzdata"
 )
 
+// restartExitCode marks an exit the agent asked for rather than a crash. It is
+// non-zero on purpose: the binary updater replaces binaries, not systemd units,
+// so a device still running Restart=on-failure must also come back up. Under
+// Restart=always either code works.
+const restartExitCode = 75 // EX_TEMPFAIL
+
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 
 	configPath := flag.String("conf", "config.yml", "path to config file")
 	logPath := flag.String("log", "/var/log", "path to log file directory")
@@ -105,6 +116,18 @@ func main() {
 		cancel()
 	}()
 
+	// A remote restart takes the same shutdown path as SIGTERM — workers stopped,
+	// battery left in whatever mode it is in — and only differs in the exit code,
+	// which is what asks the supervisor to start the agent again.
+	var restartRequested atomic.Bool
+	requestRestart := func() {
+		if restartRequested.Swap(true) {
+			return
+		}
+		lg.Info("restart requested by control server; shutting down for supervisor restart")
+		cancel()
+	}
+
 	// Set status for all batteries (including disabled ones) before starting workers
 	for _, b := range conf.Batteries {
 		if !b.Enabled {
@@ -144,7 +167,7 @@ func main() {
 			remoteClient.PublishConfigSnapshot(config.GetBatteries(), config.GetSchedules())
 		})
 
-		go handleRemoteCommands(ctx, remoteClient.Commands(), manager, lg)
+		go handleRemoteCommands(ctx, remoteClient.Commands(), manager, requestRestart, lg)
 
 		go func() {
 			var lastRevision int
@@ -197,12 +220,17 @@ func main() {
 		// If no remote control and no batteries, exit immediately
 		if len(batteries) == 0 {
 			lg.Warn("no batteries enabled and remote control disabled; exiting")
-			return
+			return 0
 		}
 		wg.Wait()
 	}
 
 	lg.Info("gok-pi stopped")
+
+	if restartRequested.Load() {
+		return restartExitCode
+	}
+	return 0
 }
 
 // Wire-format command strings used by the WebSocket protocol.
@@ -214,9 +242,10 @@ const (
 	wireSetLimits      = "set_limits"
 	wireForceMode      = "force_mode"
 	wireResetGoal      = "reset_goal"
+	wireRestartAgent   = "restart_agent"
 )
 
-func handleRemoteCommands(ctx context.Context, commands <-chan wsclient.Command, manager *workerManager, log *slog.Logger) {
+func handleRemoteCommands(ctx context.Context, commands <-chan wsclient.Command, manager *workerManager, requestRestart func(), log *slog.Logger) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -226,6 +255,12 @@ func handleRemoteCommands(ctx context.Context, commands <-chan wsclient.Command,
 				return
 			}
 			if cmd.Type != "agent.command" {
+				continue
+			}
+			// Restarting is about the process, not a battery, so it is handled
+			// before the target check every other command has to pass.
+			if cmd.Command == wireRestartAgent {
+				requestRestart()
 				continue
 			}
 			if cmd.Target == "" {

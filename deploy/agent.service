@@ -12,7 +12,10 @@ Environment=GOK_LOG_DIR=/var/log/gok
 EnvironmentFile=-/etc/default/gok-agent
 WorkingDirectory={{AGENT_PATH}}/current
 ExecStart={{AGENT_PATH}}/current/gok -conf=${GOK_CONF} -log=${GOK_LOG_DIR}
-Restart=on-failure
+# A remote restart (POST /api/agents/<id>/restart) exits 75 after a graceful
+# shutdown, so an installed unit still set to on-failure also brings the agent
+# back. always additionally covers a clean exit.
+Restart=always
 RestartSec=5s
 SyslogIdentifier=gok-agent
 StandardOutput=journal

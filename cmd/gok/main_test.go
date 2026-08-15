@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"testing"
+	"time"
 
 	"gok-pi/battery/controller"
 	"gok-pi/internal/remote/wsclient"
@@ -152,5 +156,26 @@ func TestTranslateCommandForceModeInvalid(t *testing.T) {
 	_, err := translateCommand(cmd)
 	if err == nil {
 		t.Fatal("expected error for invalid mode")
+	}
+}
+
+// TestHandleRemoteCommandsRestart: the restart command is about the process, so
+// it must be acted on before the target-battery check every other command faces.
+func TestHandleRemoteCommandsRestart(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	commands := make(chan wsclient.Command, 1)
+	restarted := make(chan struct{})
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	go handleRemoteCommands(ctx, commands, newWorkerManager(), func() { close(restarted) }, log)
+
+	commands <- wsclient.Command{Type: "agent.command", Command: wireRestartAgent}
+
+	select {
+	case <-restarted:
+	case <-time.After(time.Second):
+		t.Fatal("expected the restart command to trigger a shutdown")
 	}
 }

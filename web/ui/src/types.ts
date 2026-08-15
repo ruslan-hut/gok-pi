@@ -145,9 +145,19 @@ export interface ScheduleConfig {
   goal_reached_time?: string; // ISO timestamp, set when run_once goal is reached
 }
 
+/** One address and the deliveries it is subscribed to. */
+export interface EmailRecipient {
+  address: string;
+  daily: boolean;
+  weekly: boolean;
+  monthly: boolean;
+  /** Offline and recovery notices — opted into separately from the reports. */
+  alerts: boolean;
+}
+
 export interface EmailReportsConfig {
   enabled: boolean;
-  recipients: string[];
+  recipients: EmailRecipient[];
   daily: boolean;
   weekly: boolean;
   monthly: boolean;

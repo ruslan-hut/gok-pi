@@ -220,3 +220,48 @@ func TestUnregisterAgentIdentityCheck(t *testing.T) {
 		t.Fatalf("expected agent removed from registry after its own cleanup")
 	}
 }
+
+// TestHandleAgentRestartQueuesCommand covers the remote recovery path: a restart
+// is addressed to the process, so it carries no battery target and must still
+// reach the agent.
+func TestHandleAgentRestartQueuesCommand(t *testing.T) {
+	srv := New(Config{}, testLogger())
+	agent := &agentConnection{
+		id:   "agent-1",
+		s:    srv,
+		send: make(chan interface{}, 4),
+		done: make(chan struct{}),
+	}
+	srv.agentsMu.Lock()
+	srv.agents[agent.id] = agent
+	srv.agentsMu.Unlock()
+
+	rec := httptest.NewRecorder()
+	srv.handleAgentRestart(rec, "agent-1")
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rec.Code)
+	}
+
+	select {
+	case msg := <-agent.send:
+		cmd, ok := msg.(OutgoingCommand)
+		if !ok {
+			t.Fatalf("expected an outgoing command, got %T", msg)
+		}
+		if cmd.Command != commandRestartAgent {
+			t.Fatalf("expected %s, got %s", commandRestartAgent, cmd.Command)
+		}
+		if cmd.Target != "" {
+			t.Fatalf("expected no battery target, got %q", cmd.Target)
+		}
+	default:
+		t.Fatal("expected the restart command to be queued for the agent")
+	}
+
+	rec = httptest.NewRecorder()
+	srv.handleAgentRestart(rec, "agent-missing")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for a disconnected agent, got %d", rec.Code)
+	}
+}

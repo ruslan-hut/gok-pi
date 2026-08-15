@@ -82,6 +82,11 @@ type Server struct {
 
 	emailBrevo     *email.BrevoClient
 	emailScheduler *email.Scheduler
+
+	// agentWatch raises an alert when an agent stops coming back. It is separate
+	// from the telemetry stall check: that one watches a live connection, this one
+	// watches for the connection never returning.
+	agentWatch *agentWatcher
 }
 
 func New(cfg Config, log *slog.Logger) *Server {
@@ -145,6 +150,8 @@ func New(cfg Config, log *slog.Logger) *Server {
 		chargerLinks:    NewChargerLinkStore(chargerLinksPath),
 		chargerSessions: newChargerSessionStore(chargerSessionsPath),
 	}
+
+	srv.agentWatch = newAgentWatcher(store.agentIDs(), time.Now())
 
 	if sessDB != nil {
 		srv.telemetry = newTelemetryRecorder(log, sessDB)
@@ -408,6 +415,15 @@ func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if len(segments) == 2 && segments[1] == "restart" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleAgentRestart(w, agentID)
+		return
+	}
+
 	if len(segments) == 2 && segments[1] == "diag" {
 		if r.Method != http.MethodGet && r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -548,6 +564,15 @@ func (s *Server) registerAgent(ac *agentConnection) {
 		_ = old.conn.Close()
 	}
 
+	if recovered, since := s.agentWatch.connected(ac.id, time.Now()); recovered {
+		now := time.Now()
+		s.log.With(
+			slog.String("agent", ac.id),
+			slog.Duration("offline_for", now.Sub(since).Truncate(time.Second)),
+		).Info("agent reconnected after a reported outage")
+		s.sendConnectivityAlert(email.AlertRecovered, ac.id, since, now)
+	}
+
 	s.broadcastAgentSnapshot(ac.summary())
 
 	if cfg, ok := s.configs.Get(ac.id); ok {
@@ -578,6 +603,7 @@ func (s *Server) unregisterAgent(ac *agentConnection) {
 	s.agentsMu.Unlock()
 
 	s.log.With(slog.String("agent", ac.id)).Info("agent disconnected")
+	s.agentWatch.disconnected(ac.id, time.Now())
 	s.telemetry.Forget(ac.id)
 	s.broadcastAgentRemoved(ac.id)
 }
@@ -627,6 +653,7 @@ func (s *Server) runTelemetryRecorder(ctx context.Context) {
 		case now := <-ticker.C:
 			s.telemetry.Flush(now)
 			s.checkTelemetryStalls(now)
+			s.checkAgentOutages(now)
 		}
 	}
 }
@@ -911,7 +938,7 @@ func (s *Server) versionFilename() string {
 // inbox routing without waiting for the next scheduled send.
 //
 // Request body (optional): {"recipients": ["a@x.y", "b@x.y"]}
-// When recipients is empty, the agent's stored EmailReports.Recipients is used.
+// When recipients is empty, the agent's stored daily-report subscribers are used.
 // State (last-sent date) is NOT touched, so the regular morning report still fires.
 func (s *Server) handleAgentEmailTest(w http.ResponseWriter, r *http.Request, agentID string) {
 	if s.emailScheduler == nil {
@@ -936,8 +963,8 @@ func (s *Server) handleAgentEmailTest(w http.ResponseWriter, r *http.Request, ag
 	}
 
 	recipients := body.Recipients
-	if len(recipients) == 0 && cfg.EmailReports != nil {
-		recipients = cfg.EmailReports.Recipients
+	if len(recipients) == 0 {
+		recipients = cfg.EmailReports.RecipientsFor(entity.EmailKindDaily)
 	}
 	cleaned := make([]string, 0, len(recipients))
 	for _, addr := range recipients {
@@ -1577,6 +1604,30 @@ func (s *Server) handleDBRecords(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		s.log.With(slog.Any("error", err)).Error("encode db records response")
 	}
+}
+
+// handleAgentRestart asks an agent to restart itself. The agent shuts down
+// gracefully and exits so its supervisor starts it again; there is no reply to
+// wait for, because a successful restart is indistinguishable from the socket
+// dropping. The agent reconnects within seconds if it worked.
+func (s *Server) handleAgentRestart(w http.ResponseWriter, agentID string) {
+	s.agentsMu.RLock()
+	agent, ok := s.agents[agentID]
+	s.agentsMu.RUnlock()
+
+	if !ok {
+		http.Error(w, "agent not connected", http.StatusNotFound)
+		return
+	}
+
+	if err := agent.sendCommand(CommandRequest{Command: commandRestartAgent}); err != nil {
+		s.log.With(slog.String("agent", agentID), slog.Any("error", err)).Error("sending restart command to agent")
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	s.log.With(slog.String("agent", agentID)).Info("restart requested")
+	w.WriteHeader(http.StatusAccepted)
 }
 
 // handleAgentDiag asks a connected agent for its current health and returns it

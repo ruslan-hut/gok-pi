@@ -267,6 +267,18 @@ func (cs *ConfigStore) snapshot() configSnapshot {
 	return out
 }
 
+// agentIDs returns every agent the store knows about, connected or not.
+func (cs *ConfigStore) agentIDs() []string {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+
+	out := make([]string, 0, len(cs.records))
+	for id := range cs.records {
+		out = append(out, id)
+	}
+	return out
+}
+
 func (cs *ConfigStore) persistLocked() error {
 	if cs.path == "" {
 		return nil

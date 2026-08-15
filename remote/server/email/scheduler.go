@@ -110,13 +110,14 @@ func (s *Scheduler) processAgent(ctx context.Context, job AgentJob) {
 	}
 
 	// Daily — covers the previous local day.
-	if job.Reports.Daily {
+	if job.Reports.Daily && len(job.Reports.RecipientsFor(entity.EmailKindDaily)) > 0 {
 		yesterday := LocalDay(job.Timezone, now.AddDate(0, 0, -1))
 		s.maybeSendDaily(ctx, job, yesterday)
 	}
 
 	// Weekly — only on Mondays, covers the previous Mon..Sun.
-	if job.Reports.Weekly && now.Weekday() == time.Monday {
+	if job.Reports.Weekly && now.Weekday() == time.Monday &&
+		len(job.Reports.RecipientsFor(entity.EmailKindWeekly)) > 0 {
 		thisMonday := MondayOfWeek(now)
 		start := thisMonday.AddDate(0, 0, -7)
 		end := thisMonday
@@ -124,7 +125,8 @@ func (s *Scheduler) processAgent(ctx context.Context, job AgentJob) {
 	}
 
 	// Monthly — only on day 1, covers the previous month.
-	if job.Reports.Monthly && now.Day() == 1 {
+	if job.Reports.Monthly && now.Day() == 1 &&
+		len(job.Reports.RecipientsFor(entity.EmailKindMonthly)) > 0 {
 		thisMonth := FirstOfMonth(now)
 		start := thisMonth.AddDate(0, -1, 0)
 		end := thisMonth
@@ -163,7 +165,8 @@ func (s *Scheduler) maybeSendDaily(ctx context.Context, job AgentJob, day time.T
 		return
 	}
 
-	if err := s.brevo.Send(ctx, job.Reports.Recipients, subject, html); err != nil {
+	recipients := job.Reports.RecipientsFor(entity.EmailKindDaily)
+	if err := s.brevo.Send(ctx, recipients, subject, html); err != nil {
 		s.log.Error("send daily report",
 			slog.String("agent", job.AgentID),
 			slog.String("date", dayISO),
@@ -179,7 +182,7 @@ func (s *Scheduler) maybeSendDaily(ctx context.Context, job AgentJob, day time.T
 	s.log.Info("daily email sent",
 		slog.String("agent", job.AgentID),
 		slog.String("date", dayISO),
-		slog.Int("recipients", len(job.Reports.Recipients)),
+		slog.Int("recipients", len(recipients)),
 	)
 }
 
@@ -210,7 +213,8 @@ func (s *Scheduler) maybeSendRange(ctx context.Context, job AgentJob, kind Repor
 		return
 	}
 
-	if err := s.brevo.Send(ctx, job.Reports.Recipients, subject, html); err != nil {
+	recipients := job.Reports.RecipientsFor(recipientKind(kind))
+	if err := s.brevo.Send(ctx, recipients, subject, html); err != nil {
 		s.log.Error("send range report",
 			slog.String("agent", job.AgentID),
 			slog.String("kind", string(kind)),
@@ -228,7 +232,7 @@ func (s *Scheduler) maybeSendRange(ctx context.Context, job AgentJob, kind Repor
 		slog.String("agent", job.AgentID),
 		slog.String("kind", string(kind)),
 		slog.String("start", startISO),
-		slog.Int("recipients", len(job.Reports.Recipients)),
+		slog.Int("recipients", len(recipients)),
 	)
 }
 
@@ -239,7 +243,8 @@ func (s *Scheduler) SendTestDaily(ctx context.Context, job AgentJob, limits Pric
 	if s == nil || s.brevo == nil {
 		return errors.New("email scheduler unavailable")
 	}
-	if len(job.Reports.Recipients) == 0 {
+	recipients := job.Reports.RecipientsFor(entity.EmailKindDaily)
+	if len(recipients) == 0 {
 		return errors.New("no recipients")
 	}
 
@@ -258,14 +263,14 @@ func (s *Scheduler) SendTestDaily(ctx context.Context, job AgentJob, limits Pric
 		subject = "[TEST] " + subject
 	}
 
-	if err := s.brevo.Send(ctx, job.Reports.Recipients, subject, html); err != nil {
+	if err := s.brevo.Send(ctx, recipients, subject, html); err != nil {
 		return err
 	}
 
 	s.log.Info("test daily email sent",
 		slog.String("agent", job.AgentID),
 		slog.String("date", day.Format("2006-01-02")),
-		slog.Int("recipients", len(job.Reports.Recipients)),
+		slog.Int("recipients", len(recipients)),
 	)
 	return nil
 }
@@ -275,16 +280,34 @@ func (s *Scheduler) SendTestDaily(ctx context.Context, job AgentJob, limits Pric
 // in the stored config are preserved (or default to daily=true if absent) so the
 // AgentJob value is consistent with how the scheduler treats real jobs.
 func EmailReportsAdapter(stored *entity.EmailReportsConfig, recipients []string) entity.EmailReportsConfig {
+	// The test always sends a daily report, so the explicit addresses are
+	// subscribed to daily whatever they are subscribed to in the stored config.
+	subscribed := make([]entity.EmailRecipient, 0, len(recipients))
+	for _, addr := range recipients {
+		subscribed = append(subscribed, entity.EmailRecipient{Address: addr, Daily: true})
+	}
 	if stored == nil {
 		return entity.EmailReportsConfig{
 			Enabled:    true,
-			Recipients: recipients,
+			Recipients: subscribed,
 			Daily:      true,
 		}
 	}
 	out := *stored
-	out.Recipients = recipients
+	out.Recipients = subscribed
 	return out
+}
+
+// recipientKind maps a report kind to the subscription it is delivered under.
+func recipientKind(kind ReportKind) string {
+	switch kind {
+	case KindWeekly:
+		return entity.EmailKindWeekly
+	case KindMonthly:
+		return entity.EmailKindMonthly
+	default:
+		return entity.EmailKindDaily
+	}
 }
 
 func clampHour(h int) int {

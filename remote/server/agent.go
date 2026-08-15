@@ -37,6 +37,10 @@ const (
 	serverMessageConfigPush  = "server.config.push"
 	serverMessageLogRequest  = "server.log.request"
 	serverMessageDiagRequest = "server.diag.request"
+
+	// commandRestartAgent asks the agent to shut down and let its supervisor
+	// start it again. It carries no target: it is about the process, not a battery.
+	commandRestartAgent = "restart_agent"
 )
 
 // WebSocket liveness tuning. The server pings agents every pingPeriod and requires

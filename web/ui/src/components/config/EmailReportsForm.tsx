@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { EmailProviderStatus, EmailReportsConfig } from "../../types";
+import type { EmailProviderStatus, EmailRecipient, EmailReportsConfig } from "../../types";
 import { fetchEmailStatus, sendEmailTest } from "../../api";
 
 const DEFAULT: EmailReportsConfig = {
@@ -13,6 +13,19 @@ const DEFAULT: EmailReportsConfig = {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type SubscriptionKey = "daily" | "weekly" | "monthly" | "alerts";
+
+const COLUMNS: { key: SubscriptionKey; label: string; title: string }[] = [
+  { key: "daily", label: "Daily", title: "Yesterday's sessions, each morning." },
+  { key: "weekly", label: "Weekly", title: "Previous Mon–Sun, sent Monday." },
+  { key: "monthly", label: "Monthly", title: "Previous month, sent on day 1." },
+  {
+    key: "alerts",
+    label: "Alerts",
+    title: "Sent when the agent stops reporting for 10 minutes, and again when it returns.",
+  },
+];
+
 interface Props {
   value: EmailReportsConfig | null | undefined;
   agentId?: string;
@@ -23,8 +36,6 @@ interface Props {
 
 export function EmailReportsForm({ value, agentId, disabled, readonly, onChange }: Props) {
   const cfg = value ?? DEFAULT;
-  const [recipientsText, setRecipientsText] = useState<string>(cfg.recipients.join(", "));
-  const [recipientError, setRecipientError] = useState<string>("");
   const [status, setStatus] = useState<EmailProviderStatus | null>(null);
   const [testState, setTestState] = useState<{
     busy: boolean;
@@ -36,50 +47,54 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
     fetchEmailStatus().then(setStatus).catch(() => setStatus(null));
   }, []);
 
-  // Re-sync the local recipients string when the parent replaces the value.
-  useEffect(() => {
-    setRecipientsText((value?.recipients ?? []).join(", "));
-  }, [value?.recipients]);
-
   const update = (patch: Partial<EmailReportsConfig>) => {
     onChange({ ...cfg, ...patch });
   };
 
-  const onRecipientsBlur = () => {
-    const parts = recipientsText
-      .split(/[,;\n]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const invalid = parts.filter((p) => !EMAIL_RE.test(p));
-    if (invalid.length > 0) {
-      setRecipientError(`Invalid email${invalid.length > 1 ? "s" : ""}: ${invalid.join(", ")}`);
-    } else {
-      setRecipientError("");
-    }
-    update({ recipients: parts });
+  const updateRecipient = (index: number, patch: Partial<EmailRecipient>) => {
+    const next = cfg.recipients.map((r, i) => (i === index ? { ...r, ...patch } : r));
+    update({ recipients: next });
   };
 
-  const parseRecipients = (): string[] =>
-    recipientsText
-      .split(/[,;\n]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
+  const addRecipient = () => {
+    // A new address starts subscribed to whatever reports the agent sends, and
+    // not to alerts: being added to a mailing list should not page anyone.
+    update({
+      recipients: [
+        ...cfg.recipients,
+        { address: "", daily: cfg.daily, weekly: cfg.weekly, monthly: cfg.monthly, alerts: false },
+      ],
+    });
+  };
+
+  const removeRecipient = (index: number) => {
+    update({ recipients: cfg.recipients.filter((_, i) => i !== index) });
+  };
+
+  const locked = disabled || readonly;
+  const dailySubscribers = cfg.recipients
+    .map((r) => r.address.trim())
+    .filter((address, i) => address !== "" && cfg.recipients[i].daily);
+  const invalidAddresses = cfg.recipients
+    .map((r) => r.address.trim())
+    .filter((address) => address !== "" && !EMAIL_RE.test(address));
 
   const onSendTest = async () => {
     if (!agentId) return;
-    const parts = parseRecipients();
-    const invalid = parts.filter((p) => !EMAIL_RE.test(p));
-    if (parts.length === 0) {
-      setTestState({ busy: false, error: "Add at least one recipient before testing." });
+    if (dailySubscribers.length === 0) {
+      setTestState({ busy: false, error: "Subscribe at least one recipient to the daily report first." });
       return;
     }
-    if (invalid.length > 0) {
-      setTestState({ busy: false, error: `Invalid email${invalid.length > 1 ? "s" : ""}: ${invalid.join(", ")}` });
+    if (invalidAddresses.length > 0) {
+      setTestState({
+        busy: false,
+        error: `Invalid email${invalidAddresses.length > 1 ? "s" : ""}: ${invalidAddresses.join(", ")}`,
+      });
       return;
     }
     setTestState({ busy: true });
     try {
-      const res = await sendEmailTest(agentId, parts);
+      const res = await sendEmailTest(agentId, dailySubscribers);
       setTestState({
         busy: false,
         message: `Sent test report to ${res.recipients.join(", ")}. Check your inbox.`,
@@ -111,51 +126,15 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
             <input
               type="checkbox"
               checked={cfg.enabled}
-              disabled={disabled || readonly}
+              disabled={locked}
               onChange={(e) => update({ enabled: e.target.checked })}
             />
             <span className="switch-slider"></span>
-            <span className="switch-label">Send email reports</span>
+            <span className="switch-label">Send email for this agent</span>
           </label>
           <small className="form-help-text">
-            Reports go to the recipients below once at least one kind is selected.
+            Master switch: no reports and no alerts are sent while this is off.
           </small>
-        </div>
-
-        <div className="form-field">
-          <label htmlFor="email-recipients">Recipients</label>
-          <input
-            id="email-recipients"
-            type="text"
-            value={recipientsText}
-            disabled={disabled || readonly}
-            placeholder="alice@example.com, bob@example.com"
-            onChange={(e) => setRecipientsText(e.target.value)}
-            onBlur={onRecipientsBlur}
-          />
-          <small className="form-help-text">Comma-separated list of email addresses.</small>
-          {recipientError && <small className="form-error">{recipientError}</small>}
-
-          {agentId && status?.enabled && (
-            <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="button-small"
-                onClick={onSendTest}
-                disabled={disabled || readonly || testState.busy}
-                title="Send a [TEST] daily report for yesterday to the recipients above."
-              >
-                {testState.busy ? "Sending…" : "Send test email"}
-              </button>
-              {testState.message && <small className="form-help-text" style={{ color: "var(--color-success)" }}>{testState.message}</small>}
-              {testState.error && <small className="form-error">{testState.error}</small>}
-            </div>
-          )}
-          {agentId && status && !status.enabled && (
-            <small className="form-help-text" style={{ marginTop: 8 }}>
-              Test sending is unavailable: server email provider is {status.configured ? "configured but inactive" : "not configured"}.
-            </small>
-          )}
         </div>
 
         <div className="form-field">
@@ -166,36 +145,149 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
             min={0}
             max={23}
             value={cfg.send_hour}
-            disabled={disabled || readonly || !cfg.enabled}
+            disabled={locked || !cfg.enabled}
             onChange={(e) => update({ send_hour: Math.max(0, Math.min(23, Number(e.target.value) || 0)) })}
           />
+          <small className="form-help-text">Alerts ignore this — they are sent when the outage happens.</small>
         </div>
 
         <div className="form-field">
-          <label>Reports</label>
-          {/* A label labels; the schedule is help text rather than doing both
-              jobs inside one long switch label. */}
+          <label>Reports this agent produces</label>
           <ReportToggle
             label="Daily"
             help="Each morning, covering the previous day, with session detail and the price chart."
             checked={cfg.daily}
-            disabled={disabled || readonly || !cfg.enabled}
+            disabled={locked || !cfg.enabled}
             onChange={(daily) => update({ daily })}
           />
           <ReportToggle
             label="Weekly"
             help="Monday, covering the previous Mon–Sun, totalled per battery."
             checked={cfg.weekly}
-            disabled={disabled || readonly || !cfg.enabled}
+            disabled={locked || !cfg.enabled}
             onChange={(weekly) => update({ weekly })}
           />
           <ReportToggle
             label="Monthly"
             help="Day 1, covering the previous month, totalled per battery."
             checked={cfg.monthly}
-            disabled={disabled || readonly || !cfg.enabled}
+            disabled={locked || !cfg.enabled}
             onChange={(monthly) => update({ monthly })}
           />
+        </div>
+
+        <div className="form-field">
+          <label>Recipients</label>
+          <small className="form-help-text">
+            Each address receives only what it is subscribed to. A report also needs its
+            switch above; alerts do not.
+          </small>
+
+          {cfg.recipients.length === 0 ? (
+            <p className="recipients-empty">No recipients yet.</p>
+          ) : (
+            <div className="recipients-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Address</th>
+                    {COLUMNS.map((col) => (
+                      <th key={col.key} className="sub" title={col.title}>
+                        {col.label}
+                      </th>
+                    ))}
+                    <th className="sub"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cfg.recipients.map((recipient, index) => {
+                    const address = recipient.address.trim();
+                    const invalid = address !== "" && !EMAIL_RE.test(address);
+                    return (
+                      <tr key={index}>
+                        <td>
+                          <input
+                            type="email"
+                            className={invalid ? "input-invalid" : undefined}
+                            value={recipient.address}
+                            disabled={locked}
+                            placeholder="alice@example.com"
+                            aria-label="Recipient email address"
+                            onChange={(e) => updateRecipient(index, { address: e.target.value })}
+                          />
+                        </td>
+                        {COLUMNS.map((col) => (
+                          <td key={col.key} className="sub">
+                            <input
+                              type="checkbox"
+                              checked={recipient[col.key]}
+                              disabled={locked || !cfg.enabled || (col.key !== "alerts" && !cfg[col.key])}
+                              aria-label={`${col.label} for ${address || "this recipient"}`}
+                              title={
+                                col.key !== "alerts" && !cfg[col.key]
+                                  ? `${col.label} reports are switched off for this agent.`
+                                  : col.title
+                              }
+                              onChange={(e) => updateRecipient(index, { [col.key]: e.target.checked })}
+                            />
+                          </td>
+                        ))}
+                        <td className="sub">
+                          <button
+                            type="button"
+                            className="recipient-remove"
+                            disabled={locked}
+                            aria-label={`Remove ${address || "recipient"}`}
+                            title="Remove this recipient"
+                            onClick={() => removeRecipient(index)}
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {invalidAddresses.length > 0 && (
+            <small className="form-error">
+              Invalid email{invalidAddresses.length > 1 ? "s" : ""}: {invalidAddresses.join(", ")}
+            </small>
+          )}
+
+          <div className="recipients-actions">
+            <button type="button" className="button-small" disabled={locked} onClick={addRecipient}>
+              Add recipient
+            </button>
+
+            {agentId && status?.enabled && (
+              <button
+                type="button"
+                className="button-small"
+                onClick={onSendTest}
+                disabled={locked || testState.busy}
+                title="Send a [TEST] daily report for yesterday to the daily subscribers above."
+              >
+                {testState.busy ? "Sending…" : "Send test email"}
+              </button>
+            )}
+          </div>
+
+          {testState.message && (
+            <small className="form-help-text" style={{ color: "var(--color-success)" }}>
+              {testState.message}
+            </small>
+          )}
+          {testState.error && <small className="form-error">{testState.error}</small>}
+          {agentId && status && !status.enabled && (
+            <small className="form-help-text">
+              Test sending is unavailable: server email provider is{" "}
+              {status.configured ? "configured but inactive" : "not configured"}.
+            </small>
+          )}
         </div>
       </div>
     </div>
