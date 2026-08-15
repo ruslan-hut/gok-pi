@@ -830,7 +830,7 @@ func (c *Client) handleConfigPush(raw json.RawMessage) {
 	var payload struct {
 		Type    string             `json:"type"`
 		AgentID string             `json:"agent_id"`
-		Config  entity.AgentConfig `json:"config"`
+		Config  agentConfigPayload `json:"config"`
 		SentAt  time.Time          `json:"sent_at"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
@@ -840,7 +840,7 @@ func (c *Client) handleConfigPush(raw json.RawMessage) {
 
 	update := ConfigUpdate{
 		AgentID: payload.AgentID,
-		Config:  payload.Config,
+		Config:  payload.Config.toEntity(),
 		SentAt:  payload.SentAt,
 	}
 
@@ -1026,6 +1026,35 @@ type ConfigUpdate struct {
 	AgentID string
 	Config  entity.AgentConfig
 	SentAt  time.Time
+}
+
+// agentConfigPayload decodes a pushed config, typing only the parts the agent
+// acts on. A config push also carries settings meant for other parts of the
+// system — email report subscriptions, for one — and decoding those into their
+// real types makes the agent reject the whole message when the server's schema
+// for a field it never reads moves ahead of the binary on the device. That has
+// happened: an agent ran on a stale config, silently, until it was rebuilt.
+// Anything not typed here is ignored by encoding/json and cannot break the push.
+type agentConfigPayload struct {
+	DeviceName string                 `json:"device_name,omitempty"`
+	Env        string                 `json:"env,omitempty"`
+	Timezone   string                 `json:"timezone,omitempty"`
+	Revision   int                    `json:"revision"`
+	UpdatedAt  time.Time              `json:"updated_at"`
+	Batteries  []entity.BatteryConfig `json:"batteries"`
+	Schedules  []entity.Schedule      `json:"schedules"`
+}
+
+func (p agentConfigPayload) toEntity() entity.AgentConfig {
+	return entity.AgentConfig{
+		DeviceName: p.DeviceName,
+		Env:        p.Env,
+		Timezone:   p.Timezone,
+		Revision:   p.Revision,
+		UpdatedAt:  p.UpdatedAt,
+		Batteries:  p.Batteries,
+		Schedules:  p.Schedules,
+	}
 }
 
 type configSnapshot struct {
