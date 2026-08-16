@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { restartAgent } from "../../api";
 import { Icon } from "../shared/Icon";
 
@@ -20,6 +20,15 @@ export function AgentMaintenance({ agentId, online }: AgentMaintenanceProps) {
   const [error, setError] = useState<string>("");
 
   const disabled = !agentId || !online || busy;
+
+  // Blur is the primary cancel, but a tap elsewhere does not reliably blur a
+  // button on touch, and an armed restart should not wait around for the next
+  // person to press it.
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = window.setTimeout(() => setConfirming(false), 8000);
+    return () => window.clearTimeout(timer);
+  }, [confirming]);
 
   const onRestart = async () => {
     if (!agentId) return;
@@ -69,7 +78,7 @@ export function AgentMaintenance({ agentId, online }: AgentMaintenanceProps) {
             {busy ? "Sending…" : confirming ? "Confirm restart" : "Restart agent"}
           </button>
           {confirming && (
-            <small className="form-help-text">Click again to restart, or click away to cancel.</small>
+            <small className="form-help-text">Click again to restart. Clicking away or waiting cancels it.</small>
           )}
         </div>
 

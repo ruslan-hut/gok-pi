@@ -66,6 +66,13 @@ const (
 	defaultSpoolFlushInterval = 5 * time.Second
 	// spoolBatchSize caps how many snapshots are read per flush iteration.
 	spoolBatchSize = 200
+
+	// dialFailureRepeat is how often a dial failure that keeps returning the same
+	// error is logged again while the link stays down. A five-hour DNS outage on
+	// 2026-08-16 wrote 310 identical WARN lines and pushed everything else out of
+	// the window the UI's log fetch can reach, which is the opposite of what the
+	// line is for.
+	dialFailureRepeat = 10 * time.Minute
 )
 
 const (
@@ -286,12 +293,24 @@ func (c *Client) run(ctx context.Context) {
 	backoff := initialBackoff
 	connected := false
 	everConnected := false
+
+	var dialFailures dialFailureLog
+
 	c.onConnected = func() {
 		backoff = initialBackoff
 		connected = true
+		attempts, downFor := dialFailures.reset(time.Now())
 		if everConnected {
 			c.health.recordReconnect()
-			c.log.Info("control server connection restored", slog.String("url", c.cfg.ServerURL))
+			log := c.log.With(slog.String("url", c.cfg.ServerURL))
+			if attempts > 0 {
+				// With the repeats suppressed, this is where the outage is measured.
+				log = log.With(
+					slog.Int("failed_attempts", attempts),
+					slog.Duration("down_for", downFor.Truncate(time.Second)),
+				)
+			}
+			log.Info("control server connection restored")
 		} else {
 			c.log.Info("control server connection established", slog.String("url", c.cfg.ServerURL))
 		}
@@ -314,8 +333,19 @@ func (c *Client) run(ctx context.Context) {
 			c.log.Info("control server connection lost")
 		case err != nil:
 			// Still down: a dial/handshake attempt failed. Logged at WARN to avoid
-			// masking it, but it is not a fresh lost-connection event.
-			c.log.With(sl.Err(err)).Warn("control server connection attempt failed")
+			// masking it, but it is not a fresh lost-connection event, and repeats of
+			// the same error are throttled — see dialFailureLog.
+			now := time.Now()
+			switch write, repeat := dialFailures.observe(err, now); {
+			case write && repeat:
+				c.log.With(
+					sl.Err(err),
+					slog.Int("attempts", dialFailures.attempts),
+					slog.Duration("failing_for", now.Sub(dialFailures.since).Truncate(time.Second)),
+				).Warn("control server still unreachable")
+			case write:
+				c.log.With(sl.Err(err)).Warn("control server connection attempt failed")
+			}
 		}
 
 		select {
@@ -325,6 +355,47 @@ func (c *Client) run(ctx context.Context) {
 			backoff = minDuration(backoff*2, maxBackoff)
 		}
 	}
+}
+
+// dialFailureLog throttles the dial-failure line, which otherwise writes one WARN
+// per attempt for as long as the link is down — 310 identical lines over the DNS
+// outage of 2026-08-16, crowding everything else out of the log window the UI can
+// fetch. The first failure of an outage is written in full; an error whose text
+// changes is written immediately, because a failure that changed character is news;
+// an unchanged one is repeated no more often than dialFailureRepeat.
+//
+// It is owned by run's goroutine, which is also the only caller of onConnected.
+type dialFailureLog struct {
+	err      string
+	since    time.Time
+	loggedAt time.Time
+	attempts int
+}
+
+// observe records a failed attempt and reports whether it should be written to the
+// log, and whether it is a repeat of a failure already reported.
+func (d *dialFailureLog) observe(err error, now time.Time) (write, repeat bool) {
+	if text := err.Error(); text != d.err {
+		*d = dialFailureLog{err: text, since: now, loggedAt: now, attempts: 1}
+		return true, false
+	}
+
+	d.attempts++
+	if now.Sub(d.loggedAt) < dialFailureRepeat {
+		return false, true
+	}
+	d.loggedAt = now
+	return true, true
+}
+
+// reset ends the outage and reports what it spanned, so the line that announces the
+// recovery can state the attempts and the duration the throttle kept out of the log.
+func (d *dialFailureLog) reset(now time.Time) (attempts int, downFor time.Duration) {
+	if d.attempts > 0 {
+		attempts, downFor = d.attempts, now.Sub(d.since)
+	}
+	*d = dialFailureLog{}
+	return attempts, downFor
 }
 
 // spoolMaintenance periodically prunes the durable telemetry buffer so it cannot

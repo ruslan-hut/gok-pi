@@ -337,7 +337,10 @@
   gap: 0.4rem;
 }
 
-.form-field label {
+/* .field-label is for a group of controls — a table of them, say — where a
+   <label> would have no single control to point at. */
+.form-field label,
+.form-field .field-label {
   font-size: 0.85rem;
   color: var(--color-text);
   font-weight: 500;
@@ -385,14 +388,19 @@
   line-height: 1.3;
 }
 
-/* Live region for the outcome of a form action. It stays mounted so screen
-   readers announce the result, and takes no room in a gapped column until it
-   has something to say. */
+/* Live region for the outcome of a form action. Taken out of flow rather than
+   hidden while it is empty: display:none drops it from the accessibility tree,
+   and a region that is not in the tree when the text arrives is not announced. */
 .form-status:empty {
-  display: none;
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
-/* Outcomes of a form action: what went wrong, or that it worked. */
+/* Outcomes of a form action: what went wrong, or that it worked. Both use the
+   text-weight hues — the badge hues are too light to read at this size on the
+   light theme's white cards. */
 .form-error,
 .form-ok {
   display: block;
@@ -402,11 +410,11 @@
 }
 
 .form-error {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .form-ok {
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 /* Mobile form adjustments */
@@ -458,7 +466,8 @@
     gap: var(--space-xs);
   }
 
-  .form-field label {
+  .form-field label,
+  .form-field .field-label {
     font-size: 0.9rem;
     font-weight: 600;
   }

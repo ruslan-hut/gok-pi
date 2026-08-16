@@ -2,6 +2,9 @@ package controller
 
 import (
 	"errors"
+	"gok-pi/battery/entity"
+	"io"
+	"log/slog"
 	"testing"
 )
 
@@ -60,5 +63,39 @@ func TestModeCoordinator_MarkActiveBlocksAuto(t *testing.T) {
 	}
 	if auto {
 		t.Fatal("switched to auto while adopted discharge still active")
+	}
+}
+
+// TestStopIgnoresAutoModeActivity pins the 2026-08-16 log noise: with the battery
+// taking PV into store in auto mode, the charge controller matched on the charging
+// flag alone and issued a setpoint POST plus a "stopped charge" line on every poll
+// for five hours. Nothing is running in manual mode, so there is nothing to stop.
+func TestStopIgnoresAutoModeActivity(t *testing.T) {
+	client := &fakeClient{}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	c, err := New("BAT-AUTO", client, ChargeDirection(client), log)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	c.status = &entity.SystemStatus{OperatingMode: batteryModeAuto, USOC: 92, BatteryCharging: true}
+
+	if err := c.stopOperation(); err != nil {
+		t.Fatalf("stopOperation: %v", err)
+	}
+	if client.stops != 0 {
+		t.Fatalf("expected no stop command in auto mode, got %d", client.stops)
+	}
+	if len(client.modes) != 0 {
+		t.Fatalf("expected no mode switch in auto mode, got %v", client.modes)
+	}
+
+	// The same reading in manual mode is this controller's to stop.
+	c.status.OperatingMode = batteryModeManual
+	if err := c.stopOperation(); err != nil {
+		t.Fatalf("stopOperation: %v", err)
+	}
+	if client.stops != 1 {
+		t.Fatalf("expected one stop command in manual mode, got %d", client.stops)
 	}
 }

@@ -124,6 +124,12 @@ const (
 	OperatingModeAuto   OperatingMode = "auto"
 )
 
+// Operating modes as the battery reports them in SystemStatus.OperatingMode.
+const (
+	batteryModeManual = "1"
+	batteryModeAuto   = "2"
+)
+
 // CommandSourceCharger marks a start command issued because an EV charging
 // session began. Such an override outlives config pushes; see the comment on
 // Controller.overrideSource.
@@ -568,7 +574,7 @@ func (c *Controller) checkTime() {
 
 				c.ready = canStart
 
-				if !canStart && !c.deadbandHold && c.status != nil && c.status.OperatingMode == "1" && (c.active || c.dir.IsActive(c.status)) {
+				if !canStart && !c.deadbandHold && c.status != nil && c.status.OperatingMode == batteryModeManual && (c.active || c.dir.IsActive(c.status)) {
 					c.log.With(
 						slog.String("operating_mode", c.status.OperatingMode),
 						slog.Bool("is_active", c.active),
@@ -778,8 +784,17 @@ func (c *Controller) publishOverride() {
 }
 
 // stopOperation stops the current operation if it is ongoing.
+//
+// Only an operation running in manual mode is this controller's to stop. In auto
+// mode the battery charges and discharges on its own, and matching on the direction
+// flag alone made every reading of a battery taking PV into store look like a charge
+// that needed stopping: one setpoint POST and one "stopped charge" line per poll for
+// as long as the sun was out.
 func (c *Controller) stopOperation() error {
-	shouldStop := c.active || (c.status != nil && c.dir.IsActive(c.status))
+	batteryOperating := c.status != nil &&
+		c.status.OperatingMode == batteryModeManual &&
+		c.dir.IsActive(c.status)
+	shouldStop := c.active || batteryOperating
 
 	if shouldStop {
 		err := c.dir.StopOp()
@@ -1123,7 +1138,7 @@ func (c *Controller) syncStateFromBattery(status *entity.SystemStatus) {
 
 	// If battery is in manual mode and operation is active, sync our internal state
 	// OperatingMode "1" = manual, "2" = auto
-	if status.OperatingMode == "1" && c.dir.IsActive(status) {
+	if status.OperatingMode == batteryModeManual && c.dir.IsActive(status) {
 		if unowned {
 			c.log.With(
 				slog.String("operating_mode", status.OperatingMode),
@@ -1152,7 +1167,7 @@ func (c *Controller) syncStateFromBattery(status *entity.SystemStatus) {
 	}
 
 	// If battery is in auto mode but we think we're active (stale state), clear it
-	if status.OperatingMode == "2" && c.active && !c.manualOverride {
+	if status.OperatingMode == batteryModeAuto && c.active && !c.manualOverride {
 		c.log.Info("battery in auto mode but internal state shows " + c.dir.Name + "ing, clearing stale state")
 		c.active = false
 	}

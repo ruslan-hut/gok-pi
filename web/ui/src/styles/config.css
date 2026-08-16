@@ -635,7 +635,10 @@
   padding-right: var(--space-sm);
 }
 
+/* border-box or the padding is added outside the cell and the address slides
+   under the first tick once the columns get tight. */
 .recipients-table td input[type="email"] {
+  box-sizing: border-box;
   width: 100%;
   min-width: 12rem;
 }
@@ -736,8 +739,22 @@
     border-bottom: none;
   }
 
+  /* Address and its remove button share the first line: the four labelled ticks
+     need 306 of the ~311px a phone leaves, so anything else on their line is
+     pushed to a third row and the × ends up floating in empty space. The basis
+     leaves too little slack for a tick to join line one. */
   .recipients-table td:first-child {
-    flex: 1 0 100%;
+    flex: 1 1 calc(100% - 3.5rem);
+    order: 1;
+  }
+
+  .recipients-table td.sub:last-child {
+    flex: 0 0 auto;
+    order: 2;
+  }
+
+  .recipients-table td.sub[data-label] {
+    order: 3;
   }
 
   .recipients-table td input[type="email"] {
@@ -751,9 +768,5 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: var(--color-text-muted);
-  }
-
-  .recipients-table td.sub:last-child {
-    margin-left: auto;
   }
 }

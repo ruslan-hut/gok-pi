@@ -3,6 +3,7 @@ package wsclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"path/filepath"
 	"testing"
@@ -149,5 +150,54 @@ func TestReplyQueueDoesNotBlockTheReadLoop(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("enqueueReply blocked once the outbound buffer filled up")
+	}
+}
+
+// TestDialFailuresAreThrottled pins the log-volume fix from the 2026-08-16 outage:
+// five hours of the same DNS error wrote 310 identical WARN lines and left no room
+// in the fetched log window for anything else.
+func TestDialFailuresAreThrottled(t *testing.T) {
+	dns := errors.New(`dial tcp: lookup bat.example on 192.168.68.1:53: server misbehaving`)
+	start := time.Date(2026, 8, 16, 15, 38, 0, 0, time.UTC)
+
+	var d dialFailureLog
+
+	if write, repeat := d.observe(dns, start); !write || repeat {
+		t.Fatalf("first failure of an outage must be logged in full, got write=%v repeat=%v", write, repeat)
+	}
+
+	// Every attempt within the repeat window is counted but stays out of the log.
+	for at := start.Add(time.Minute); at.Sub(start) < dialFailureRepeat; at = at.Add(time.Minute) {
+		if write, _ := d.observe(dns, at); write {
+			t.Fatalf("attempt at +%s repeated the same error and must be suppressed", at.Sub(start))
+		}
+	}
+
+	// Once the window has elapsed, the outage is reported again — with what it cost.
+	at := start.Add(dialFailureRepeat)
+	write, repeat := d.observe(dns, at)
+	if !write || !repeat {
+		t.Fatalf("expected a throttled repeat after %s, got write=%v repeat=%v", dialFailureRepeat, write, repeat)
+	}
+	if d.attempts != 11 {
+		t.Fatalf("expected every suppressed attempt to be counted, got %d", d.attempts)
+	}
+
+	// A failure that changes character is news, whatever the window says.
+	refused := errors.New("dial tcp 192.0.2.1:443: connect: connection refused")
+	if write, repeat := d.observe(refused, at.Add(time.Second)); !write || repeat {
+		t.Fatalf("a changed error must be logged immediately, got write=%v repeat=%v", write, repeat)
+	}
+	if d.attempts != 1 {
+		t.Fatalf("expected the attempt count to restart with the new error, got %d", d.attempts)
+	}
+
+	// Recovery reports the outage the throttle kept out of the log, then forgets it.
+	attempts, downFor := d.reset(at.Add(time.Minute))
+	if attempts != 1 || downFor != time.Duration(59)*time.Second {
+		t.Fatalf("unexpected outage summary: attempts=%d down_for=%s", attempts, downFor)
+	}
+	if attempts, downFor := d.reset(at); attempts != 0 || downFor != 0 {
+		t.Fatalf("a reset without failures must report nothing, got attempts=%d down_for=%s", attempts, downFor)
 	}
 }

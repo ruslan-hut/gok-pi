@@ -6,6 +6,7 @@ import (
 	"gok-pi/internal/lib/sl"
 	"gok-pi/metrics/observers"
 	"log/slog"
+	"math"
 	"time"
 )
 
@@ -24,6 +25,12 @@ type StatusPoller struct {
 	log         *slog.Logger
 	interval    time.Duration
 	subscribers []chan *entity.SystemStatus
+
+	// Reference point for the plausibility check below. Only touched from poll(),
+	// which runs on the poller's own goroutine.
+	lastUSOC   float64
+	lastUSOCAt time.Time
+	discarded  int
 }
 
 // StaleAfterFailures is how many consecutive failed polls make the last successful
@@ -32,6 +39,28 @@ type StatusPoller struct {
 // failed poll is a blip, but half a minute of silence means the battery may have
 // been changed by someone else, or not be there at all.
 const StaleAfterFailures = 3
+
+// Bounds for the SoC plausibility check. A Sonnen occasionally answers a status
+// request with a partially populated body — USOC zeroed and the discharge flag
+// cleared while the rest of the frame looks normal. Acting on one of those stopped
+// a discharge mid-window on 2026-08-16 (usoc=0 logged while the battery was at 85%)
+// and put a 0% spike in the history, so such a reading is discarded rather than
+// published.
+const (
+	// maxSoCStepPerPoll is how far USOC may move between consecutive readings. At
+	// the highest rate the hardware supports SoC moves a fraction of a point per
+	// interval, so a double-digit jump is a bad frame, not a battery.
+	maxSoCStepPerPoll = 20
+
+	// maxDiscardedReadings is how many readings in a row may be discarded before the
+	// next one is believed anyway. A genuine step change — a replaced battery, a
+	// reconfigured capacity — must not lock the poller out permanently.
+	maxDiscardedReadings = 3
+
+	// socReferenceMaxAge is how long the previous reading stays a valid reference.
+	// After a gap the battery may legitimately be somewhere else entirely.
+	socReferenceMaxAge = time.Minute
+)
 
 // NewStatusPoller creates a poller for a battery. Subscribe consumers before calling Run.
 func NewStatusPoller(name string, client Client, log *slog.Logger) *StatusPoller {
@@ -105,10 +134,45 @@ func (p *StatusPoller) poll() {
 		// is no reading to publish.
 		observers.UpdateStatus(p.name, "Connected")
 	} else {
+		if p.implausible(status, time.Now()) {
+			return
+		}
 		p.observe(status)
 	}
 
 	p.publish(status)
+}
+
+// implausible reports whether a reading contradicts the previous one so badly that
+// it cannot be real, and records the reference point for the next call. A discarded
+// reading reaches neither the observers nor the controllers: the battery is
+// reachable, so the previous reading is still the best information available and
+// the controllers keep operating from it.
+func (p *StatusPoller) implausible(status *entity.SystemStatus, now time.Time) bool {
+	fresh := !p.lastUSOCAt.IsZero() && now.Sub(p.lastUSOCAt) <= socReferenceMaxAge
+	step := math.Abs(status.USOC - p.lastUSOC)
+
+	if !fresh || step <= maxSoCStepPerPoll {
+		p.lastUSOC, p.lastUSOCAt, p.discarded = status.USOC, now, 0
+		return false
+	}
+
+	p.discarded++
+	log := p.log.With(
+		slog.Float64("usoc", status.USOC),
+		slog.Float64("previous_usoc", p.lastUSOC),
+		slog.Int("discarded", p.discarded),
+	)
+
+	if p.discarded > maxDiscardedReadings {
+		// It is not a blip: the battery really is reporting this now.
+		log.Warn("battery SoC step persists, accepting the reading")
+		p.lastUSOC, p.lastUSOCAt, p.discarded = status.USOC, now, 0
+		return false
+	}
+
+	log.Warn("discarding implausible battery status reading")
+	return true
 }
 
 // publish fans a reading out to every subscriber, keeping only the latest: a stale

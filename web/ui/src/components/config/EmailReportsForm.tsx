@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EmailProviderStatus, EmailRecipient, EmailReportsConfig } from "../../types";
 import { fetchEmailStatus, sendEmailTest } from "../../api";
 
@@ -49,6 +49,21 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
     fetchEmailStatus().then(setStatus).catch(() => setStatus(null));
   }, []);
 
+  /**
+   * A row key that survives a removal. Keying by index makes React reuse the
+   * input of the deleted row for the one that moves up into its place, so a
+   * cursor sitting in row 3 ends up in row 2's address. Ids follow the rows:
+   * they are spliced along with them, and topped up when a config arrives from
+   * outside the form.
+   */
+  const rowIds = useRef<number[]>([]);
+  const nextRowId = useRef(0);
+  if (rowIds.current.length !== cfg.recipients.length) {
+    rowIds.current = cfg.recipients.map(
+      (_, i) => rowIds.current[i] ?? nextRowId.current++,
+    );
+  }
+
   const update = (patch: Partial<EmailReportsConfig>) => {
     onChange({ ...cfg, ...patch });
   };
@@ -67,6 +82,7 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
   };
 
   const removeRecipient = (index: number) => {
+    rowIds.current.splice(index, 1);
     update({ recipients: cfg.recipients.filter((_, i) => i !== index) });
   };
 
@@ -107,7 +123,7 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
   return (
     <div className="config-section">
       {status && (
-        <div className="config-section-header config-section-header-actions">
+        <div className="config-section-header">
           <span
             className={`badge ${status.enabled ? "ok" : "muted"}`}
             title={status.sender ? `Sender: ${status.sender}` : undefined}
@@ -152,7 +168,11 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
       </div>
 
       <div className="form-field email-recipients">
-        <label>Recipients</label>
+        {/* A heading for the table, not a label for one control, so it is not a
+            <label> — the table takes its accessible name from it instead. */}
+        <span className="field-label" id="email-recipients-label">
+          Recipients
+        </span>
         <small className="form-help-text">
           Each address gets exactly what it is ticked for, and nothing else.
         </small>
@@ -161,7 +181,7 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
           <p className="recipients-empty">No recipients yet — nothing is being sent.</p>
         ) : (
           <div className="recipients-table">
-            <table>
+            <table aria-labelledby="email-recipients-label">
               <thead>
                 <tr>
                   <th>Address</th>
@@ -178,7 +198,7 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
                   const address = recipient.address.trim();
                   const invalid = address !== "" && !EMAIL_RE.test(address);
                   return (
-                    <tr key={index}>
+                    <tr key={rowIds.current[index]}>
                       <td>
                         <input
                           type="email"
@@ -187,6 +207,7 @@ export function EmailReportsForm({ value, agentId, disabled, readonly, onChange 
                           disabled={locked}
                           placeholder="alice@example.com"
                           aria-label="Recipient email address"
+                          aria-invalid={invalid || undefined}
                           onChange={(e) => updateRecipient(index, { address: e.target.value })}
                         />
                       </td>
