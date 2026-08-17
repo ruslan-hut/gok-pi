@@ -1143,7 +1143,7 @@ func (c *Controller) syncStateFromBattery(status *entity.SystemStatus) {
 			c.log.With(
 				slog.String("operating_mode", status.OperatingMode),
 				slog.Bool("battery_active", c.dir.IsActive(status)),
-			).Info("detected battery already " + c.dir.Name + "ing in manual mode on startup, syncing internal state")
+			).Info("detected an ongoing " + c.dir.Name + " in manual mode on startup, syncing internal state")
 			c.active = true
 		}
 

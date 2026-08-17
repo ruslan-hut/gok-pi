@@ -183,18 +183,20 @@ func TestDialFailuresAreThrottled(t *testing.T) {
 		t.Fatalf("expected every suppressed attempt to be counted, got %d", d.attempts)
 	}
 
-	// A failure that changes character is news, whatever the window says.
+	// A failure that changes character is news, whatever the window says — but it is
+	// the same outage: reporting it as a fresh one understated the 2026-08-17 outage
+	// by the 43 minutes it spent as a dial timeout before DNS started failing.
 	refused := errors.New("dial tcp 192.0.2.1:443: connect: connection refused")
-	if write, repeat := d.observe(refused, at.Add(time.Second)); !write || repeat {
+	if write, repeat := d.observe(refused, at.Add(time.Second)); !write || !repeat {
 		t.Fatalf("a changed error must be logged immediately, got write=%v repeat=%v", write, repeat)
 	}
-	if d.attempts != 1 {
-		t.Fatalf("expected the attempt count to restart with the new error, got %d", d.attempts)
+	if d.attempts != 12 {
+		t.Fatalf("expected the changed error to keep counting the same outage, got %d", d.attempts)
 	}
 
 	// Recovery reports the outage the throttle kept out of the log, then forgets it.
 	attempts, downFor := d.reset(at.Add(time.Minute))
-	if attempts != 1 || downFor != time.Duration(59)*time.Second {
+	if attempts != 12 || downFor != dialFailureRepeat+time.Minute {
 		t.Fatalf("unexpected outage summary: attempts=%d down_for=%s", attempts, downFor)
 	}
 	if attempts, downFor := d.reset(at); attempts != 0 || downFor != 0 {

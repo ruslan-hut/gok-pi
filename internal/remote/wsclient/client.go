@@ -361,8 +361,9 @@ func (c *Client) run(ctx context.Context) {
 // per attempt for as long as the link is down — 310 identical lines over the DNS
 // outage of 2026-08-16, crowding everything else out of the log window the UI can
 // fetch. The first failure of an outage is written in full; an error whose text
-// changes is written immediately, because a failure that changed character is news;
-// an unchanged one is repeated no more often than dialFailureRepeat.
+// changes is written immediately, because a failure that changed character is news,
+// but as a repeat carrying the running counters rather than a new outage; an
+// unchanged one is repeated no more often than dialFailureRepeat.
 //
 // It is owned by run's goroutine, which is also the only caller of onConnected.
 type dialFailureLog struct {
@@ -376,8 +377,16 @@ type dialFailureLog struct {
 // log, and whether it is a repeat of a failure already reported.
 func (d *dialFailureLog) observe(err error, now time.Time) (write, repeat bool) {
 	if text := err.Error(); text != d.err {
-		*d = dialFailureLog{err: text, since: now, loggedAt: now, attempts: 1}
-		return true, false
+		// The outage is measured from its first failure, not from the last time the
+		// error text changed: a DNS failure that starts out as a dial timeout is one
+		// outage, and resetting since/attempts here reported 2h32m for the 3h15m
+		// outage of 2026-08-17 and re-announced it mid-flight as a fresh one.
+		if d.attempts == 0 {
+			d.since = now
+		}
+		d.err, d.loggedAt = text, now
+		d.attempts++
+		return true, d.attempts > 1
 	}
 
 	d.attempts++
