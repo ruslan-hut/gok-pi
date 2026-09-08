@@ -10,3 +10,4 @@ PLAN.md
 /.build/
 .log
 /essprobe
+.DS_Store
