@@ -56,7 +56,9 @@ Key packages:
 - `battery/controller` - Unified charge/discharge control loop, parameterized by direction
 - `battery/driver` - Battery driver interface and registry; drivers self-register via `init()`
 - `battery/driver/sonnen` - Sonnen battery API driver implementation
+- `battery/driver/huawei` - Huawei LUNA2000B point table, codec and alarms; **no driver yet**, see `HUAWEI_INTEGRATION.md`
 - `battery/entity` - Shared domain types (BatteryConfig, Schedule, AgentConfig, SystemStatus) and helpers
+- `internal/modbus` - Modbus-TCP client, read-only by construction (only `0x03` and `0x2B`); `modbussim` is its test server
 - `internal/remote/wsclient` - Agent-side WebSocket client with reconnection backoff
 - `remote/server` - Control server WebSocket handlers, config store, UI serving
 - `remote/server/email` - Brevo-backed daily/weekly/monthly email reports built from session DB + price fetcher
@@ -105,6 +107,12 @@ Adding a new driver:
 4. Add corresponding `<option>` in the Web UI driver select (`web/ui/src/components/config/BatteryConfigForm.tsx`)
 
 The driver options in the UI must match the registered driver names in the backend.
+
+`battery/driver/huawei` is a partial exception: it carries the LUNA2000B point
+table, codec and alarm definitions but implements no `driver.Driver` and calls no
+`driver.Register`, so it is data plus `cmd/essprobe`, not a working driver.
+See `HUAWEI_INTEGRATION.md` for the site details, the SmartLogger change it is
+blocked on, and the bring-up stages.
 
 ## Development Notes
 
