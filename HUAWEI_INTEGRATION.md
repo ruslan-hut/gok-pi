@@ -100,6 +100,69 @@ register against a 140.4 kW baseline, not the kW register. Anything we write to
 either register will be overwritten on its next cycle unless the logger's own
 ESS control is switched off or handed over.
 
+### SmartLogger control configuration (read, not changed)
+
+Read from the logger web UI on 2026-09-15; nothing was submitted.
+
+| Page | Setting | Value |
+|---|---|---|
+| Power Adjustment → Active Power Control | Active power control mode | **Export Limitation (kW)** |
+| | Start control / meter direction / limitation mode | Yes / Positive / Total power |
+| | Maximum grid feed-in power | 99 kW |
+| | Power lowering adjustment period / protection time / raising threshold | 0.5 s / 3.0 s / 5 kW |
+| | PV / PCS power limit upon communication failure | 0 % / 0 % |
+| Battery Settings | Working mode | **Maximum self-consumption** |
+| | Grid active power threshold during discharge / deadband | 100 W / 35 W |
+| | Scheduling mode | Maximize energy |
+| | Array end-of-charge / end-of-discharge SOC | 100 % / 5 % |
+| Battery Settings → Capacity Control | Peak shaving / power boost limit | No control / No control |
+| Microgrid Control | MGCC mode | Disable |
+| Comm. Param. → Modbus TCP | Link setting | Enable (Limited): `10.0.80.155`, `10.0.80.154` |
+| | Address mode / logger address / fast scheduling | Logical address / 0 / Disable |
+| | Communication abnormality detection time | 3.0 s |
+| | Protection upon PPC communication error | Disable |
+| Status bar | AI control | Disabled |
+
+Feature Parameters and Other Parameters hold nothing dispatch-related.
+
+**What the logger is doing:** holding grid exchange at about zero. PV surplus
+charges the ESS and the ESS covers site load — the overview read PV 40.3 kW,
+battery −39.3 kW, load 1.1 kW, grid 0.1 kW. 42913 on each cabinet is the output
+of that loop.
+
+**Modes the logger offers:**
+
+- Active power control mode: No limit · DI active scheduling · Percentage
+  fixed-value limitation (open loop) · **Remote communication scheduling** ·
+  Export Limitation (kW) · Remote output control
+- Battery working mode: No control · Maximum self-consumption · TOU ·
+  **Charge/Discharge based on grid dispatch** · TOU (fixed power) · Custom
+
+The working-mode help text says *No control* is for on-site commissioning only,
+that AI energy management overrides the local working mode when enabled, and
+that power-limited grid connection and TOU fixed power cannot be combined.
+
+### Handing over control: what this implies
+
+1. **The vendor path for an external master** is battery working mode *Charge/
+   Discharge based on grid dispatch* plus active power control *Remote
+   communication scheduling*. Dispatch then goes **to the SmartLogger at unit 0**,
+   not to each cabinet, so its registers come from Huawei's *SmartLogger Modbus
+   Interface Definitions*, which we do not have. The LUNA2000B table stays the
+   source of per-cabinet telemetry.
+2. **A communication-loss fallback exists at logger level.** After the 3.0 s
+   communication abnormality detection time, the logger applies *PCS power limit
+   upon communication failure* (0 % today). That covers the missing watchdog
+   register, provided dispatch goes through the logger.
+3. **Leaving Export Limitation removes the 99 kW feed-in cap.** Check the grid
+   connection agreement before switching modes.
+4. **Coexisting may be enough.** Maximum self-consumption already discharges
+   the ESS whenever the EV chargers draw power, which is what
+   `EVSYS_INTEGRATION.md` sets out to achieve. What gok would add is price and
+   time based charging; the logger has a native TOU mode. Adjusting the logger's
+   working mode or TOU schedule may be simpler and safer than full remote
+   dispatch.
+
 ## Original blocker: Modbus TCP was disabled on the SmartLogger
 
 Measured from `10.0.80.155` over the VPN:
@@ -245,15 +308,15 @@ leaves it unbounded, while enforcing the four registers whose bounds are literal
 1. **Sign of 42915 when written.** 30417, 32986 and 42913 are settled (see
    above); 42915 is inferred as negative = charge and needs confirming at the
    first write.
-2. **Replace or coexist with the SmartLogger's dispatch.** Settled that it is the
-   logger, writing 42913 continuously. Open: which logger setting hands ESS
-   control to a third-party master (a remote-dispatch mode in its power/ESS
-   control settings), or whether to dispatch at plant level through the logger's
-   own register map instead of per cabinet. The latter needs Huawei's
-   *SmartLogger Modbus Interface Definitions*, which we do not have yet.
-3. **No watchdog register exists.** A setpoint written persists if the writer
-   dies. Whatever eventually writes must guarantee ramp-to-zero on shutdown, and
-   must sit on the site LAN — never behind a VPN that can drop mid-command.
+2. **Replace or coexist with the SmartLogger's dispatch.** The handover modes
+   are known (see *Handing over control* above). Open: whether to take full
+   remote dispatch through the logger or keep its self-consumption loop and
+   only adjust its working mode or TOU schedule. Either way, the next document
+   needed is Huawei's *SmartLogger Modbus Interface Definitions*.
+3. **No watchdog register on the cabinets.** A setpoint written directly to an
+   ESS persists if the writer dies. Dispatch through the logger avoids this: its
+   communication-failure limit applies after 3 s. Anything that writes to a
+   cabinet directly must still ramp to zero on shutdown and sit on the site LAN.
 4. **Concurrent client limit** on the logger, and whether enabling Modbus TCP
    affects the existing FusionSolar link.
 5. **TLS on Modbus TCP**, per the configuration section above.
