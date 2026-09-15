@@ -150,7 +150,7 @@ func TestDumpTable(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"ADDR", "Rated capacity", "215", "Running: PQ",
-		"positive (discharging", "0 failed",
+		"positive (charging)", "0 failed",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("dump() output missing %q", want)
@@ -361,14 +361,14 @@ func TestTrackerPolarity(t *testing.T) {
 		want    string
 	}{
 		{
-			name:    "positive power with falling SOC matches the documented reading",
-			samples: [][2]float64{{80, 50}, {79, 50}, {78, 50}, {77, 50}},
-			want:    "consistent with positive = discharge",
+			name:    "positive power with rising SOC matches the confirmed convention",
+			samples: [][2]float64{{70, 50}, {71, 50}, {72, 50}, {73, 50}},
+			want:    "consistent with positive = charge",
 		},
 		{
-			name:    "positive power with rising SOC means the polarity is inverted",
-			samples: [][2]float64{{70, 50}, {71, 50}, {72, 50}, {73, 50}},
-			want:    "INVERTED",
+			name:    "positive power with falling SOC contradicts it",
+			samples: [][2]float64{{80, 50}, {79, 50}, {78, 50}, {77, 50}},
+			want:    "CONTRADICTS",
 		},
 		{
 			name:    "an idle battery yields no verdict",
@@ -384,7 +384,7 @@ func TestTrackerPolarity(t *testing.T) {
 
 			for _, s := range tt.samples {
 				smp := newSample()
-				smp.Values[huawei.SOC.Addr] = s[0]
+				smp.Values[huawei.ControlSOC.Addr] = s[0]
 				smp.Values[huawei.ChargeDischargePower.Addr] = s[1]
 				tr.observe(smp, &log)
 			}

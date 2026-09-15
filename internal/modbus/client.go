@@ -27,8 +27,10 @@ import (
 const (
 	// mbapLen is the fixed size of the MBAP header.
 	mbapLen = 7
-	// maxADU is the recommended frame length; anything larger is a framing error.
-	maxADU = 260
+	// maxADU bounds a response frame. 260 bytes is only the recommended size:
+	// section 4.2.1.1 lets extended functions grow it, and the SmartLogger pads
+	// device-list descriptions past it.
+	maxADU = 1024
 
 	funcReadHolding  = 0x03
 	funcReadDeviceID = 0x2B
@@ -241,10 +243,12 @@ func (c *Client) ReadDeviceID(ctx context.Context, unit, readCode, firstObject u
 			return nil, fmt.Errorf("read device id: MEI type 0x%02X, want 0x%02X", resp[1], meiDeviceID)
 		}
 
-		more, next, count := resp[4], resp[5], resp[6]
+		more, next := resp[4], resp[5]
 
+		// The object count is not trusted: the SmartLogger reports the total for
+		// the whole list while sending one object per response.
 		p := 7
-		for range count {
+		for p < len(resp) {
 			if p+2 > len(resp) {
 				return nil, errors.New("read device id: object list truncated")
 			}

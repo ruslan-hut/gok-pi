@@ -168,8 +168,8 @@ type tracker struct {
 	haveSOC   bool
 	lastPower float64
 
-	// agreement counts samples where SOC moved in the direction the documented
-	// polarity predicts, against those where it moved the other way.
+	// agree counts samples where SOC moved the way the confirmed polarity
+	// predicts, disagree those where it moved the other way.
 	agree, disagree int
 	writers         map[string]int
 }
@@ -227,12 +227,12 @@ func (t *tracker) observe(s *sample, w io.Writer) {
 	t.trackPolarity(s)
 }
 
-// trackPolarity accumulates evidence for the sign convention. The document does
-// not say whether a positive charge/discharge power means charging or
-// discharging, but SOC does: if power is positive while SOC falls, positive is
-// discharge. Counting both ways over many samples settles it without writing.
+// trackPolarity keeps checking the sign convention of 30417. The document does
+// not state it; on site a positive value came with rising SOC and a growing
+// "energy charged today", so positive means charging. Control SOC is used for
+// its 0.1% resolution, which moves every minute or so at typical power.
 func (t *tracker) trackPolarity(s *sample) {
-	soc, okSOC := s.value(huawei.SOC)
+	soc, okSOC := s.value(huawei.ControlSOC)
 	power, okPower := s.value(huawei.ChargeDischargePower)
 	if !okSOC || !okPower {
 		return
@@ -254,12 +254,10 @@ func (t *tracker) trackPolarity(s *sample) {
 	rising := soc > t.lastSOC
 	positive := power > 0
 
-	// Documented reading: positive is discharge, so a positive power should
-	// come with a falling SOC.
 	if positive == rising {
-		t.disagree++
-	} else {
 		t.agree++
+	} else {
+		t.disagree++
 	}
 }
 
@@ -281,12 +279,12 @@ func (t *tracker) summarise(w io.Writer) {
 		return
 	}
 
-	fmt.Fprintf(w, "\npolarity: %d of %d samples match 'positive means discharging'\n", t.agree, total)
+	fmt.Fprintf(w, "\npolarity: %d of %d samples match 'positive means charging'\n", t.agree, total)
 	switch {
 	case t.agree > 0 && t.disagree == 0:
-		fmt.Fprintln(w, "  consistent with positive = discharge, negative = charge")
+		fmt.Fprintln(w, "  consistent with positive = charge, negative = discharge")
 	case t.disagree > 0 && t.agree == 0:
-		fmt.Fprintln(w, "  INVERTED: positive = charge, negative = discharge")
+		fmt.Fprintln(w, "  CONTRADICTS the confirmed convention: positive = discharge on this device")
 	default:
 		fmt.Fprintln(w, "  contradictory; SOC may be moving for reasons other than the measured power")
 	}

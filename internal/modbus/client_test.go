@@ -332,3 +332,27 @@ func TestConnectRefused(t *testing.T) {
 		t.Error("Connect() to a closed port: expected error")
 	}
 }
+
+func TestReadDeviceIDIgnoresObjectCount(t *testing.T) {
+	// Captured from a SmartLogger V300R024C10SPC161: count says 6, one object follows.
+	page := 0
+	s := newFakeServer(t, func(_ uint8, _ []byte) []byte {
+		page++
+		if page == 1 {
+			return []byte{0x2B, 0x0E, 0x03, 0x03, 0xFF, 0x88, 0x06, 0x87, 0x01, 0x05}
+		}
+		out := []byte{0x2B, 0x0E, 0x03, 0x03, 0x00, 0x00, 0x06, 0x88, 3}
+
+		return append(out, "1=x"...)
+	})
+	c := New(s.addr(), time.Second)
+	t.Cleanup(func() { _ = c.Close() })
+
+	got, err := c.ReadDeviceID(context.Background(), 0, ReadDevIDList, ObjectDeviceCount)
+	if err != nil {
+		t.Fatalf("ReadDeviceID() error = %v", err)
+	}
+	if got[0x87] != "\x05" || got[0x88] != "1=x" {
+		t.Errorf("ReadDeviceID() = %q", got)
+	}
+}

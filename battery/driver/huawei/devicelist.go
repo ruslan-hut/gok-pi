@@ -107,9 +107,7 @@ func ParseDevice(desc string) Device {
 func ParseDeviceList(objects map[uint8]string) (count int, devices []Device) {
 	count = -1
 	if v, ok := objects[0x87]; ok {
-		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
-			count = n
-		}
+		count = deviceCount(v)
 	}
 
 	ids := make([]int, 0, len(objects))
@@ -134,4 +132,21 @@ func ParseDeviceList(objects map[uint8]string) (count int, devices []Device) {
 	}
 
 	return count, devices
+}
+
+// deviceCount decodes object 0x87. The document types it as int; the SmartLogger
+// sends it as a big-endian binary integer, so ASCII digits are only a fallback.
+func deviceCount(v string) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && v != "" && v[0] >= '0' && v[0] <= '9' {
+		return n
+	}
+	if v == "" || len(v) > 4 {
+		return -1
+	}
+	n := 0
+	for i := 0; i < len(v); i++ {
+		n = n<<8 | int(v[i])
+	}
+
+	return n
 }

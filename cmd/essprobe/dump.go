@@ -154,9 +154,8 @@ func annotate(reg huawei.Register, s *sample) string {
 	return ""
 }
 
-// powerDirection spells out what the sign of the charge/discharge power means,
-// flagging that the polarity is an assumption until it has been confirmed
-// against SOC movement on real hardware.
+// powerDirection spells out the sign of 30417, which is battery-side: positive
+// means charging. Confirmed on site against SOC and the daily energy counters.
 func powerDirection(s *sample) string {
 	v, ok := s.value(huawei.ChargeDischargePower)
 	if !ok || v == 0 {
@@ -164,10 +163,10 @@ func powerDirection(s *sample) string {
 	}
 
 	if v > 0 {
-		return "positive (discharging, if the documented polarity holds)"
+		return "positive (charging)"
 	}
 
-	return "negative (charging, if the documented polarity holds)"
+	return "negative (discharging)"
 }
 
 func deref(p *int64) int64 {

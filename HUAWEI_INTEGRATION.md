@@ -1,17 +1,18 @@
 # Huawei LUNA2000B Integration (Modbus-TCP)
 
 Support for Huawei LUNA2000B C&I energy storage systems, reached over Modbus-TCP.
-Status: **the point table and a read-only probe are built and tested; nothing is
-connected yet.** Blocked on a SmartLogger configuration change at the site.
+Status: **reading works on the real site; nothing writes yet.** Modbus TCP is
+enabled on the SmartLogger, both ESS units answer, and the point table is
+validated against them (2026-09-15). No driver exists.
 
 Source document: `doc/LUNA2000B ESS Modbus Port Definitions.pdf`, issue 01
 (2025-09-10). Section numbers below refer to it.
 
 ```
-gok agent ──Modbus-TCP:502──▶ SmartLogger 10.0.80.91 ──▶ ESS(Net.8.129)
-   (master)                    (unit 0)                ──▶ ESS(Net.8.130)
-                                                       ──▶ Inverter(COM1-1)
-                                                       ──▶ Meter
+gok agent ──Modbus-TCP:502──▶ SmartLogger 10.0.80.91 ──▶ unit 5  ESS LUNA2000B-V2
+   (master)                    (unit 0)                ──▶ unit 6  ESS LUNA2000B-V2
+                                                       ──▶ unit 1  Inverter SUN2000-50KTL-M3
+                                                       ──▶ unit 11 PowerMeter
 ```
 
 ## Target site
@@ -29,7 +30,77 @@ gok agent ──Modbus-TCP:502──▶ SmartLogger 10.0.80.91 ──▶ ESS(Net
 Being an EV charging station, this site is a natural fit for the existing
 charger↔battery links — see `EVSYS_INTEGRATION.md`.
 
-## Current blocker: Modbus TCP is disabled on the SmartLogger
+## Site bring-up, 2026-09-15
+
+### Logger configuration now in place
+
+Changed in the SmartLogger UI, **Ajustes → Parámetros de comunicación → Modbus TCP**:
+
+- Modbus TCP enabled (it was disabled — see the diagnosis below).
+- **Modo de dirección: dirección lógica.** In communication-address mode only the
+  RS485 devices (inverter 1, meter 11) had unit IDs; the ESS cabinets are
+  network-attached and were unreachable at every unit 1–247. Logical-address
+  mode gives them **5 and 6**.
+
+Logger firmware `V300R024C10SPC161`. No TLS was needed.
+
+### Device list (unit 0, `0x2B`/`0x0E` code 3)
+
+| Unit | Model | Software | ESN |
+|---|---|---|---|
+| 0 | Smart Logger | V300R024C10SPC161 | 102597484606 |
+| 1 | SUN2000-50KTL-M3 | V200R023C00SPC125 | ES2320029926 |
+| 11 | PowerMeter | V100R001C01AM001 | AM00102597484606 |
+| 5 | LUNA2000B-V2 | V200R024C00SPC400 | BT2610479858 |
+| 6 | LUNA2000B-V2 | V200R024C00SPC400 | BT2610378535 |
+
+Unit numbers for the ESS come from the logger UI; the device list itself reports
+device ID 0 for both, as it does for any network-attached device. Which ESN is
+unit 5 and which is unit 6 is not established.
+
+The logger departs from the document in three ways, all handled in
+`internal/modbus`: it sets the object count to the list total while sending one
+object per response, sends object 0x87 as a binary integer rather than text,
+and pads descriptions past the 260-byte recommended frame.
+
+### Point table validated
+
+`essprobe dump -all` on units 5 and 6: **92 of 92 registers read, none failed**,
+every value plausible. `RatedCapacity` reads **215.04 kWh** on each, and
+2 × 215.04 = 430.08 kWh is exactly the nominal capacity FusionSolar shows.
+Pmax / RPmax read ±140.4 kW; charge cut-off 100 %, discharge cut-off 5 %;
+working mode PQ; no alarms raised on either unit.
+
+### Sign conventions — confirmed
+
+Sampled read-only every 30 s for 4 minutes, midday, both units charging from PV:
+control SOC rose 92.0 → 92.6 %, *energy charged today* grew 1.36 kWh (≈ 20.4 kW,
+matching the measured power) while *energy discharged today* stayed flat.
+
+| Register | While charging | Convention |
+|---|---|---|
+| 30417 Charge/Discharge power | +20 kW | battery side: **positive = charge** |
+| 32037 Rack current | +24.6 A | positive = charge |
+| 32986 Active power | −20.4 kW | AC side: **negative = charge** |
+| 42913 Active power (%) | −14.5 % | **negative = charge** |
+
+The two conventions are opposite: 30417 is measured at the battery, 32986 and the
+setpoints at the AC terminal. `42913 × 42936 / 100` reproduces 32986 to within
+0.1 kW (−14.58 % × 140.4 kW = −20.47 kW), so the % setpoint shares the AC-side
+convention. **42915 (kW) is inferred to follow the same convention, negative =
+charge, but has not been written, so that remains unverified.**
+
+### The dispatcher is the SmartLogger, via 42913
+
+On both units `42915` (kW setpoint) reads 0, while `42913` (active power %) holds
+the live dispatch and moves between samples (−14.45 … −14.61 %, 30 s apart).
+Work status is `0x0204 Running: limited power`. So the SmartLogger runs a
+continuous control loop and commands the cabinets through the **percentage**
+register against a 140.4 kW baseline, not the kW register. Anything we write to
+either register will be overwritten on its next cycle unless the logger's own
+ESS control is switched off or handed over.
+
+## Original blocker: Modbus TCP was disabled on the SmartLogger
 
 Measured from `10.0.80.155` over the VPN:
 
@@ -75,7 +146,7 @@ SmartLogger web UI at `https://10.0.80.91`, installer account:
 Do not forward 502 to the internet. Modbus has no authentication of any kind and
 the VPN already works.
 
-## Verifying once 502 is open
+## Verifying the connection
 
 ```bash
 go build -o essprobe ./cmd/essprobe
@@ -88,9 +159,9 @@ correct behaviour at unit 0, not a fault. The device list is the point: the
 `0x2B`/`0x0E` code-3 query (§4.3.6.2) returns each downstream device with model,
 software version, ESN and device ID.
 
-`ESS(Net.8.129)` / `(Net.8.130)` may mean unit IDs 129 and 130, but this is a
-guess. Two authoritative sources: the device list above, and
-**Mantenimiento → Gestión de dispositivos** in the logger UI.
+The ESS unit IDs are **5 and 6**, and only in logical-address mode; they come
+from **Mantenimiento → Gestión de dispositivos** in the logger UI. The `Net.8.129`
+/ `Net.8.130` names in FusionSolar are not unit IDs.
 
 Then, per ESS unit:
 
@@ -171,16 +242,15 @@ leaves it unbounded, while enforcing the four registers whose bounds are literal
 
 ## Open questions
 
-1. **Sign convention on 42915 / 30417.** The document never states polarity.
-   Resolvable read-only: `essprobe watch` correlates the sign of 30417 against
-   SOC movement and reports `consistent with positive = discharge` or
-   `INVERTED`. Must be settled before any write.
-2. **Who dispatches this ESS.** The site cycles daily under FusionSolar, so
-   something is commanding it — almost certainly the SmartLogger's own strategy.
-   The writable setpoints are readable, and nothing in `essprobe` writes, so a
-   setpoint that moves is another master at work; `watch` reports those as
-   `ANOTHER MASTER WROTE …`. Whether we replace that strategy or coexist with it
-   is the next real architectural decision.
+1. **Sign of 42915 when written.** 30417, 32986 and 42913 are settled (see
+   above); 42915 is inferred as negative = charge and needs confirming at the
+   first write.
+2. **Replace or coexist with the SmartLogger's dispatch.** Settled that it is the
+   logger, writing 42913 continuously. Open: which logger setting hands ESS
+   control to a third-party master (a remote-dispatch mode in its power/ESS
+   control settings), or whether to dispatch at plant level through the logger's
+   own register map instead of per cabinet. The latter needs Huawei's
+   *SmartLogger Modbus Interface Definitions*, which we do not have yet.
 3. **No watchdog register exists.** A setpoint written persists if the writer
    dies. Whatever eventually writes must guarantee ramp-to-zero on shutdown, and
    must sit on the site LAN — never behind a VPN that can drop mid-command.
@@ -193,8 +263,8 @@ leaves it unbounded, while enforcing the four registers whose bounds are literal
 | Stage | Where it runs | Risk |
 |---|---|---|
 | 0 — build probe and simulator | local | none — **done** |
-| 1 — identify, nameplate check, dump | laptop over VPN | one client slot |
-| 2 — observe: polarity, competing master, alarm baseline | Pi on site preferred | one client slot |
+| 1 — identify, nameplate check, dump | laptop over VPN | one client slot — **done** |
+| 2 — observe: polarity, competing master, alarm baseline | Pi on site preferred | one client slot — **polarity and dispatcher done**; multi-day baseline pending |
 | 3 — write-path proof: read 42002, write the same value back | laptop over VPN | no behavioural change |
 | 4 — first real setpoint | **must be a host on the site LAN** | needs owner sign-off |
 
