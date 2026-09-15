@@ -5,7 +5,7 @@ Status: **reading works on the real site; nothing writes yet.** Modbus TCP is
 enabled on the SmartLogger, both ESS units answer, and the point table is
 validated against them (2026-09-15). No driver exists.
 
-Source document: `doc/LUNA2000B ESS Modbus Port Definitions.pdf`, issue 01
+Source document: `huawei/LUNA2000B ESS Modbus Port Definitions.pdf`, issue 01
 (2025-09-10). Section numbers below refer to it.
 
 ```
@@ -28,7 +28,7 @@ gok agent ──Modbus-TCP:502──▶ SmartLogger 10.0.80.91 ──▶ unit 5 
 | State | In production service, cycling daily |
 
 Being an EV charging station, this site is a natural fit for the existing
-charger↔battery links — see `EVSYS_INTEGRATION.md`.
+charger↔battery links — see [evsys-integration.md](evsys-integration.md).
 
 ## Site bring-up, 2026-09-15
 
@@ -36,7 +36,7 @@ charger↔battery links — see `EVSYS_INTEGRATION.md`.
 
 Changed in the SmartLogger UI, **Ajustes → Parámetros de comunicación → Modbus TCP**:
 
-- Modbus TCP enabled (it was disabled — see the diagnosis below).
+- Modbus TCP enabled (it was disabled: `:502` answered with an immediate TCP RST).
 - **Modo de dirección: dirección lógica.** In communication-address mode only the
   RS485 devices (inverter 1, meter 11) had unit IDs; the ESS cabinets are
   network-attached and were unreachable at every unit 1–247. Logical-address
@@ -158,56 +158,22 @@ that power-limited grid connection and TOU fixed power cannot be combined.
    connection agreement before switching modes.
 4. **Coexisting may be enough.** Maximum self-consumption already discharges
    the ESS whenever the EV chargers draw power, which is what
-   `EVSYS_INTEGRATION.md` sets out to achieve. What gok would add is price and
+   [evsys-integration.md](evsys-integration.md) sets out to achieve. What gok would add is price and
    time based charging; the logger has a native TOU mode. Adjusting the logger's
    working mode or TOU schedule may be simpler and safer than full remote
    dispatch.
 
-## Original blocker: Modbus TCP was disabled on the SmartLogger
+## Network notes
 
-Measured from `10.0.80.155` over the VPN:
-
-| Check | Result | Meaning |
-|---|---|---|
-| `ping 10.0.80.91` | 21 ms, 0% loss | routing is fine |
-| `:443` | open, TLS cert `CN=102597484606` | the logger, serial matches FusionSolar |
-| `:502` | **TCP RST in 0.02 s** | nothing listening |
-| `:27250` (LAN and via NAT) | TCP RST | NAT rule works, port not served |
-| `10.0.80.129`, `10.0.80.130` | no ICMP, TCP timeout | ESS cabinets are not on this subnet |
-
-A reset that fast, from a host that serves 443 happily, means the Modbus TCP
-slave is switched off — not a busy socket, not a client limit, not a firewall.
-A connection limit would accept and close; a firewall would time out.
-
-Port 27250 is the port the SmartLogger **dials out on** to reach FusionSolar. It
-is not a service the logger offers inbound, so the NAT rule reaches a closed
-port. Harmless, but it is not a path to Modbus. (§4.2.1.4 describes a reverse
-mode where the device dials out to a master on the public internet; that is a
-fallback if inbound ever becomes impossible, and is not needed while the VPN
-works.)
-
-Since `10.0.80.129/.130` answer nothing, the cabinets are on the logger's
-downstream segment rather than the LAN: **the logger is the only path**, and the
-two ESS units are addressed by Modbus unit ID behind it.
-
-### The change to make
-
-SmartLogger web UI at `https://10.0.80.91`, installer account:
-
-**Ajustes → Parámetros de comunicación → Modbus TCP**
-
-1. **Configuración de enlace**: `Deshabilitar` → `Habilitar (ilimitado)`, or
-   `Habilitar (n)` with the agent host in the client address list.
-2. **Modo de dirección**: note whether it is *dirección de comunicación* or
-   *dirección lógica*. This decides what unit IDs the ESS units answer on.
-3. **Check for an SSL/TLS option.** The logger's certificate is dated Sep 2025,
-   so this is recent firmware, and newer builds can require TLS on Modbus TCP.
-   `internal/modbus` speaks plain TCP. If TLS turns out to be mandatory the
-   client needs a TLS dial path; the symptom is 502 opening but every request
-   failing at the handshake.
-
-Do not forward 502 to the internet. Modbus has no authentication of any kind and
-the VPN already works.
+- **The logger is the only path.** `10.0.80.129/.130` answer nothing on the LAN;
+  the cabinets sit on the logger's downstream segment and are addressed by
+  Modbus unit ID behind it.
+- **Port 27250 is not Modbus.** It is the port the SmartLogger dials out on to
+  reach FusionSolar; the NAT rule reaches a closed port. (§4.2.1.4 describes a
+  reverse mode where the device dials out to a master; not needed while the VPN
+  works.)
+- **Do not forward 502 to the internet.** Modbus has no authentication of any
+  kind and the VPN already works.
 
 ## Verifying the connection
 
@@ -268,7 +234,7 @@ to be restated in weaker terms (no call sites rather than no code).
 
 ### How the tables were generated
 
-Not transcribed by hand. `pdftotext -layout` on the PDF, then parsed by column
+Not transcribed by hand (`huawei/regen_tables.py`). `pdftotext -layout` on the PDF, then parsed by column
 offsets taken from each page's own header row, then the Go literals emitted from
 the parsed JSON. The parse self-validates — 168 rows with sequential numbering,
 every type/access/gain in a legal set, no duplicate addresses, alarms confined to
@@ -319,7 +285,6 @@ leaves it unbounded, while enforcing the four registers whose bounds are literal
    cabinet directly must still ramp to zero on shutdown and sit on the site LAN.
 4. **Concurrent client limit** on the logger, and whether enabling Modbus TCP
    affects the existing FusionSolar link.
-5. **TLS on Modbus TCP**, per the configuration section above.
 
 ## Bring-up stages
 
@@ -341,7 +306,7 @@ not depend on a VPN session staying up.
 
 ## Adding the driver later
 
-Per `CLAUDE.md`, a new driver needs: a package implementing `driver.Driver`, a
+Per [architecture.md](architecture.md#battery-drivers), a new driver needs: a package implementing `driver.Driver`, a
 `driver.Register("huawei", …)` call in its `init()`, a blank import in
 `cmd/gok/main.go`, and a matching option in
 `web/ui/src/components/config/BatteryConfigForm.tsx`.

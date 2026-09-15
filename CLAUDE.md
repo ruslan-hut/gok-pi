@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 GOK-Pi is a Go-based service for automated battery discharge/charge control with optional remote monitoring and control. It uses a driver-based architecture to support multiple battery vendors (currently Sonnen). It manages battery systems via vendor APIs, executes scheduled operations, and exposes Prometheus metrics.
 
+Documentation lives in `doc/`; the index is `doc/README.md`. Keep new docs there and add them to the index.
+
 ## Build and Run Commands
 
 ### Agent (primary battery controller)
@@ -16,7 +18,7 @@ go build -o gok ./cmd/gok
 
 ### Control Server (central monitoring)
 ```bash
-go run ./cmd/controlserver -addr :8080 -secret "<shared-secret>" -static ./web/ui/dist
+go run ./cmd/controlserver -config deploy/gok-cs.config.example
 go build -o controlserver ./cmd/controlserver
 ```
 
@@ -56,7 +58,7 @@ Key packages:
 - `battery/controller` - Unified charge/discharge control loop, parameterized by direction
 - `battery/driver` - Battery driver interface and registry; drivers self-register via `init()`
 - `battery/driver/sonnen` - Sonnen battery API driver implementation
-- `battery/driver/huawei` - Huawei LUNA2000B point table, codec and alarms; **no driver yet**, see `HUAWEI_INTEGRATION.md`
+- `battery/driver/huawei` - Huawei LUNA2000B point table, codec and alarms; **no driver yet**, see `doc/huawei-integration.md`
 - `battery/entity` - Shared domain types (BatteryConfig, Schedule, AgentConfig, SystemStatus) and helpers
 - `internal/modbus` - Modbus-TCP client, read-only by construction (only `0x03` and `0x2B`); `modbussim` is its test server
 - `internal/remote/wsclient` - Agent-side WebSocket client with reconnection backoff
@@ -77,7 +79,7 @@ Config file: `config.yml` (YAML format)
 
 Control server config (`cmd/controlserver`) additionally has `charger_token` /
 `charger_links` / `charger_sessions` for the evsys integration; see
-`EVSYS_INTEGRATION.md`.
+`doc/evsys-integration.md`.
 
 Environment variables override config values via cleanenv tags.
 
@@ -88,7 +90,7 @@ Environment variables override config values via cleanenv tags.
 3. If remote_control enabled: WebSocket streams telemetry to control server, receives commands
 4. Control server aggregates telemetry, broadcasts to web UI clients, routes commands to agents
 5. Config updates from UI persist to agent's local `config.yml` via optimistic locking
-6. EV charger integration: evsys POSTs `transaction.start`/`transaction.stop` to `/api/webhooks/evsys`; the server matches the event to a charger link (by evsys location, falling back to charge point id) and sends `start_discharge`/`stop_discharge` to that link's agent. The discharge is an override that outranks schedules and survives config pushes; see `EVSYS_INTEGRATION.md`.
+6. EV charger integration: evsys POSTs `transaction.start`/`transaction.stop` to `/api/webhooks/evsys`; the server matches the event to a charger link (by evsys location, falling back to charge point id) and sends `start_discharge`/`stop_discharge` to that link's agent. The discharge is an override that outranks schedules and survives config pushes; see `doc/evsys-integration.md`.
 7. Email scheduler (control server) ticks every minute; for each agent with `email_reports.enabled` and a populated recipients list, it dispatches daily / weekly (Mon) / monthly (1st) summaries through Brevo at the agent's configured `send_hour` in the agent timezone. A report is built when at least one recipient is subscribed to it; subscriptions are the only switch (the old agent-level `daily`/`weekly`/`monthly` flags are kept for migration only). Last-sent date per (agent, kind) is persisted to `data/email-reports-state.json` so reports are not duplicated across restarts. Brevo credentials live in the controlserver config (`email_provider`); per-agent recipients/toggles live in `AgentConfig.email_reports` and are editable from the web UI.
 
 8. Connectivity alerts (control server): `agentWatcher` (`remote/server/agent_alerts.go`) raises one email per outage when an agent stays disconnected for 10 minutes, and one recovery notice when it returns. Agents known to the config store are seeded as offline at startup, so a device that is down while the server restarts is still reported. Alerts need `email_reports.enabled` plus recipients subscribed to `alerts`.
@@ -111,7 +113,7 @@ The driver options in the UI must match the registered driver names in the backe
 `battery/driver/huawei` is a partial exception: it carries the LUNA2000B point
 table, codec and alarm definitions but implements no `driver.Driver` and calls no
 `driver.Register`, so it is data plus `cmd/essprobe`, not a working driver.
-See `HUAWEI_INTEGRATION.md` for the site details, the SmartLogger change it is
+See `doc/huawei-integration.md` for the site details, the SmartLogger change it is
 blocked on, and the bring-up stages.
 
 ## Development Notes

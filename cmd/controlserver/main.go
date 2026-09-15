@@ -6,7 +6,7 @@
 //
 // Usage:
 //
-//	go run ./cmd/controlserver -addr :8080 -secret "<shared-secret>" -static ./web/ui/dist
+//	go run ./cmd/controlserver -config /etc/gok-cs/config.yml
 package main
 
 import (

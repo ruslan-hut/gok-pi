@@ -6,7 +6,7 @@ hand. Re-run it if Huawei issues a revision of the document, then diff the
 result against the current tables.
 
     brew install poppler          # for pdftotext
-    python3 doc/regen_tables.py "doc/LUNA2000B ESS Modbus Port Definitions.pdf"
+    python3 doc/huawei/regen_tables.py "doc/huawei/LUNA2000B ESS Modbus Port Definitions.pdf"
 
 Writes registers.json and alarms.json next to the PDF and prints the validation
 results. It does not rewrite the .go files: the Go names (SOC, RatedCapacity,

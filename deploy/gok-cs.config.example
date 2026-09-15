@@ -29,7 +29,7 @@ email_state: "/var/lib/gok-cs/email-reports-state.json"
 # /api/webhooks/evsys and the linked battery discharges for their duration.
 # charger_token must match the "token" field of the gok-pi document in the evsys
 # webhook_subscribers collection. Empty disables the endpoint entirely (404) —
-# it does not fail open. See EVSYS_INTEGRATION.md.
+# it does not fail open. See doc/evsys-integration.md.
 # Provisioned in CI from the GitHub secret GOK_CHARGER_TOKEN.
 charger_token: ""
 charger_links: "/var/lib/gok-cs/charger-links.json"
