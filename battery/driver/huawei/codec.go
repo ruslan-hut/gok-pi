@@ -93,6 +93,10 @@ func (r Register) EncodeRaw(raw int64) ([]uint16, error) {
 // rawLimits is the inclusive range of wire values r.Kind can carry.
 func (r Register) rawLimits() (int64, int64) {
 	bits := 16 * uint(r.Words())
+	if bits >= 64 {
+		// Only I64 is this wide; there is no U64 to cap below the int64 range.
+		return math.MinInt64, math.MaxInt64
+	}
 	if r.Kind.Signed() {
 		return -1 << (bits - 1), 1<<(bits-1) - 1
 	}

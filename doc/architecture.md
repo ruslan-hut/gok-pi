@@ -21,7 +21,7 @@ that hosts the web UI, generates price-based schedules, and relays commands.
 | `cmd/gok` | Agent. Loads `config.yml`, runs one status poller plus a charge and a discharge controller per enabled battery, connects to the control server when `remote_control.enabled`, exposes Prometheus metrics when `metrics.enabled`. |
 | `cmd/controlserver` | Central hub. Agent and UI WebSockets, REST API, config store with optimistic locking, price fetching and auto-schedules, energy session DB, email reports and connectivity alerts, evsys webhook receiver, serves the UI and `/downloads`. Configured by YAML (`-config`) or environment. |
 | `cmd/agentupdater` | Compares the remote `VERSION` SHA-256 with the local binary, replaces it atomically, optionally restarts the agent service. |
-| `cmd/essprobe` | Read-only Modbus diagnostic for Huawei ESS; see [huawei-integration.md](huawei-integration.md). |
+| `cmd/essprobe` | Read-only Modbus diagnostic for Huawei ESS cabinets, SmartLogger and meter; see [huawei-integration.md](huawei-integration.md). |
 
 ## Packages
 
@@ -30,7 +30,7 @@ battery/
   controller/        charge/discharge control loop, StatusPoller, ModeCoordinator
   driver/            Driver interface + registry
     sonnen/          Sonnen REST driver
-    huawei/          LUNA2000B point table, codec, alarms (no driver yet)
+    huawei/          LUNA2000B, SmartLogger and meter point tables, codec, alarms (no driver yet)
   entity/            BatteryConfig, Schedule, AgentConfig, SystemStatus, helpers
 electricity/
   redata/            REData (REE) API client

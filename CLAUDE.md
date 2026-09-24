@@ -58,7 +58,7 @@ Key packages:
 - `battery/controller` - Unified charge/discharge control loop, parameterized by direction
 - `battery/driver` - Battery driver interface and registry; drivers self-register via `init()`
 - `battery/driver/sonnen` - Sonnen battery API driver implementation
-- `battery/driver/huawei` - Huawei LUNA2000B point table, codec and alarms; **no driver yet**, see `doc/huawei-integration.md`
+- `battery/driver/huawei` - Huawei LUNA2000B cabinet point table, SmartLogger (unit 0) and power meter tables, codec and alarms; **no driver yet**, see `doc/huawei-integration.md`
 - `battery/entity` - Shared domain types (BatteryConfig, Schedule, AgentConfig, SystemStatus) and helpers
 - `internal/modbus` - Modbus-TCP client, read-only by construction (only `0x03` and `0x2B`); `modbussim` is its test server
 - `internal/remote/wsclient` - Agent-side WebSocket client with reconnection backoff
@@ -110,11 +110,12 @@ Adding a new driver:
 
 The driver options in the UI must match the registered driver names in the backend.
 
-`battery/driver/huawei` is a partial exception: it carries the LUNA2000B point
-table, codec and alarm definitions but implements no `driver.Driver` and calls no
+`battery/driver/huawei` is a partial exception: it carries the LUNA2000B,
+SmartLogger and meter point tables, codec and alarm definitions but implements no `driver.Driver` and calls no
 `driver.Register`, so it is data plus `cmd/essprobe`, not a working driver.
-See `doc/huawei-integration.md` for the site details, the SmartLogger change it is
-blocked on, and the bring-up stages.
+Dispatch is planned through the SmartLogger at unit 0 (register 40381), not
+per cabinet. See `doc/huawei-integration.md` for the site details, the logger
+registers, the handover options still to be decided, and the bring-up stages.
 
 ## Development Notes
 

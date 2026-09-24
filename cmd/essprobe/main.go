@@ -1,5 +1,6 @@
 // Command essprobe is a read-only diagnostic for Huawei LUNA2000B energy
-// storage systems reachable over Modbus-TCP.
+// storage systems reachable over Modbus-TCP, and for the SmartLogger and power
+// meter in front of them.
 //
 // It exists to answer, without changing anything about the equipment, the
 // questions that have to be settled before an agent is pointed at a site:
@@ -13,9 +14,14 @@
 // equipment it is pointed at. That is what makes it safe to run against a site
 // in production service.
 //
+// -device selects the point table: "ess" for a LUNA2000B cabinet (the
+// default), "logger" for the SmartLogger itself at unit 0, "meter" for the
+// power meter on its RS485 address.
+//
 // Usage:
 //
-//	essprobe -addr 10.0.0.5:502 identify
+//	essprobe -addr 10.0.0.5:502 -unit 5 identify
+//	essprobe -addr 10.0.0.5:502 -unit 0 -device logger dump
 //	essprobe -addr 10.0.0.5:502 dump [-json] [-all]
 //	essprobe -addr 10.0.0.5:502 watch [-interval 10s] [-out obs.jsonl] [-duration 24h]
 //	essprobe -addr 10.0.0.5:502 alarms
@@ -45,10 +51,15 @@ Usage:
   essprobe [flags] <command>
 
 Commands:
-  identify   report what answers on the endpoint: vendor, product, device list
+  identify   report what answers on the endpoint: vendor, product, device list, nameplate check
   dump       read the point table once and print name, raw value and decoded value
   watch      poll telemetry, setpoints and alarms, appending one JSON object per sample
-  alarms     read the 52 alarm words and list the alarms currently raised
+  alarms     read the alarm words and list the alarms currently raised
+
+Devices (-device):
+  ess        LUNA2000B cabinet (default)
+  logger     SmartLogger at unit 0: plant-level ESS telemetry and dispatch registers
+  meter      power meter behind the SmartLogger, at its RS485 address
 
 Flags:
 `
@@ -64,6 +75,7 @@ func run() error {
 	var (
 		addr    = flag.String("addr", "", "ESS endpoint as host:port (port 502 unless the site says otherwise)")
 		unit    = flag.Uint("unit", 0, "Modbus unit id; 0 is the directly connected node")
+		devName = flag.String("device", "ess", "point table to read with: "+deviceNames())
 		timeout = flag.Duration("timeout", 5*time.Second, "per-request timeout")
 		retries = flag.Int("retries", 2, "retries for a request the device rejects as busy or times out")
 
@@ -89,6 +101,11 @@ func run() error {
 		return fmt.Errorf("unit %d is out of range", *unit)
 	}
 
+	dev, ok := devices[*devName]
+	if !ok {
+		return fmt.Errorf("unknown device %q; want one of %s", *devName, deviceNames())
+	}
+
 	cmd := flag.Arg(0)
 	if cmd == "" {
 		flag.Usage()
@@ -106,18 +123,18 @@ func run() error {
 
 	switch cmd {
 	case "identify":
-		return identify(ctx, r, os.Stdout)
+		return identify(ctx, r, dev, os.Stdout)
 	case "dump":
-		return dump(ctx, r, os.Stdout, *asJSON, *all)
+		return dump(ctx, r, dev, os.Stdout, *asJSON, *all)
 	case "watch":
-		return watch(ctx, r, watchOptions{
+		return watch(ctx, r, dev, watchOptions{
 			interval: *interval,
 			duration: *duration,
 			path:     *out,
 			log:      os.Stderr,
 		})
 	case "alarms":
-		return alarms(ctx, r, os.Stdout)
+		return alarms(ctx, r, dev, os.Stdout)
 	default:
 		flag.Usage()
 

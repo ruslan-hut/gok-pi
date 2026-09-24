@@ -56,41 +56,46 @@ func (r *reader) read(ctx context.Context, regs []huawei.Register) (*sample, err
 	}
 
 	var firstErr error
+	fail := func(regs []huawei.Register, err error) {
+		for _, reg := range regs {
+			s.Failed[reg.Addr] = err.Error()
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+
 	for _, b := range blocks {
 		words, err := r.readBlock(ctx, b)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			for _, reg := range byBlock[b] {
-				s.Failed[reg.Addr] = err.Error()
-			}
-			if firstErr == nil {
-				firstErr = err
-			}
-
-			continue
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 
-		for _, reg := range byBlock[b] {
-			w, ok := b.Extract(words, reg)
-			if !ok {
-				s.Failed[reg.Addr] = "register fell outside its own read block"
+		var exc modbus.Exception
+		switch {
+		case err == nil:
+			s.store(b, words, byBlock[b])
+		case errors.As(err, &exc) && exc == modbus.ExceptionInvalidAddress && len(byBlock[b]) > 1:
+			// A block spans the undocumented gaps between registers, and a
+			// device may refuse the whole request over one of them. Asking
+			// for each register on its own separates a refused gap from a
+			// refused register, at the cost of extra round trips only when
+			// something was refused.
+			for _, reg := range byBlock[b] {
+				one := huawei.Block{Addr: reg.Addr, Count: reg.Words()}
+				words, err := r.readBlock(ctx, one)
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				if err != nil {
+					fail([]huawei.Register{reg}, err)
 
-				continue
+					continue
+				}
+				s.store(one, words, []huawei.Register{reg})
 			}
-
-			raw, err := reg.DecodeRaw(w)
-			if err != nil {
-				s.Failed[reg.Addr] = err.Error()
-
-				continue
-			}
-			s.Raw[reg.Addr] = raw
-
-			if v, err := reg.Decode(w); err == nil {
-				s.Values[reg.Addr] = v
-			}
+		default:
+			fail(byBlock[b], err)
 		}
 	}
 
@@ -101,6 +106,30 @@ func (r *reader) read(ctx context.Context, regs []huawei.Register) (*sample, err
 	}
 
 	return s, nil
+}
+
+// store decodes the registers of one block read into the sample.
+func (s *sample) store(b huawei.Block, words []uint16, regs []huawei.Register) {
+	for _, reg := range regs {
+		w, ok := b.Extract(words, reg)
+		if !ok {
+			s.Failed[reg.Addr] = "register fell outside its own read block"
+
+			continue
+		}
+
+		raw, err := reg.DecodeRaw(w)
+		if err != nil {
+			s.Failed[reg.Addr] = err.Error()
+
+			continue
+		}
+		s.Raw[reg.Addr] = raw
+
+		if v, err := reg.Decode(w); err == nil {
+			s.Values[reg.Addr] = v
+		}
+	}
 }
 
 // readBlock issues one 0x03, retrying the exceptions the device says are

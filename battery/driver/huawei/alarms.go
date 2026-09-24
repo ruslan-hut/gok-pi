@@ -1,6 +1,9 @@
 package huawei
 
-import "sort"
+import (
+	"sort"
+	"strconv"
+)
 
 // Alarm definitions, transcribed from "LUNA2000B ESS Modbus Port Definitions",
 // issue 01 (2025-09-10), table 3-2. Each alarm is one bit of one of the
@@ -15,11 +18,16 @@ import "sort"
 
 // Alarm is one row of table 3-2: a fault identified by the vendor's alarm ID,
 // raised while Bit of the register at Addr is set.
+//
+// SubID and Cause are used only by the SmartLogger table, where one alarm ID
+// covers several causes, each on its own bit. They are zero for the cabinet.
 type Alarm struct {
-	ID   uint16
-	Name string
-	Addr uint16
-	Bit  uint8
+	ID    uint16
+	SubID uint8
+	Name  string
+	Cause string
+	Addr  uint16
+	Bit   uint8
 }
 
 // Reserved reports whether the vendor left this bit undefined.
@@ -27,6 +35,26 @@ func (a Alarm) Reserved() bool { return a.Name == "Reserved" }
 
 // String implements fmt.Stringer.
 func (a Alarm) String() string { return a.Name }
+
+// Code is the vendor's identifier: the alarm ID, followed by the sub-ID where
+// there is one ("1100-5").
+func (a Alarm) Code() string {
+	if a.SubID == 0 {
+		return strconv.Itoa(int(a.ID))
+	}
+
+	return strconv.Itoa(int(a.ID)) + "-" + strconv.Itoa(int(a.SubID))
+}
+
+// Label is the name, with the cause appended where the name alone does not
+// tell same-named alarms apart.
+func (a Alarm) Label() string {
+	if a.Cause == "" {
+		return a.Name
+	}
+
+	return a.Name + ": " + a.Cause
+}
 
 // Alarms lists every alarm of table 3-2, ordered by alarm ID.
 var Alarms = [207]Alarm{

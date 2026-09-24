@@ -7,8 +7,6 @@ import (
 	"io"
 	"sort"
 	"text/tabwriter"
-
-	"gok-pi/battery/driver/huawei"
 )
 
 // dumpRow is one register as read, shaped for both the table and the JSON form.
@@ -28,10 +26,10 @@ type dumpRow struct {
 // decoded value, so the whole mapping can be eyeballed against the site in one
 // pass. Anything implausible here is a mapping error worth chasing before the
 // driver is written.
-func dump(ctx context.Context, r *reader, out io.Writer, asJSON, all bool) error {
-	regs := huawei.ObservationRegisters()
+func dump(ctx context.Context, r *reader, d *device, out io.Writer, asJSON, all bool) error {
+	regs := d.observation()
 	if all {
-		regs = huawei.AllRegisters()
+		regs = d.all()
 	}
 
 	s, err := r.read(ctx, regs)
@@ -64,7 +62,7 @@ func dump(ctx context.Context, r *reader, out io.Writer, asJSON, all bool) error
 		if v, ok := s.value(reg); ok {
 			row.Value = &v
 		}
-		row.Note = annotate(reg, s)
+		row.Note = d.annotate(reg, s)
 
 		rows = append(rows, row)
 	}
@@ -74,11 +72,12 @@ func dump(ctx context.Context, r *reader, out io.Writer, asJSON, all bool) error
 		enc.SetIndent("", "  ")
 
 		return enc.Encode(struct {
-			At   string    `json:"at"`
-			Addr string    `json:"endpoint"`
-			Unit uint8     `json:"unit"`
-			Rows []dumpRow `json:"registers"`
-		}{s.At.Format("2006-01-02T15:04:05Z"), r.client.Addr(), r.unit, rows})
+			At     string    `json:"at"`
+			Addr   string    `json:"endpoint"`
+			Unit   uint8     `json:"unit"`
+			Device string    `json:"device"`
+			Rows   []dumpRow `json:"registers"`
+		}{s.At.Format("2006-01-02T15:04:05Z"), r.client.Addr(), r.unit, d.name, rows})
 	}
 
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -101,72 +100,6 @@ func dump(ctx context.Context, r *reader, out io.Writer, asJSON, all bool) error
 	fmt.Fprintf(out, "\n%d registers read, %d failed\n", len(s.Raw), len(s.Failed))
 
 	return nil
-}
-
-// annotate adds the meaning behind a raw value where the point table defines
-// one, so an enumeration does not have to be looked up by hand.
-func annotate(reg huawei.Register, s *sample) string {
-	raw, ok := s.raw(reg)
-	if !ok {
-		return ""
-	}
-	v := uint16(raw)
-
-	switch reg.Addr {
-	case huawei.WorkStatus.Addr:
-		return huawei.WorkStatusName(v)
-	case huawei.ChargingStatus.Addr:
-		return [...]string{"idle", "recharge request", "recharging", "charging ends"}[min(int(v), 3)]
-	case huawei.LTMSWorkingStatus.Addr:
-		return [...]string{"off", "self-circulating", "refrigeration", "heating"}[min(int(v), 3)]
-	case huawei.WorkingMode.Addr:
-		if v == huawei.ModeVSG {
-			return "VSG (grid-forming)"
-		}
-
-		return "PQ (grid-following)"
-	case huawei.PowerOnOff.Addr:
-		if v == huawei.PowerStateRun {
-			return "run"
-		}
-
-		return "off"
-	case huawei.ChargeDischargePower.Addr:
-		return powerDirection(s)
-	}
-
-	if reg.Kind == huawei.Bits16 && v != 0 {
-		names := huawei.AlarmsInWord(reg.Addr, v)
-		if len(names) == 0 {
-			return fmt.Sprintf("bits 0x%04X set, none documented", v)
-		}
-		out := ""
-		for i, a := range names {
-			if i > 0 {
-				out += "; "
-			}
-			out += a.Name
-		}
-
-		return out
-	}
-
-	return ""
-}
-
-// powerDirection spells out the sign of 30417, which is battery-side: positive
-// means charging. Confirmed on site against SOC and the daily energy counters.
-func powerDirection(s *sample) string {
-	v, ok := s.value(huawei.ChargeDischargePower)
-	if !ok || v == 0 {
-		return "idle"
-	}
-
-	if v > 0 {
-		return "positive (charging)"
-	}
-
-	return "negative (discharging)"
 }
 
 func deref(p *int64) int64 {

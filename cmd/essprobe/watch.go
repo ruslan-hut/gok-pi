@@ -25,6 +25,7 @@ type observation struct {
 	At        string             `json:"at"`
 	Endpoint  string             `json:"endpoint"`
 	Unit      uint8              `json:"unit"`
+	Device    string             `json:"device"`
 	Values    map[string]float64 `json:"values"`
 	Raw       map[string]int64   `json:"raw"`
 	Alarms    []string           `json:"alarms,omitempty"`
@@ -32,19 +33,19 @@ type observation struct {
 	Setpoints map[string]float64 `json:"setpoints"`
 }
 
-// watch samples the observation set on an interval and appends one JSON object
-// per sample. It is the tool for the two questions that cannot be answered from
-// a single reading:
+// watch samples the device's observation set on an interval and appends one
+// JSON object per sample. It is the tool for the two questions that cannot be
+// answered from a single reading:
 //
-// The polarity of the charge/discharge power. Correlating its sign against the
+// The polarity of each power reading. Correlating its sign against the
 // direction SOC moves settles it without writing anything, and the running
 // summary on stderr does that correlation as it goes.
 //
-// Whether another master is dispatching the ESS. The active power setpoint and
-// the cut-off SOC limits are writable but readable; nothing here writes them,
-// so any change in one came from somewhere else on the network. Those changes
-// are called out on stderr as they happen.
-func watch(ctx context.Context, r *reader, opts watchOptions) error {
+// Whether another master is dispatching. The setpoint registers are writable
+// but readable; nothing here writes them, so any change in one came from
+// somewhere else on the network. Those changes are called out on stderr as
+// they happen.
+func watch(ctx context.Context, r *reader, d *device, opts watchOptions) error {
 	if opts.interval < time.Second {
 		return fmt.Errorf("interval %s is too short to be polite to a production endpoint", opts.interval)
 	}
@@ -65,12 +66,12 @@ func watch(ctx context.Context, r *reader, opts watchOptions) error {
 		defer cancel()
 	}
 
-	regs := huawei.ObservationRegisters()
+	regs := d.observation()
 	enc := json.NewEncoder(sink)
-	tr := newTracker()
+	tr := newTracker(d)
 
-	fmt.Fprintf(opts.log, "watching %s unit %d every %s; %d registers in %d requests per sample\n",
-		r.client.Addr(), r.unit, opts.interval, len(regs), len(huawei.Blocks(regs, huawei.DefaultGap)))
+	fmt.Fprintf(opts.log, "watching %s unit %d (%s) every %s; %d registers in %d requests per sample\n",
+		r.client.Addr(), r.unit, d.name, opts.interval, len(regs), len(huawei.Blocks(regs, huawei.DefaultGap)))
 	if opts.path != "" {
 		fmt.Fprintf(opts.log, "appending to %s\n", opts.path)
 	}
@@ -92,7 +93,7 @@ func watch(ctx context.Context, r *reader, opts watchOptions) error {
 			fmt.Fprintf(opts.log, "%s sample failed: %v\n", time.Now().Format(time.RFC3339), err)
 		default:
 			samples++
-			obs := buildObservation(r, s)
+			obs := buildObservation(r, d, s)
 			if err := enc.Encode(obs); err != nil {
 				return fmt.Errorf("write sample: %w", err)
 			}
@@ -110,17 +111,18 @@ func watch(ctx context.Context, r *reader, opts watchOptions) error {
 	}
 }
 
-func buildObservation(r *reader, s *sample) observation {
+func buildObservation(r *reader, d *device, s *sample) observation {
 	obs := observation{
 		At:        s.At.Format(time.RFC3339),
 		Endpoint:  r.client.Addr(),
 		Unit:      r.unit,
+		Device:    d.name,
 		Values:    map[string]float64{},
 		Raw:       map[string]int64{},
 		Setpoints: map[string]float64{},
 	}
 
-	for _, reg := range huawei.TelemetryRegisters {
+	for _, reg := range d.telemetry {
 		if v, ok := s.value(reg); ok {
 			obs.Values[reg.Name] = v
 		}
@@ -129,23 +131,17 @@ func buildObservation(r *reader, s *sample) observation {
 		}
 	}
 
-	for _, reg := range huawei.SetpointRegisters {
+	for _, reg := range d.setpoints {
 		if v, ok := s.value(reg); ok {
 			obs.Setpoints[reg.Name] = v
 		}
 	}
 
-	words := map[uint16]uint16{}
-	for _, reg := range huawei.AlarmWords {
-		if raw, ok := s.raw(reg); ok {
-			words[reg.Addr] = uint16(raw)
-		}
-	}
-	for _, a := range huawei.ActiveAlarms(words) {
+	for _, a := range d.activeAlarms(d.alarmWordValues(s)) {
 		if a.Reserved() {
 			continue
 		}
-		obs.Alarms = append(obs.Alarms, fmt.Sprintf("%d %s", a.ID, a.Name))
+		obs.Alarms = append(obs.Alarms, a.Code()+" "+a.Label())
 	}
 
 	if len(s.Failed) > 0 {
@@ -159,26 +155,32 @@ func buildObservation(r *reader, s *sample) observation {
 }
 
 // tracker watches successive samples for the two things a passive observer is
-// here to find: who else is writing, and which way the power sign runs.
+// here to find: who else is writing, and which way each power sign runs.
 type tracker struct {
+	dev *device
+
 	setpoints map[string]float64
 	alarms    map[string]bool
+	writers   map[string]int
 
-	lastSOC   float64
-	haveSOC   bool
-	lastPower float64
+	lastSOC float64
+	haveSOC bool
 
-	// agree counts samples where SOC moved the way the confirmed polarity
-	// predicts, disagree those where it moved the other way.
-	agree, disagree int
-	writers         map[string]int
+	// Per power register: its previous value, and how many samples moved SOC
+	// the way "positive means charging" predicts (agree) or the other way.
+	lastPower       map[uint16]float64
+	agree, disagree map[uint16]int
 }
 
-func newTracker() *tracker {
+func newTracker(d *device) *tracker {
 	return &tracker{
+		dev:       d,
 		setpoints: map[string]float64{},
 		alarms:    map[string]bool{},
 		writers:   map[string]int{},
+		lastPower: map[uint16]float64{},
+		agree:     map[uint16]int{},
+		disagree:  map[uint16]int{},
 	}
 }
 
@@ -186,7 +188,7 @@ func (t *tracker) observe(s *sample, w io.Writer) {
 	stamp := s.At.Format(time.RFC3339)
 
 	// A setpoint that changes was changed by something else: this probe cannot write.
-	for _, reg := range huawei.SetpointRegisters {
+	for _, reg := range t.dev.setpoints {
 		v, ok := s.value(reg)
 		if !ok {
 			continue
@@ -200,18 +202,12 @@ func (t *tracker) observe(s *sample, w io.Writer) {
 	}
 
 	// Alarms appearing and clearing.
-	words := map[uint16]uint16{}
-	for _, reg := range huawei.AlarmWords {
-		if raw, ok := s.raw(reg); ok {
-			words[reg.Addr] = uint16(raw)
-		}
-	}
 	now := map[string]bool{}
-	for _, a := range huawei.ActiveAlarms(words) {
+	for _, a := range t.dev.activeAlarms(t.dev.alarmWordValues(s)) {
 		if a.Reserved() {
 			continue
 		}
-		key := fmt.Sprintf("%d %s", a.ID, a.Name)
+		key := a.Code() + " " + a.Label()
 		now[key] = true
 		if !t.alarms[key] {
 			fmt.Fprintf(w, "%s alarm raised: %s\n", stamp, key)
@@ -227,37 +223,43 @@ func (t *tracker) observe(s *sample, w io.Writer) {
 	t.trackPolarity(s)
 }
 
-// trackPolarity keeps checking the sign convention of 30417. The document does
-// not state it; on site a positive value came with rising SOC and a growing
-// "energy charged today", so positive means charging. Control SOC is used for
-// its 0.1% resolution, which moves every minute or so at typical power.
+// trackPolarity correlates the sign of each power register with the direction
+// SOC moves. On a cabinet this re-checks what the site already settled (30417
+// positive = charge, 32986 the other way); on the logger it is how the sign of
+// 40507, 40392 and 30014 gets settled at all. The SOC registers used have 0.1%
+// resolution, which moves every minute or so at typical power.
 func (t *tracker) trackPolarity(s *sample) {
-	soc, okSOC := s.value(huawei.ControlSOC)
-	power, okPower := s.value(huawei.ChargeDischargePower)
-	if !okSOC || !okPower {
+	if len(t.dev.polarity) == 0 {
+		return
+	}
+	soc, ok := s.value(t.dev.soc)
+	if !ok {
 		return
 	}
 
-	defer func() {
-		t.lastSOC, t.haveSOC, t.lastPower = soc, true, power
-	}()
-
-	// Only samples where both the previous and current power agree in sign, and
-	// SOC actually moved, carry information.
-	if !t.haveSOC || soc == t.lastSOC || power == 0 || t.lastPower == 0 {
-		return
-	}
-	if (power > 0) != (t.lastPower > 0) {
-		return
-	}
-
+	moved := t.haveSOC && soc != t.lastSOC
 	rising := soc > t.lastSOC
-	positive := power > 0
+	t.lastSOC, t.haveSOC = soc, true
 
-	if positive == rising {
-		t.agree++
-	} else {
-		t.disagree++
+	for _, p := range t.dev.polarity {
+		power, ok := s.value(p.reg)
+		if !ok {
+			continue
+		}
+		last, had := t.lastPower[p.reg.Addr]
+		t.lastPower[p.reg.Addr] = power
+
+		// Only samples where both the previous and current power agree in
+		// sign, and SOC actually moved, carry information.
+		if !had || !moved || power == 0 || last == 0 || (power > 0) != (last > 0) {
+			continue
+		}
+
+		if (power > 0) == rising {
+			t.agree[p.reg.Addr]++
+		} else {
+			t.disagree[p.reg.Addr]++
+		}
 	}
 }
 
@@ -267,26 +269,47 @@ func (t *tracker) summarise(w io.Writer) {
 		for name, n := range t.writers {
 			fmt.Fprintf(w, "  %s: %d change(s)\n", name, n)
 		}
-		fmt.Fprintln(w, "  another master is dispatching this ESS; it will contend with any setpoint the agent writes")
+		fmt.Fprintln(w, "  another master is dispatching; it will contend with any setpoint the agent writes")
 	} else if len(t.setpoints) > 0 {
 		fmt.Fprintln(w, "\nno setpoint changed during this run (no evidence of another master writing)")
 	}
 
-	total := t.agree + t.disagree
-	if total == 0 {
-		fmt.Fprintln(w, "\npolarity: not enough movement to tell; run while the battery is cycling")
+	for _, p := range t.dev.polarity {
+		fmt.Fprintf(w, "\npolarity of %d %s: ", p.reg.Addr, p.reg.Name)
 
-		return
-	}
+		agree, disagree := t.agree[p.reg.Addr], t.disagree[p.reg.Addr]
+		total := agree + disagree
+		if total == 0 {
+			fmt.Fprintln(w, "not enough movement to tell; run while the battery is cycling")
 
-	fmt.Fprintf(w, "\npolarity: %d of %d samples match 'positive means charging'\n", t.agree, total)
-	switch {
-	case t.agree > 0 && t.disagree == 0:
-		fmt.Fprintln(w, "  consistent with positive = charge, negative = discharge")
-	case t.disagree > 0 && t.agree == 0:
-		fmt.Fprintln(w, "  CONTRADICTS the confirmed convention: positive = discharge on this device")
-	default:
-		fmt.Fprintln(w, "  contradictory; SOC may be moving for reasons other than the measured power")
+			continue
+		}
+		fmt.Fprintf(w, "%d of %d samples match 'positive means charging'\n", agree, total)
+
+		var found int
+		switch {
+		case agree > 0 && disagree == 0:
+			found = +1
+		case disagree > 0 && agree == 0:
+			found = -1
+		default:
+			fmt.Fprintln(w, "  contradictory; SOC may be moving for reasons other than the measured power")
+
+			continue
+		}
+
+		verdict := "positive = charge, negative = discharge"
+		if found < 0 {
+			verdict = "positive = discharge, negative = charge"
+		}
+		switch {
+		case p.confirmed == 0:
+			fmt.Fprintf(w, "  consistent with %s (not yet confirmed; note it in the integration doc)\n", verdict)
+		case p.confirmed == found:
+			fmt.Fprintf(w, "  consistent with %s, as confirmed on site\n", verdict)
+		default:
+			fmt.Fprintf(w, "  CONTRADICTS the confirmed convention: %s on this device\n", verdict)
+		}
 	}
 }
 

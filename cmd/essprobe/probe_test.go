@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,7 +85,7 @@ func seedBlocks(f *fakeESS, regs []huawei.Register) {
 func (f *fakeESS) set(t *testing.T, r huawei.Register, v float64) {
 	t.Helper()
 
-	raw := int64(v * float64(r.Gain))
+	raw := int64(math.Round(v * float64(r.Gain)))
 	words := make([]uint16, r.Words())
 	u := uint64(raw)
 	for i := len(words) - 1; i >= 0; i-- {
@@ -102,7 +103,7 @@ func TestIdentify(t *testing.T) {
 	f := newFakeESS(t)
 	var out bytes.Buffer
 
-	if err := identify(context.Background(), newReader(f), &out); err != nil {
+	if err := identify(context.Background(), newReader(f), essDevice, &out); err != nil {
 		t.Fatalf("identify() error = %v", err)
 	}
 
@@ -130,7 +131,7 @@ func TestIdentifyFlagsWrongMapping(t *testing.T) {
 	f.SetWords(huawei.RatedCapacity.Addr, []uint16{0xFFFF, 0xFFFF})
 
 	var out bytes.Buffer
-	if err := identify(context.Background(), newReader(f), &out); err != nil {
+	if err := identify(context.Background(), newReader(f), essDevice, &out); err != nil {
 		t.Fatalf("identify() error = %v", err)
 	}
 
@@ -143,7 +144,7 @@ func TestDumpTable(t *testing.T) {
 	f := newFakeESS(t)
 	var out bytes.Buffer
 
-	if err := dump(context.Background(), newReader(f), &out, false, true); err != nil {
+	if err := dump(context.Background(), newReader(f), essDevice, &out, false, true); err != nil {
 		t.Fatalf("dump() error = %v", err)
 	}
 
@@ -162,7 +163,7 @@ func TestDumpJSON(t *testing.T) {
 	f := newFakeESS(t)
 	var out bytes.Buffer
 
-	if err := dump(context.Background(), newReader(f), &out, true, false); err != nil {
+	if err := dump(context.Background(), newReader(f), essDevice, &out, true, false); err != nil {
 		t.Fatalf("dump() error = %v", err)
 	}
 
@@ -209,7 +210,7 @@ func TestDumpReportsUnreadableRegisters(t *testing.T) {
 	r := &reader{client: modbus.New(srv.Addr(), time.Second), retries: 0}
 
 	// Almost everything is missing, but the pass must still report what it got.
-	if err := dump(context.Background(), r, &out, false, false); err != nil {
+	if err := dump(context.Background(), r, essDevice, &out, false, false); err != nil {
 		t.Fatalf("dump() error = %v", err)
 	}
 	got := out.String()
@@ -227,7 +228,7 @@ func TestAlarms(t *testing.T) {
 	f.Set(32133, 1<<0|1<<13)
 
 	var out bytes.Buffer
-	if err := alarms(context.Background(), newReader(f), &out); err != nil {
+	if err := alarms(context.Background(), newReader(f), essDevice, &out); err != nil {
 		t.Fatalf("alarms() error = %v", err)
 	}
 
@@ -244,7 +245,7 @@ func TestAlarmsQuietSite(t *testing.T) {
 	f := newFakeESS(t)
 	var out bytes.Buffer
 
-	if err := alarms(context.Background(), newReader(f), &out); err != nil {
+	if err := alarms(context.Background(), newReader(f), essDevice, &out); err != nil {
 		t.Fatalf("alarms() error = %v", err)
 	}
 	if !strings.Contains(out.String(), "no alarms raised") {
@@ -258,7 +259,7 @@ func TestAlarmsReportsUndocumentedBits(t *testing.T) {
 	f.Set(30463, 0x0004)
 
 	var out bytes.Buffer
-	if err := alarms(context.Background(), newReader(f), &out); err != nil {
+	if err := alarms(context.Background(), newReader(f), essDevice, &out); err != nil {
 		t.Fatalf("alarms() error = %v", err)
 	}
 	if !strings.Contains(out.String(), "undocumented bits") {
@@ -274,7 +275,7 @@ func TestWatchWritesSamples(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3500*time.Millisecond)
 	defer cancel()
 
-	err := watch(ctx, newReader(f), watchOptions{interval: time.Second, path: path, log: &log})
+	err := watch(ctx, newReader(f), essDevice, watchOptions{interval: time.Second, path: path, log: &log})
 	if err != nil {
 		t.Fatalf("watch() error = %v", err)
 	}
@@ -303,14 +304,14 @@ func TestWatchWritesSamples(t *testing.T) {
 func TestWatchRejectsImpoliteInterval(t *testing.T) {
 	f := newFakeESS(t)
 
-	err := watch(context.Background(), newReader(f), watchOptions{interval: time.Millisecond, log: &bytes.Buffer{}})
+	err := watch(context.Background(), newReader(f), essDevice, watchOptions{interval: time.Millisecond, log: &bytes.Buffer{}})
 	if err == nil {
 		t.Error("watch() accepted a sub-second interval")
 	}
 }
 
 func TestTrackerDetectsAnotherMaster(t *testing.T) {
-	tr := newTracker()
+	tr := newTracker(essDevice)
 	var log bytes.Buffer
 
 	s1 := newSample()
@@ -334,7 +335,7 @@ func TestTrackerDetectsAnotherMaster(t *testing.T) {
 }
 
 func TestTrackerQuietOnStableSetpoints(t *testing.T) {
-	tr := newTracker()
+	tr := newTracker(essDevice)
 	var log bytes.Buffer
 
 	for range 3 {
@@ -379,7 +380,7 @@ func TestTrackerPolarity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tr := newTracker()
+			tr := newTracker(essDevice)
 			var log bytes.Buffer
 
 			for _, s := range tt.samples {
@@ -399,7 +400,7 @@ func TestTrackerPolarity(t *testing.T) {
 }
 
 func TestTrackerReportsAlarmTransitions(t *testing.T) {
-	tr := newTracker()
+	tr := newTracker(essDevice)
 	var log bytes.Buffer
 
 	quiet := newSample()

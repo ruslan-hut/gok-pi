@@ -11,12 +11,14 @@ import (
 )
 
 // identify reports what is on the other end of the endpoint and whether the
-// point table fits it. The nameplate check is the useful part: RatedCapacity is
-// a U32 with a gain of 1000, so a LUNA2000-215 that decodes to 215.0 confirms
-// the address space, the word order and the gain in a single read. A wrong
-// answer here means everything else read from this device is meaningless.
-func identify(ctx context.Context, r *reader, out io.Writer) error {
-	fmt.Fprintf(out, "endpoint %s, unit %d\n\n", r.client.Addr(), r.unit)
+// point table fits it. The nameplate check is the useful part: each device has
+// a register whose value is known from the installation (a cabinet's rated
+// capacity, the logger's summed capacity, the meter's phase voltages), and a
+// multi-word one with a gain confirms the address space, the word order and
+// the gain in a single read. A wrong answer here means everything else read
+// from this device is meaningless.
+func identify(ctx context.Context, r *reader, d *device, out io.Writer) error {
+	fmt.Fprintf(out, "endpoint %s, unit %d, read as %s\n\n", r.client.Addr(), r.unit, d.name)
 
 	basic, err := r.client.ReadDeviceID(ctx, r.unit, modbus.ReadDevIDBasic, modbus.ObjectVendor)
 	switch {
@@ -39,9 +41,9 @@ func identify(ctx context.Context, r *reader, out io.Writer) error {
 		if len(devices) == 0 {
 			fmt.Fprintln(out, "  none reported")
 		}
-		for _, d := range devices {
-			fmt.Fprintf(out, "  %s\n", d)
-			if d.IsHost() {
+		for _, dev := range devices {
+			fmt.Fprintf(out, "  %s\n", dev)
+			if dev.IsHost() {
 				fmt.Fprintln(out, "      this is the device holding the Modbus card")
 			}
 		}
@@ -49,41 +51,36 @@ func identify(ctx context.Context, r *reader, out io.Writer) error {
 
 	fmt.Fprintln(out, "\nnameplate check:")
 
-	s, err := r.read(ctx, []huawei.Register{
-		huawei.RatedCapacity, huawei.RatedPower,
-		huawei.MaxActivePower, huawei.MaxReverseRectificationPower,
-		huawei.SOC, huawei.WorkStatus,
-	})
+	regs := make([]huawei.Register, 0, len(d.nameplate)+len(d.status))
+	for _, c := range d.nameplate {
+		regs = append(regs, c.reg)
+	}
+	regs = append(regs, d.status...)
+
+	s, err := r.read(ctx, regs)
 	if err != nil {
 		return fmt.Errorf("the endpoint answered nothing readable: %w", err)
 	}
 
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	report := func(label string, reg huawei.Register, verdict func(float64) string) {
-		if msg, bad := s.Failed[reg.Addr]; bad {
-			fmt.Fprintf(w, "  %s\t%d\tfailed: %s\n", label, reg.Addr, msg)
+	for _, c := range d.nameplate {
+		if msg, bad := s.Failed[c.reg.Addr]; bad {
+			fmt.Fprintf(w, "  %s\t%d\tfailed: %s\n", c.label, c.reg.Addr, msg)
 
-			return
+			continue
 		}
-		v, _ := s.value(reg)
-		fmt.Fprintf(w, "  %s\t%d\t%g %s\t%s\n", label, reg.Addr, v, reg.Unit, verdict(v))
+		v, _ := s.value(c.reg)
+		fmt.Fprintf(w, "  %s\t%d\t%g %s\t%s\n", c.label, c.reg.Addr, v, c.reg.Unit, c.verdict(v))
 	}
 
-	report("rated capacity", huawei.RatedCapacity, func(v float64) string {
-		if v <= 0 || v > 10000 {
-			return "IMPLAUSIBLE - the point table does not match this device"
+	for _, reg := range d.status {
+		if msg, bad := s.Failed[reg.Addr]; bad {
+			fmt.Fprintf(w, "  %s\t%d\tfailed: %s\n", reg.Name, reg.Addr, msg)
+
+			continue
 		}
-
-		return "compare against the installed model's nameplate"
-	})
-	report("rated power", huawei.RatedPower, plausibleRange(0, 10000))
-	report("max active power (Pmax)", huawei.MaxActivePower, plausibleRange(0, 10000))
-	report("max reverse power (RPmax)", huawei.MaxReverseRectificationPower, plausibleRange(-10000, 10000))
-	report("SOC", huawei.SOC, plausibleRange(0, 100))
-
-	if raw, ok := s.raw(huawei.WorkStatus); ok {
-		fmt.Fprintf(w, "  work status\t%d\t0x%04X\t%s\n",
-			huawei.WorkStatus.Addr, uint16(raw), huawei.WorkStatusName(uint16(raw)))
+		v, _ := s.value(reg)
+		fmt.Fprintf(w, "  %s\t%d\t%g %s\t%s\n", reg.Name, reg.Addr, v, reg.Unit, d.annotate(reg, s))
 	}
 
 	if err := w.Flush(); err != nil {
@@ -91,12 +88,14 @@ func identify(ctx context.Context, r *reader, out io.Writer) error {
 	}
 
 	if len(s.Failed) > 0 {
-		fmt.Fprintf(out, "\n%d of the nameplate registers could not be read; "+
-			"if the device answered exception 0x02 the address space differs from the document\n", len(s.Failed))
+		fmt.Fprintf(out, "\n%d of these registers could not be read; "+
+			"if the device answered exception 0x02 the address space differs from the document, "+
+			"or -device does not match what is at this unit\n", len(s.Failed))
 	}
 
-	fmt.Fprintln(out, "\nActive power setpoint registers are readable and are polled by 'watch'.")
-	fmt.Fprintln(out, "A setpoint that moves without you writing it means another master is dispatching this ESS.")
+	if d.footer != "" {
+		fmt.Fprintf(out, "\n%s\n", d.footer)
+	}
 
 	return nil
 }

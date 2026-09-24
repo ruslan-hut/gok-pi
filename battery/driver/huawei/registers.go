@@ -27,6 +27,9 @@ const (
 	// Bits16 is the document's Bitfield16: sixteen independent flags, carried
 	// as a U16 but never scaled by Gain.
 	Bits16
+	// I64 occurs only in the SmartLogger and power meter tables, for lifetime
+	// energy counters.
+	I64
 )
 
 // Words is the number of 16-bit registers a value of this Kind occupies. It is
@@ -35,13 +38,15 @@ func (k Kind) Words() uint16 {
 	switch k {
 	case U32, I32:
 		return 2
+	case I64:
+		return 4
 	default:
 		return 1
 	}
 }
 
 // Signed reports whether the raw value is two's complement.
-func (k Kind) Signed() bool { return k == I16 || k == I32 }
+func (k Kind) Signed() bool { return k == I16 || k == I32 || k == I64 }
 
 // String implements fmt.Stringer.
 func (k Kind) String() string {
@@ -56,6 +61,8 @@ func (k Kind) String() string {
 		return "I32"
 	case Bits16:
 		return "Bitfield16"
+	case I64:
+		return "I64"
 	}
 	return fmt.Sprintf("Kind(%d)", uint8(k))
 }
