@@ -232,6 +232,11 @@ func annotateLogger(reg huawei.Register, s *sample) string {
 	}
 	v := uint16(raw)
 
+	// 40430 shares the sentinel but documents it as "released", handled below.
+	if reg.Unset(raw) && reg.Addr != huawei.LoggerHighestPriorityActivePower.Addr {
+		return "not set"
+	}
+
 	switch reg.Addr {
 	case huawei.LoggerActivePowerControlMode.Addr:
 		return huawei.ControlModeName(v)

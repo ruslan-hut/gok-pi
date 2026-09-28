@@ -1,10 +1,11 @@
 // Package modbus implements the subset of Modbus-TCP that the gok agent needs
 // to talk to battery systems.
 //
-// It is deliberately read-only: the only function codes implemented are 0x03
-// (read holding registers) and 0x2B/0x0E (read device identification). There is
-// no code path anywhere in this package that writes to a device, so a binary
-// that links it cannot alter the state of the equipment it is pointed at.
+// Client is deliberately read-only: its only function codes are 0x03 (read
+// holding registers) and 0x2B/0x0E (read device identification). Writes (0x06,
+// 0x10) live on Writer, which has to be constructed explicitly with NewWriter,
+// so a binary that never calls NewWriter cannot alter the state of the
+// equipment it is pointed at.
 //
 // Framing follows the MBAP header of the Modbus-TCP specification: a two-byte
 // transaction identifier echoed by the server, a two-byte protocol identifier

@@ -277,7 +277,7 @@ All 78 logger registers (`dump -all`) and all 22 meter registers read; no alarms
 | 40737 / 41889 | 6 / 6 | Export Limitation, as in the UI. 41889 reads the same value as 40737 (half of open question 2) |
 | 40398 | 216 kW | 2 × 108 kW rated, **not** 2 × 140.4. It is the reference for 40383 |
 | 40738 / 40802 | 55 kW / 1–8 % | Not an ESS dispatch readback in this mode: 55 kW is 40396 rated PV power, and 40697 = 280.8 + 55 |
-| 40381 40383 40420 40428 40378 40380 40430 | `0x7FFFFFFF` / `0x7FFF` / `0xFFFFFFFF` / `0xFFFF` | **Never written: the type's maximum is the "not set" sentinel.** A driver must decode it as *unset*, not as a huge setpoint. `essprobe` labels the 40381 sentinel "positive (discharging)"; ignore that |
+| 40381 40383 40420 40428 40378 40380 40430 | `0x7FFFFFFF` / `0x7FFF` / `0xFFFFFFFF` / `0xFFFF` | **Never written: the type's maximum is the "not set" sentinel.** A driver must decode it as *unset*, not as a huge setpoint. `Register.Unset` detects it and `essprobe` shows it as "not set" |
 | 42470 / 42471 | **0 / 0** | Not the 100 / 5 the UI shows (40218 / 40217 do read 100 / 5). The RW array SOC parameters are not populated while the battery works in *Maximum self-consumption* |
 | 41947 / 41948 / 41949 | 0 / 300 s / 1 | Array shutdown on comm timeout is off |
 | 40488 | 0 | Number of ESSs: does not count network-attached cabinets |
@@ -443,8 +443,8 @@ shows exactly which address is unsupported, instead of failing the whole block.
 
 | Path | Contents |
 |---|---|
-| `internal/modbus/` | Modbus-TCP client: **only** `0x03` and `0x2B`/`0x0E` |
-| `internal/modbus/modbussim/` | in-process server for tests and offline work |
+| `internal/modbus/` | Modbus-TCP client (`0x03`, `0x2B`/`0x0E`) and a separate `Writer` (`0x06`, `0x10`) |
+| `internal/modbus/modbussim/` | in-process server for tests and offline work; accepts writes |
 | `battery/driver/huawei/registers.go` | all 168 signals of the cabinet table 3-1, enums, pack helpers |
 | `battery/driver/huawei/codec.go` | words ↔ values: gain, sign extension (up to I64), range checks |
 | `battery/driver/huawei/alarms.go` | all 207 alarms of the cabinet table 3-2, plus decoding |
@@ -453,6 +453,7 @@ shows exactly which address is unsupported, instead of failing the whole block.
 | `battery/driver/huawei/blocks.go` | batching reads into `0x03` requests |
 | `battery/driver/huawei/devicelist.go` | parsing the vendor device-description format |
 | `cmd/essprobe/` | read-only field diagnostic for cabinet, logger and meter |
+| `cmd/writeproof/` | stage 3: writes an allowlisted unit-0 register's current value back with `0x06` and `0x10` |
 
 The SmartLogger tables were checked mechanically against the PDF. Every
 register's address, type, access and gain, and every alarm's ID, sub-ID, word and
@@ -468,12 +469,17 @@ untouched.
 
 ### The read-only guarantee
 
-`internal/modbus` implements no write function code: `0x06` and `0x10` do not
-exist anywhere in the package, so nothing that links it can alter equipment
-state. That is what makes `essprobe` safe to run against a site in production
-service. When the driver needs writes, they go in a separate path, and this
-property then has to be restated in weaker terms (no call sites rather than no
-code). 40381 is an I32, so that path needs `0x10`. `0x06` alone cannot write it.
+`modbus.Client` has no write method. Writes (`0x06`, `0x10`) live on
+`modbus.Writer`, which exists only through an explicit `modbus.NewWriter(client)`.
+The guarantee is therefore **no call sites**, not "no code": a binary that
+never calls `NewWriter` cannot alter equipment state. `essprobe` does not call
+it, which is what keeps it safe to run against a site in production service.
+The only caller today is `cmd/writeproof`; check with
+`grep -rn 'modbus.NewWriter' --include='*.go' .` before trusting a binary as
+read-only. 40381 is an I32, so dispatch needs `0x10`. `0x06` alone cannot write it.
+
+`Writer` never retries. If the transport fails after a write was sent, the
+device may or may not have applied it, and only a read-back can tell.
 
 ### How the tables were generated
 
@@ -554,7 +560,7 @@ alarms (table 3-2), and working status.
 | 1: identify, nameplate check, dump (cabinets) | laptop over VPN | one client slot. **Done** |
 | 2: observe cabinets: polarity, competing master, alarm baseline | Pi on site preferred | one client slot. **Polarity and dispatcher done**; multi-day baseline pending |
 | 2b: logger and meter: `identify`, `dump -all`, `alarms`, then `watch -device logger` while cycling | laptop over VPN | read-only. **Done 2026-09-28**; discharge polarity pending |
-| 3: write-path proof at unit 0: read 41948 and write the same value back, once with `0x06` and once with `0x10` | laptop over VPN | no behavioural change. Needs the write path in code first |
+| 3: write-path proof at unit 0: read 41948 and write the same value back, once with `0x06` and once with `0x10` | laptop over VPN | no behavioural change. **Tool ready** (`cmd/writeproof`) |
 | 4: logger handover (UI change) and first 40381 setpoint, **including the communication-loss test** | see below | needs owner sign-off and a check of the grid limits |
 
 Stage 2b's single decisive check is **40484 = 430.08 kWh**, the unit-0
@@ -565,6 +571,18 @@ Stage 3 writes a register's own current value. That proves the function code and
 write permission (no `0x80`/`0x01` exception) while changing nothing. 42470 was
 the first choice but reads 0, outside its own range, so the target is now 41948
 (currently 300 s, range [60, 1800], not a dispatch input).
+
+```bash
+go build -o writeproof ./cmd/writeproof
+./writeproof -addr 10.0.80.91:502          # dry run: reads, checks, prints the plan
+./writeproof -addr 10.0.80.91:502 -yes     # 0x06, read back, 0x10, read back
+```
+
+`writeproof` accepts only allowlisted registers (41948 today), always at unit 0.
+It refuses a current value that is unset or outside the documented range, and it
+writes back exactly the words it read. After each write it reads the register
+again, stopping at the first mismatch and printing the value to restore. A `0x80`
+exception means this host is not on the logger's Modbus TCP whitelist.
 
 Stage 4 no longer strictly requires a host on the site LAN, because the logger's
 comm-loss limit unwinds a stranded setpoint. That holds only after the fallback

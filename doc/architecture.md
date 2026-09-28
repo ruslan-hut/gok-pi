@@ -22,6 +22,7 @@ that hosts the web UI, generates price-based schedules, and relays commands.
 | `cmd/controlserver` | Central hub. Agent and UI WebSockets, REST API, config store with optimistic locking, price fetching and auto-schedules, energy session DB, email reports and connectivity alerts, evsys webhook receiver, serves the UI and `/downloads`. Configured by YAML (`-config`) or environment. |
 | `cmd/agentupdater` | Compares the remote `VERSION` SHA-256 with the local binary, replaces it atomically, optionally restarts the agent service. |
 | `cmd/essprobe` | Read-only Modbus diagnostic for Huawei ESS cabinets, SmartLogger and meter; see [huawei-integration.md](huawei-integration.md). |
+| `cmd/writeproof` | Huawei bring-up stage 3: writes an allowlisted SmartLogger register's current value back to prove `0x06`/`0x10`; see [huawei-integration.md](huawei-integration.md). |
 
 ## Packages
 

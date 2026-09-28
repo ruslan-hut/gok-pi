@@ -239,3 +239,32 @@ func TestTrackerLoggerSetpointChange(t *testing.T) {
 		t.Errorf("tracker missed a write to 40381\n%s", log.String())
 	}
 }
+
+func TestDumpLoggerUnsetSetpoints(t *testing.T) {
+	f := newFakeLogger(t)
+	f.SetWords(huawei.LoggerESSActivePowerSetpoint.Addr, []uint16{0x7FFF, 0xFFFF})
+	f.SetWords(huawei.LoggerESSActivePowerPercent.Addr, []uint16{0x7FFF})
+	var out bytes.Buffer
+
+	if err := dump(context.Background(), newReader(f), loggerDevice, &out, false, true); err != nil {
+		t.Fatalf("dump() error = %v", err)
+	}
+
+	seen := 0
+	for _, line := range strings.Split(out.String(), "\n") {
+		if !strings.HasPrefix(line, "40381") && !strings.HasPrefix(line, "40383") && !strings.HasPrefix(line, "40430") {
+			continue
+		}
+		seen++
+		want := "not set"
+		if strings.HasPrefix(line, "40430") {
+			want = "released"
+		}
+		if !strings.HasSuffix(strings.TrimSpace(line), want) {
+			t.Errorf("dump() line %q, want it to end in %q", line, want)
+		}
+	}
+	if seen != 3 {
+		t.Errorf("dump() printed %d of the 3 setpoint lines\n%s", seen, out.String())
+	}
+}

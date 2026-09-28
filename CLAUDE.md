@@ -60,7 +60,7 @@ Key packages:
 - `battery/driver/sonnen` - Sonnen battery API driver implementation
 - `battery/driver/huawei` - Huawei LUNA2000B cabinet point table, SmartLogger (unit 0) and power meter tables, codec and alarms; **no driver yet**, see `doc/huawei-integration.md`
 - `battery/entity` - Shared domain types (BatteryConfig, Schedule, AgentConfig, SystemStatus) and helpers
-- `internal/modbus` - Modbus-TCP client, read-only by construction (only `0x03` and `0x2B`); `modbussim` is its test server
+- `internal/modbus` - Modbus-TCP client; `Client` is read-only (`0x03`, `0x2B`), writes (`0x06`, `0x10`) only through an explicit `NewWriter`, called solely by `cmd/writeproof`; `modbussim` is its test server
 - `internal/remote/wsclient` - Agent-side WebSocket client with reconnection backoff
 - `remote/server` - Control server WebSocket handlers, config store, UI serving
 - `remote/server/email` - Brevo-backed daily/weekly/monthly email reports built from session DB + price fetcher

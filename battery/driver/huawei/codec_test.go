@@ -225,3 +225,28 @@ func TestTableIntegrity(t *testing.T) {
 		}
 	}
 }
+
+func TestUnset(t *testing.T) {
+	tests := []struct {
+		name string
+		reg  Register
+		raw  int64
+		want bool
+	}{
+		{"I32 setpoint at max", LoggerESSActivePowerSetpoint, 0x7FFFFFFF, true},
+		{"I32 setpoint written", LoggerESSActivePowerSetpoint, -100, false},
+		{"I16 setpoint at max", LoggerESSActivePowerPercent, 0x7FFF, true},
+		{"U32 setpoint at max", LoggerPVActivePowerSetpoint, 0xFFFFFFFF, true},
+		{"U16 parameter at max", LoggerCommTimeout, 0xFFFF, true},
+		{"U16 parameter set", LoggerCommTimeout, 300, false},
+		{"read-only register at max", LoggerRatedESSPower, 0xFFFFFFFF, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.reg.Unset(tt.raw); got != tt.want {
+				t.Errorf("Unset(%d) = %v, want %v", tt.raw, got, tt.want)
+			}
+		})
+	}
+}

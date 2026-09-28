@@ -90,6 +90,20 @@ func (r Register) EncodeRaw(raw int64) ([]uint16, error) {
 	return words, nil
 }
 
+// Unset reports whether raw is the "not set" value of a writable register: the
+// largest value r.Kind can carry. The SmartLogger returns it from every dispatch
+// setpoint that has never been written (0x7FFFFFFF for 40381, 0x7FFF for 40383),
+// so it must not be read as a setpoint of that size.
+func (r Register) Unset(raw int64) bool {
+	if !r.Access.Writable() {
+		return false
+	}
+
+	_, hi := r.rawLimits()
+
+	return raw == hi
+}
+
 // rawLimits is the inclusive range of wire values r.Kind can carry.
 func (r Register) rawLimits() (int64, int64) {
 	bits := 16 * uint(r.Words())

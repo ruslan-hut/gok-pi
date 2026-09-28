@@ -1,8 +1,8 @@
 // Package modbussim is an in-process Modbus-TCP server for tests and for
 // developing against a device that is not to hand.
 //
-// It answers the same subset the client speaks — 0x03 and 0x2B/0x0E — out of a
-// register map that a test can seed and mutate while a client is polling, which
+// It answers the subset the client speaks — 0x03, 0x2B/0x0E, and the writes
+// 0x06 and 0x10 — out of a register map that a test can seed and mutate while a client is polling, which
 // is what makes it possible to rehearse behaviour that depends on values
 // changing over time without waiting on real equipment.
 package modbussim
@@ -15,14 +15,17 @@ import (
 )
 
 const (
-	mbapLen          = 7
-	funcReadHolding  = 0x03
-	funcReadDeviceID = 0x2B
-	meiDeviceID      = 0x0E
-	exceptionBit     = 0x80
+	mbapLen           = 7
+	funcReadHolding   = 0x03
+	funcWriteSingle   = 0x06
+	funcWriteMultiple = 0x10
+	funcReadDeviceID  = 0x2B
+	meiDeviceID       = 0x0E
+	exceptionBit      = 0x80
 
 	exceptionInvalidFunction = 0x01
 	exceptionInvalidAddress  = 0x02
+	exceptionNoPermission    = 0x80
 )
 
 // Server serves a register map over Modbus-TCP on a loopback port.
@@ -34,6 +37,9 @@ type Server struct {
 	objects   map[uint8]string
 	unit      uint8
 	requests  int
+	writes    int
+	denyWrite bool
+	onWrite   func(addr, value uint16) uint16
 	failEvery int
 	seen      int
 }
@@ -111,6 +117,33 @@ func (s *Server) FailEvery(n int) {
 	s.failEvery = n
 }
 
+// DenyWrites makes every write answer 0x80 "no permission", as the SmartLogger
+// does for a client its Modbus TCP whitelist does not admit.
+func (s *Server) DenyWrites(deny bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.denyWrite = deny
+}
+
+// OnWrite makes the server store fn(addr, value) instead of the value a write
+// carries, to rehearse a device that acknowledges a write but keeps something
+// else. Nil restores normal behaviour.
+func (s *Server) OnWrite(fn func(addr, value uint16) uint16) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.onWrite = fn
+}
+
+// Writes is the number of write requests (0x06, 0x10) received, applied or not.
+func (s *Server) Writes() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.writes
+}
+
 // Requests is the number of requests served.
 func (s *Server) Requests() int {
 	s.mu.Lock()
@@ -182,6 +215,8 @@ func (s *Server) handle(unit uint8, pdu []byte) []byte {
 		return s.readHolding(pdu)
 	case funcReadDeviceID:
 		return s.readDeviceID(pdu)
+	case funcWriteSingle, funcWriteMultiple:
+		return s.write(pdu)
 	default:
 		return []byte{pdu[0] | exceptionBit, exceptionInvalidFunction}
 	}
@@ -207,6 +242,61 @@ func (s *Server) readHolding(pdu []byte) []byte {
 	}
 
 	return out
+}
+
+// write applies 0x06 or 0x10. Only registers already in the map can be
+// written; any other address answers 0x02 and nothing is changed.
+func (s *Server) write(pdu []byte) []byte {
+	s.writes++
+	fn := pdu[0]
+
+	if s.denyWrite {
+		return []byte{fn | exceptionBit, exceptionNoPermission}
+	}
+
+	var (
+		addr   uint16
+		values []uint16
+		resp   []byte
+	)
+
+	switch fn {
+	case funcWriteSingle:
+		if len(pdu) != 5 {
+			return []byte{fn | exceptionBit, exceptionInvalidAddress}
+		}
+		addr = binary.BigEndian.Uint16(pdu[1:])
+		values = []uint16{binary.BigEndian.Uint16(pdu[3:])}
+		resp = append([]byte(nil), pdu...)
+	default:
+		if len(pdu) < 6 {
+			return []byte{fn | exceptionBit, exceptionInvalidAddress}
+		}
+		addr = binary.BigEndian.Uint16(pdu[1:])
+		count := int(binary.BigEndian.Uint16(pdu[3:]))
+		if int(pdu[5]) != 2*count || len(pdu) != 6+2*count {
+			return []byte{fn | exceptionBit, exceptionInvalidAddress}
+		}
+		for i := range count {
+			values = append(values, binary.BigEndian.Uint16(pdu[6+2*i:]))
+		}
+		resp = append([]byte(nil), pdu[:5]...)
+	}
+
+	for i := range values {
+		if _, ok := s.regs[addr+uint16(i)]; !ok {
+			return []byte{fn | exceptionBit, exceptionInvalidAddress}
+		}
+	}
+	for i, v := range values {
+		a := addr + uint16(i)
+		if s.onWrite != nil {
+			v = s.onWrite(a, v)
+		}
+		s.regs[a] = v
+	}
+
+	return resp
 }
 
 // readDeviceID answers with every published object at once, setting More to 0.
