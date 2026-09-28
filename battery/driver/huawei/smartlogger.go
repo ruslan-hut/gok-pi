@@ -393,8 +393,8 @@ func LoggerAllRegisters() []Register {
 	)
 }
 
-// Power meter registers, table 2-5, read at the meter's own RS485 address (11
-// on the Pedernoso site). On the meter "a positive value indicates the power
+// Power meter registers, table 2-5, read at the meter's own unit ID (3 on the
+// Pedernoso site in logical-address mode). On the meter "a positive value indicates the power
 // fed to the grid, and a negative value indicates the power supplied from the
 // grid" (SL section 2.4).
 var (

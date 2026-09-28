@@ -91,6 +91,16 @@ func run() error {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	cmd := flag.Arg(0)
+	// flag stops at the first non-flag argument; accept flags after the command too.
+	if flag.NArg() > 1 {
+		if err := flag.CommandLine.Parse(flag.Args()[1:]); err != nil {
+			return err
+		}
+		if flag.NArg() > 0 {
+			return fmt.Errorf("unexpected arguments: %v", flag.Args())
+		}
+	}
 
 	if *addr == "" {
 		flag.Usage()
@@ -106,7 +116,6 @@ func run() error {
 		return fmt.Errorf("unknown device %q; want one of %s", *devName, deviceNames())
 	}
 
-	cmd := flag.Arg(0)
 	if cmd == "" {
 		flag.Usage()
 

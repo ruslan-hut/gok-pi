@@ -5,7 +5,8 @@ Status: **reading works on the real site; nothing writes yet.** Modbus TCP is
 enabled on the SmartLogger, both ESS units answer, and the cabinet point table is
 validated against them (2026-09-15). The SmartLogger's own interface document
 arrived on 2026-09-24. It gives a plant-level ESS dispatch register at unit 0, so
-dispatch no longer has to go to each cabinet. No driver exists yet.
+dispatch no longer has to go to each cabinet. The logger and meter tables were
+validated on site on 2026-09-28 (stage 2b). No driver exists yet.
 
 Source documents, both in `huawei/`:
 
@@ -19,8 +20,8 @@ The site logger runs V300R024C10SPC161, which is the release that document cover
 ```
 gok agent ──Modbus-TCP:502──▶ SmartLogger 10.0.80.91 ──▶ unit 5  ESS LUNA2000B-V2
    (master)                    (unit 0)                ──▶ unit 6  ESS LUNA2000B-V2
-                                  │                    ──▶ unit 1  Inverter SUN2000-50KTL-M3
-                                  │                    ──▶ unit 11 PowerMeter
+                                  │                    ──▶ unit 2  Inverter SUN2000-50KTL-M3
+                                  │                    ──▶ unit 3  PowerMeter
                                   └─ plant-level ESS dispatch: 40381 / 40383 (SL §3.7, §3.8)
 ```
 
@@ -33,7 +34,7 @@ gok agent ──Modbus-TCP:502──▶ SmartLogger 10.0.80.91 ──▶ unit 5 
 | ESS | `ESS(Net.8.129)`, `ESS(Net.8.130)`: 2 × 215 kWh = 430.080 kWh nominal |
 | Also on the logger | `Inverter(COM1-1)` (50 kW PV), `Meter-AM0010259748…` |
 | External | `87.247.129.133:27250` → `10.0.80.91:27250` (NAT rule) |
-| Access | VPN, routed; laptop lands on `10.0.80.155` |
+| Access | VPN, routed; laptop lands on `10.0.80.155` or `10.0.80.154` (both whitelisted) |
 | State | In production service, cycling daily |
 
 PV (SUN2000) and storage (LUNA2000B with its own PCS) are separate AC-connected
@@ -53,7 +54,9 @@ Changed in the SmartLogger UI, **Ajustes → Parámetros de comunicación → Mo
 - **Modo de dirección: dirección lógica.** In communication-address mode only the
   RS485 devices (inverter 1, meter 11) had unit IDs. The ESS cabinets are
   network-attached and did not answer at any unit ID from 1 to 247. Logical-address
-  mode gives them **5 and 6**.
+  mode gives them **5 and 6**, and it also renumbers the RS485 devices: the
+  inverter is now **2** and the meter **3** (unit 11 answers `0x04`; confirmed
+  2026-09-28).
 
 Logger firmware `V300R024C10SPC161`. No TLS was needed.
 
@@ -62,14 +65,16 @@ Logger firmware `V300R024C10SPC161`. No TLS was needed.
 | Unit | Model | Software | ESN |
 |---|---|---|---|
 | 0 | Smart Logger | V300R024C10SPC161 | 102597484606 |
-| 1 | SUN2000-50KTL-M3 | V200R023C00SPC125 | ES2320029926 |
-| 11 | PowerMeter | V100R001C01AM001 | AM00102597484606 |
+| 2 | SUN2000-50KTL-M3 | V200R023C00SPC125 | ES2320029926 |
+| 3 | PowerMeter | V100R001C01AM001 | AM00102597484606 |
 | 5 | LUNA2000B-V2 | V200R024C00SPC400 | BT2610479858 |
 | 6 | LUNA2000B-V2 | V200R024C00SPC400 | BT2610378535 |
 
-Unit numbers for the ESS come from the logger UI. The device list itself reports
-device ID 0 for both, as it does for any network-attached device. We have not
-established which ESN is unit 5 and which is unit 6.
+On 2026-09-15 the device list reported device ID 0 for both cabinets and the old
+RS485 addresses (1, 11) for the inverter and meter. On 2026-09-28 it reported the
+logical addresses shown above, which also settles which ESN is which unit: **unit 5 =
+BT2610479858, unit 6 = BT2610378535**. The meter answers at unit 3; unit 11 now
+returns `0x04`.
 
 The logger's device-list responses do three unusual things, all handled in
 `internal/modbus`:
@@ -216,17 +221,17 @@ Enough to run a whole-site driver from unit 0 alone:
 | 40516 | SOH | U16, gain 10 | |
 | 40484 | Rated ESS capacity | U32, gain 1000, kWh | **430.08**, the unit-0 equivalent of the RatedCapacity check |
 | 40480 / 40482 | Chargeable / dischargeable energy | U32, gain 1000, kWh | |
-| 40398 | Rated ESS power | U32, gain 1000, kW | 280.8 (2 × 140.4), the base for 40383 |
-| 40412 / 40697 | Min / max active power adjustment | I32, gain 10, kW | 40412 = max charge power, negative |
-| 40490 / 40492 | Max ESS charge / discharge power now | U32, gain 1000, kW | |
+| 40398 | Rated ESS power | U32, gain 1000, kW | **216** (2 × 108, the cabinets' rated power 30238), the base for 40383. Not 2 × Pmax |
+| 40412 / 40697 | Min / max active power adjustment | I32, gain 10, kW | −225.1 / 335.8: −40490, and 40492 + 55 kW of PV |
+| 40490 / 40492 | Max ESS charge / discharge power now | U32, gain 1000, kW | ≈ 225.2 (varies) / 280.8 (2 × Pmax) |
 | 40392 | Active ESS power | I32, gain 1000, kW | sign unknown. "Output" suggests AC side, negative = charge |
 | 40507 | ESS charge/discharge power | I32, gain 1000, kW | sign unknown. Battery side like 30417? |
 | 30014 | ESS active power (fast) | I32, gain 1000, kW | fast interface |
 | 40468 / 40470 | Energy charged / discharged today | U32, gain 100, kWh | = sum of the cabinets' daily counters |
-| 40488 / 40489 / 40207 | Number of ESSs / PCSs / running PCSs | U16 | 2 / 2 / 2 |
+| 40488 / 40489 / 40207 | Number of ESSs / PCSs / running PCSs | U16 | **0** / 2 / 2. 40488 does not count network-attached ESSs; use 40489 |
 | 40217 / 40218 | End-of-discharge / end-of-charge SOC (RO) | U16, gain 10 | 5.0 / 100.0 |
 
-### Power meter (unit 11)
+### Power meter (unit 3)
 
 SL §2.4: **positive = fed to the grid, negative = drawn from the grid**. Key
 registers: 32278 active power (I32, gain 1000, kW), 32335/32337/32339 per-phase
@@ -256,6 +261,67 @@ These matter if the table is ever machine-extracted like the cabinet one:
   the ESS ports as well.
 - Gains are not uniform across related registers: 40420 and 40381 use gain 10,
   while 40430 uses 1000. Encode each one from its own row.
+
+## Logger and meter validated, 2026-09-28 (stage 2b)
+
+Read from the laptop over VPN (`10.0.80.154`), midday, both cabinets charging
+from PV at 10–14 kW. `identify`, `dump -all` and `alarms` at unit 0, `identify` and `dump` on
+the meter at unit 3, then `watch -device logger` for 24 minutes (110 samples).
+
+**Address space, word order and gain at unit 0 are confirmed: 40484 = 430.08 kWh.**
+All 78 logger registers (`dump -all`) and all 22 meter registers read; no alarms raised (50000–50007 all 0),
+40578 = 0 (no 40430 override), 42454 = 0 (PPC comms normal).
+
+| Register | Read | Meaning |
+|---|---|---|
+| 40737 / 41889 | 6 / 6 | Export Limitation, as in the UI. 41889 reads the same value as 40737 (half of open question 2) |
+| 40398 | 216 kW | 2 × 108 kW rated, **not** 2 × 140.4. It is the reference for 40383 |
+| 40738 / 40802 | 55 kW / 1–8 % | Not an ESS dispatch readback in this mode: 55 kW is 40396 rated PV power, and 40697 = 280.8 + 55 |
+| 40381 40383 40420 40428 40378 40380 40430 | `0x7FFFFFFF` / `0x7FFF` / `0xFFFFFFFF` / `0xFFFF` | **Never written: the type's maximum is the "not set" sentinel.** A driver must decode it as *unset*, not as a huge setpoint. `essprobe` labels the 40381 sentinel "positive (discharging)"; ignore that |
+| 42470 / 42471 | **0 / 0** | Not the 100 / 5 the UI shows (40218 / 40217 do read 100 / 5). The RW array SOC parameters are not populated while the battery works in *Maximum self-consumption* |
+| 41947 / 41948 / 41949 | 0 / 300 s / 1 | Array shutdown on comm timeout is off |
+| 40488 | 0 | Number of ESSs: does not count network-attached cabinets |
+| 30068 / 40476 | 10560.93 / 10560.93 kWh | *Total energy fed to grid* equals *total energy discharged* to the hundredth. The logger evidently books all ESS discharge as grid feed-in; do not use 30068 as an export counter |
+
+### Polarity of the plant-level power registers (open question 4)
+
+While charging (SOC 77.5 → 78.5 %, *energy charged today* +4.96 kWh, *energy
+discharged today* flat at 0.11 kWh):
+
+| Register | Read | Convention |
+|---|---|---|
+| 40392 Active ESS power | −11 … −14 kW | AC side: **negative = charge** |
+| 30014 ESS active power (fast) | −11 … −14 kW | AC side: **negative = charge**; tracks 40392 within ~0.3 kW |
+| 40507 ESS charge/discharge power | +11 … +14 kW | battery side: **positive = charge**, the mirror of 40392 |
+
+The same split as the cabinets' 32986 and 30417. `watch` agreed on every SOC
+step. The discharge direction was not observed in this session; confirm it once
+during an evening or EV discharge before relying on it for control.
+
+### Meter at unit 3
+
+Voltages 237–240 V phase, 412–416 V line. 32278 hovered around 0 (±0.3 kW),
+consistent with the logger's export-limitation loop holding grid exchange at zero.
+32341 total = 32357 positive (1077 kWh) − 32349 negative (8627 kWh). By the
+meter's sign convention (positive = export) and the site's profile, **32349 is
+lifetime import and 32357 export**. That is inferred from magnitudes, not yet
+checked against a direction of flow.
+
+### Connectivity
+
+One outage in 24 minutes: from 11:39:43Z every request failed with a TCP **dial**
+timeout for about 6 minutes, then the probe reconnected by itself. Ping was
+fine afterwards. Whether that was the VPN or the logger dropping its client is
+unknown. It belongs to open question 6, and it is one more reason for stage 4 and
+production to run from a Pi on the site LAN.
+
+### Consequence for stage 3
+
+The planned proof, writing 42470's current value back, would write **0**. That is
+outside [90, 100], so it is no longer a no-op. Candidate replacement: **41948**
+(comm exception detection time, RW U16, [60, 1800], currently 300). Writing 300
+back changes nothing and exercises both `0x06` and `0x10`. That register is also
+unrelated to dispatch. It does belong to a protection feature (41947) that is off.
 
 ## Handing over control
 
@@ -319,7 +385,8 @@ alongside the EV chargers.
 
 `essprobe` reads three point tables, selected with `-device`: `ess` for a
 cabinet (the default), `logger` for the SmartLogger at unit 0, and `meter` for
-the power meter at its RS485 address.
+the power meter at its unit ID (3 here). Flags may go before or after the
+command.
 
 ```bash
 go build -o essprobe ./cmd/essprobe
@@ -358,8 +425,8 @@ The logger and the meter (stage 2b):
 ./essprobe -addr 10.0.80.91:502 -unit 0  -device logger dump -all
 ./essprobe -addr 10.0.80.91:502 -unit 0  -device logger alarms
 ./essprobe -addr 10.0.80.91:502 -unit 0  -device logger watch -interval 10s -out logger.jsonl
-./essprobe -addr 10.0.80.91:502 -unit 11 -device meter identify   # voltages ≈ 230 / 400 V
-./essprobe -addr 10.0.80.91:502 -unit 11 -device meter dump
+./essprobe -addr 10.0.80.91:502 -unit 3 -device meter identify   # voltages ≈ 230 / 400 V
+./essprobe -addr 10.0.80.91:502 -unit 3 -device meter dump
 ```
 
 `watch -device logger` correlates the sign of 40507, 40392 and 30014 with the
@@ -460,21 +527,24 @@ alarms (table 3-2), and working status.
 1. **Does 40381 act while the battery working mode is *Maximum
    self-consumption*?** This decides between options B and A/C. Ask Huawei or the
    installer first. Otherwise test it in stage 4.
-2. **The 41889 enum.** Read it next to 40737 (expect both = 6 today). Then
-   confirm with Huawei that writing 4 / 6 switches the mode the way the UI does.
+2. **The 41889 enum.** It reads 6 next to 40737 = 6 (2026-09-28), so the values
+   look shared. Still to confirm with Huawei: that writing 4 / 6 switches the mode
+   the way the UI does.
 3. **Keepalive semantics of the 3.0 s timer.** Does it count any request, or only
    dispatch writes? gok's controller sends a setpoint only when it changes, so a
    driver on this path needs its own refresh loop (≤ 1 s) either way. The
    fallback must also be seen to work (stop writing → ESS power to 0 within about
    3 s) before any unattended use.
-4. **Sign of 40381, 40392 and 40507.** 40381 is inferred as negative = charge.
-   40392 and 40507 are read-only and can be settled in stage 2b against 30417 and
-   32986.
+4. **Sign of 40381.** Inferred as negative = charge; settled only by the first
+   write. The read-only registers are settled while charging (2026-09-28): 40392 and
+   30014 negative = charge, 40507 positive = charge. The discharge direction
+   still needs one observation.
 5. **Grid limits** if dispatch is taken over: the 99 kW feed-in cap (a static
    ≤ 49 kW discharge cap covers it) and the contracted import power for grid
    charging.
 6. **Concurrent client limit** on the logger, and whether Modbus TCP traffic
-   affects the FusionSolar link. The logger document is silent on both.
+   affects the FusionSolar link. The logger document is silent on both. Also the
+   ~6 min loss of TCP connectivity during the 2026-09-28 watch: VPN or logger?
 
 ## Bring-up stages
 
@@ -483,18 +553,18 @@ alarms (table 3-2), and working status.
 | 0: build probe and simulator | local | none. **Done** |
 | 1: identify, nameplate check, dump (cabinets) | laptop over VPN | one client slot. **Done** |
 | 2: observe cabinets: polarity, competing master, alarm baseline | Pi on site preferred | one client slot. **Polarity and dispatcher done**; multi-day baseline pending |
-| 2b: logger and meter: `identify`, `dump -all`, `alarms`, then `watch -device logger` while cycling | laptop over VPN | read-only. **Tooling ready; next on site** |
-| 3: write-path proof at unit 0: read 42470 and write the same value back, once with `0x06` and once with `0x10` | laptop over VPN | no behavioural change |
+| 2b: logger and meter: `identify`, `dump -all`, `alarms`, then `watch -device logger` while cycling | laptop over VPN | read-only. **Done 2026-09-28**; discharge polarity pending |
+| 3: write-path proof at unit 0: read 41948 and write the same value back, once with `0x06` and once with `0x10` | laptop over VPN | no behavioural change. Needs the write path in code first |
 | 4: logger handover (UI change) and first 40381 setpoint, **including the communication-loss test** | see below | needs owner sign-off and a check of the grid limits |
 
 Stage 2b's single decisive check is **40484 = 430.08 kWh**, the unit-0
-counterpart of the cabinets' RatedCapacity check. 40737 = 6 and 42470/42471 =
-100/5 confirm that the registers match what the UI shows.
+counterpart of the cabinets' RatedCapacity check. It passed; see
+[the stage 2b results](#logger-and-meter-validated-2026-09-28-stage-2b).
 
 Stage 3 writes a register's own current value. That proves the function code and
-write permission (no `0x80`/`0x01` exception) while changing nothing. 42470 is
-the best choice: it is an ordinary RW parameter with a narrow range, and it is
-not a dispatch input.
+write permission (no `0x80`/`0x01` exception) while changing nothing. 42470 was
+the first choice but reads 0, outside its own range, so the target is now 41948
+(currently 300 s, range [60, 1800], not a dispatch input).
 
 Stage 4 no longer strictly requires a host on the site LAN, because the logger's
 comm-loss limit unwinds a stranded setpoint. That holds only after the fallback
