@@ -6,7 +6,8 @@ enabled on the SmartLogger, both ESS units answer, and the cabinet point table i
 validated against them (2026-09-15). The SmartLogger's own interface document
 arrived on 2026-09-24. It gives a plant-level ESS dispatch register at unit 0, so
 dispatch no longer has to go to each cabinet. The logger and meter tables were
-validated on site on 2026-09-28 (stage 2b). No driver exists yet.
+validated on site on 2026-09-28 (stage 2b), and the same day the write path was
+proven at unit 0 without changing anything (stage 3). No driver exists yet.
 
 Source documents, both in `huawei/`:
 
@@ -560,7 +561,7 @@ alarms (table 3-2), and working status.
 | 1: identify, nameplate check, dump (cabinets) | laptop over VPN | one client slot. **Done** |
 | 2: observe cabinets: polarity, competing master, alarm baseline | Pi on site preferred | one client slot. **Polarity and dispatcher done**; multi-day baseline pending |
 | 2b: logger and meter: `identify`, `dump -all`, `alarms`, then `watch -device logger` while cycling | laptop over VPN | read-only. **Done 2026-09-28**; discharge polarity pending |
-| 3: write-path proof at unit 0: read 41948 and write the same value back, once with `0x06` and once with `0x10` | laptop over VPN | no behavioural change. **Tool ready** (`cmd/writeproof`) |
+| 3: write-path proof at unit 0: read 41948 and write the same value back, once with `0x06` and once with `0x10` | laptop over VPN | no behavioural change. **Done 2026-09-28**: `0x06` and `0x10` accepted, 41948 unchanged at 300 s |
 | 4: logger handover (UI change) and first 40381 setpoint, **including the communication-loss test** | see below | needs owner sign-off and a check of the grid limits |
 
 Stage 2b's single decisive check is **40484 = 430.08 kWh**, the unit-0
@@ -583,6 +584,19 @@ It refuses a current value that is unset or outside the documented range, and it
 writes back exactly the words it read. After each write it reads the register
 again, stopping at the first mismatch and printing the value to restore. A `0x80`
 exception means this host is not on the logger's Modbus TCP whitelist.
+
+Run on 2026-09-28 from `10.0.80.154`:
+
+```
+read Comm exception detection time@41948 = 300 s (words [012C])
+0x06 accepted, read back 300 s: unchanged
+0x10 accepted, read back 300 s: unchanged
+write path proven: value unchanged
+```
+
+So the logger accepts writes at unit 0 with both function codes from a
+whitelisted host, and 40381 (an I32, `0x10` only) is reachable once stage 4
+is approved.
 
 Stage 4 no longer strictly requires a host on the site LAN, because the logger's
 comm-loss limit unwinds a stranded setpoint. That holds only after the fallback
