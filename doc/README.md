@@ -4,6 +4,7 @@
 |---|---|
 | [architecture.md](architecture.md) | Executables, package map, control loop, drivers, remote protocol, config sync, metrics |
 | [deployment.md](deployment.md) | Control server config, CI deploy, systemd units, agent build, config and auto-update |
+| [pi-agent-setup.md](pi-agent-setup.md) | Raspberry Pi as on-site agent: OS, service user, systemd, updater, migrating Merce 5 off the L2TP link |
 | [evsys-integration.md](evsys-integration.md) | EV charger webhooks: evsys setup, charger↔battery links, override behaviour |
 | [huawei-integration.md](huawei-integration.md) | Huawei LUNA2000B over Modbus-TCP: site, validated point table, SmartLogger dispatch registers and handover options, bring-up stages |
 | [backlog.md](backlog.md) | Open deferred items from the stability review |
