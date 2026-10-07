@@ -31,6 +31,7 @@ import (
 	"gok-pi/internal/config"
 	"gok-pi/internal/lib/sl"
 	"gok-pi/internal/remote/spool"
+	"gok-pi/internal/sysinfo"
 	"gok-pi/metrics/observers"
 	"log/slog"
 	"math/rand"
@@ -120,10 +121,11 @@ type helloMessage struct {
 }
 
 type heartbeatMessage struct {
-	Type      string       `json:"type"`
-	Timestamp time.Time    `json:"timestamp"`
-	Agent     AgentInfo    `json:"agent"`
-	Spool     *SpoolHealth `json:"spool,omitempty"`
+	Type      string         `json:"type"`
+	Timestamp time.Time      `json:"timestamp"`
+	Agent     AgentInfo      `json:"agent"`
+	Spool     *SpoolHealth   `json:"spool,omitempty"`
+	Board     *sysinfo.Board `json:"board,omitempty"`
 }
 
 // outboundMessage is a reply handed to the write loop. Replies are produced by
@@ -850,6 +852,7 @@ func (c *Client) writeHeartbeat(ctx context.Context, conn *websocket.Conn) error
 		Timestamp: time.Now().UTC(),
 		Agent:     c.agent,
 		Spool:     c.spoolHealth(),
+		Board:     sysinfo.Read(),
 	}
 	if err := c.writeJSON(ctx, conn, msg); err != nil {
 		return fmt.Errorf("send heartbeat: %w", err)
@@ -1000,6 +1003,7 @@ func (c *Client) diagnostics() Diagnostics {
 		Agent:      c.agent,
 		UptimeSec:  int64(c.health.uptime(now).Seconds()),
 		Goroutines: goroutineCount(),
+		Board:      sysinfo.Read(),
 		Uplink:     c.health.snapshot(),
 		Batteries:  observers.GetSnapshots(),
 	}

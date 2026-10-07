@@ -70,6 +70,9 @@ export interface AgentSummary {
   // telemetry_stalled says the server is receiving nothing, this says whether the
   // agent is holding telemetry it cannot deliver — the two have different fixes.
   spool?: AgentSpoolHealth;
+  // Health of the device the agent runs on, from its last heartbeat. Absent on
+  // hosts that are not a Raspberry Pi and on agents that predate the field.
+  board?: AgentBoardHealth;
   telemetry: Record<string, TelemetrySnapshot>;
   schedule_goal_reached?: Record<string, string>;
   connected?: boolean;
@@ -90,6 +93,26 @@ export interface AgentSpoolHealth {
   flush_errors?: number;
   last_delivery_at?: string;
   last_error?: string;
+}
+
+/**
+ * AgentBoardHealth is the SoC temperature and the Raspberry Pi firmware's
+ * throttling flags (vcgencmd get_throttled). The plain flags are the current
+ * state; the *_occurred ones say the condition has happened since boot.
+ */
+export interface AgentBoardHealth {
+  temp_c?: number;
+  throttled?: {
+    raw: number;
+    under_voltage: boolean;
+    freq_capped: boolean;
+    throttled: boolean;
+    soft_temp_limit: boolean;
+    under_voltage_occurred: boolean;
+    freq_capped_occurred: boolean;
+    throttled_occurred: boolean;
+    soft_temp_limit_occurred: boolean;
+  };
 }
 
 /**

@@ -16,6 +16,12 @@ import { useServiceWorker } from "./hooks/useServiceWorker";
 import { useTheme } from "./hooks/useTheme";
 import type { AppPage } from "./types";
 import { AgentStatusBadges } from "./components/layout/AgentStatusBadges";
+import {
+  boardTempLevel,
+  boardTitle,
+  fmtBoardTemp,
+  pastConditions,
+} from "./lib/board";
 import { TopNav } from "./components/layout/TopNav";
 import { TabBar } from "./components/layout/TabBar";
 import { BottomNav } from "./components/layout/BottomNav";
@@ -230,6 +236,22 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, b
                       Last telemetry {fmtAgo(selectedAgent.last_telemetry_at)}
                     </span>
                   )}
+                  {selectedAgentOnline &&
+                    selectedAgent.board?.temp_c !== undefined && (
+                      <span
+                        className={`board-temp ${boardTempLevel(selectedAgent.board.temp_c)}`}
+                        title={boardTitle(selectedAgent.board)}
+                      >
+                        Board {fmtBoardTemp(selectedAgent.board.temp_c)}
+                        {pastConditions(selectedAgent.board).length > 0 && (
+                          <span className="board-past">
+                            {" "}
+                            ({pastConditions(selectedAgent.board).join(", ")}{" "}
+                            since boot)
+                          </span>
+                        )}
+                      </span>
+                    )}
                 </div>
               </header>
             )}

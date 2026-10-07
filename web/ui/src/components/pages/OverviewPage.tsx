@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchDBStats } from "../../api";
+import { Icon } from "../shared/Icon";
+import { boardTempLevel, boardTitle, fmtBoardTempShort } from "../../lib/board";
 import { fmtAgo, fmtBytes, fmtDate, fmtEnergy, fmtSignedEUR } from "../../lib/format";
 import type {
   AgentsMap,
@@ -69,6 +71,22 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
               </div>
               <div className="agent-card-meta">
                 <span>{agent.agent.env}</span>
+                {agent.connected !== false && agent.board?.temp_c !== undefined && (
+                  <span className="board-health" title={boardTitle(agent.board)}>
+                    {agent.board.throttled?.under_voltage && (
+                      <span className="board-temp fault">
+                        <Icon name="bolt" size={14} />
+                        Under-voltage
+                      </span>
+                    )}
+                    <span
+                      className={`board-temp ${boardTempLevel(agent.board.temp_c)}`}
+                    >
+                      <Icon name="device_thermostat" size={14} />
+                      {fmtBoardTempShort(agent.board.temp_c)}
+                    </span>
+                  </span>
+                )}
                 {agent.connected === false && (
                   <span className="agent-last-seen">
                     Last seen {fmtAgo(agent.last_seen)}

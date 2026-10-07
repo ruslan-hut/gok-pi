@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gok-pi/internal/remote/wsclient"
+	"gok-pi/internal/sysinfo"
 )
 
 // The agent and the server declare the messages they exchange separately, on
@@ -145,5 +146,39 @@ func TestDiagResponseSurvivesTheWire(t *testing.T) {
 	}
 	if payload.UptimeSec != 3600 || payload.Goroutines != 24 {
 		t.Fatalf("unexpected forwarded payload: %+v", payload)
+	}
+}
+
+// TestBoardHealthSurvivesTheWire pins the JSON names shared by the agent's
+// sysinfo.Board and the server's AgentBoardHealth, which are separate
+// declarations held together only by those names.
+func TestBoardHealthSurvivesTheWire(t *testing.T) {
+	temp := 61.5
+	sent := sysinfo.Board{
+		TempC: &temp,
+		Throttled: &sysinfo.Throttled{
+			Raw:                  0x50005,
+			UnderVoltage:         true,
+			Throttled:            true,
+			UnderVoltageOccurred: true,
+			ThrottledOccurred:    true,
+		},
+	}
+
+	raw, err := json.Marshal(sent)
+	if err != nil {
+		t.Fatalf("marshal board: %v", err)
+	}
+	var received AgentBoardHealth
+	if err := json.Unmarshal(raw, &received); err != nil {
+		t.Fatalf("unmarshal into the server type: %v", err)
+	}
+
+	if received.TempC == nil || *received.TempC != temp {
+		t.Fatalf("temp_c: got %v", received.TempC)
+	}
+	want := AgentBoardThrottled(*sent.Throttled)
+	if received.Throttled == nil || *received.Throttled != want {
+		t.Fatalf("throttled: sent %+v, received %+v", want, received.Throttled)
 	}
 }

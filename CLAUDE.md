@@ -66,6 +66,7 @@ Key packages:
 - `remote/server/email` - Brevo-backed daily/weekly/monthly email reports built from session DB + price fetcher
 - `remote/server/chargers.go` + `charger_links.go` - evsys EV charger integration: webhook receiver, charger↔battery links, active session tracking
 - `metrics/observers` - Prometheus gauges and telemetry snapshots
+- `internal/sysinfo` - Host board health (SoC temperature, Raspberry Pi throttling flags) from sysfs; sent on every agent heartbeat and shown in the web UI, nil off a Pi
 - `internal/config` - YAML config loading via cleanenv, thread-safe updates
 - `internal/lib/atomicfile` - Atomic file writes (write-to-temp-then-rename)
 

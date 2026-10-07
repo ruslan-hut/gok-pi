@@ -70,6 +70,7 @@ type AgentHeartbeat struct {
 	Timestamp time.Time         `json:"timestamp"`
 	Agent     AgentDescriptor   `json:"agent"`
 	Spool     *AgentSpoolHealth `json:"spool,omitempty"`
+	Board     *AgentBoardHealth `json:"board,omitempty"`
 }
 
 type AgentMessage struct {
@@ -122,6 +123,11 @@ type AgentSummary struct {
 	// Spool is the agent's own view of its uplink, as of its last heartbeat: a
 	// backlog here means the agent is recording telemetry it cannot deliver.
 	Spool *AgentSpoolHealth `json:"spool,omitempty"`
+
+	// Board is the health of the device the agent runs on (SoC temperature and
+	// Raspberry Pi throttling flags), as of its last heartbeat. Absent for agents
+	// that are not on a Pi or predate the field.
+	Board *AgentBoardHealth `json:"board,omitempty"`
 
 	Telemetry           map[string]TelemetrySnapshot `json:"telemetry"`
 	ScheduleGoalReached map[string]time.Time         `json:"schedule_goal_reached,omitempty"`
@@ -202,6 +208,27 @@ type AgentSpoolHealth struct {
 	FlushErrors             uint64     `json:"flush_errors,omitempty"`
 	LastDeliveryAt          *time.Time `json:"last_delivery_at,omitempty"`
 	LastError               string     `json:"last_error,omitempty"`
+}
+
+// AgentBoardHealth mirrors sysinfo.Board, kept separate for the same reason as
+// AgentSpoolHealth.
+type AgentBoardHealth struct {
+	TempC     *float64             `json:"temp_c,omitempty"`
+	Throttled *AgentBoardThrottled `json:"throttled,omitempty"`
+}
+
+// AgentBoardThrottled is the decoded Raspberry Pi firmware throttling bitmask:
+// the plain flags are the current state, the *Occurred ones are since boot.
+type AgentBoardThrottled struct {
+	Raw                   uint32 `json:"raw"`
+	UnderVoltage          bool   `json:"under_voltage"`
+	FreqCapped            bool   `json:"freq_capped"`
+	Throttled             bool   `json:"throttled"`
+	SoftTempLimit         bool   `json:"soft_temp_limit"`
+	UnderVoltageOccurred  bool   `json:"under_voltage_occurred"`
+	FreqCappedOccurred    bool   `json:"freq_capped_occurred"`
+	ThrottledOccurred     bool   `json:"throttled_occurred"`
+	SoftTempLimitOccurred bool   `json:"soft_temp_limit_occurred"`
 }
 
 // PriceLimits defines absolute price thresholds for auto-schedule filtering.

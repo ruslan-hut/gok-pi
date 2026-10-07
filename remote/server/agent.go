@@ -83,6 +83,7 @@ type agentConnection struct {
 	scheduleGoalReached map[string]time.Time         // Goal reached timestamps per schedule name
 
 	spool *AgentSpoolHealth // agent's self-reported uplink health, from its last heartbeat
+	board *AgentBoardHealth // host board health, from its last heartbeat
 
 	// In-flight server→agent requests, keyed by request ID.
 	logRequests  *pendingRequests[AgentLogResponse]
@@ -299,6 +300,9 @@ func (a *agentConnection) updateHeartbeat(msg AgentHeartbeat) {
 	if msg.Spool != nil {
 		a.spool = msg.Spool
 	}
+	// Unlike the spool, a missing board reading replaces the previous one: a
+	// stale temperature shown as current would be worse than none.
+	a.board = msg.Board
 	a.mu.Unlock()
 
 	// The agent reports its own backlog, so a uplink that is recording telemetry
@@ -372,6 +376,7 @@ func (a *agentConnection) summary() AgentSummary {
 		TelemetryFrames:     a.telemetryFrames,
 		TelemetryStalled:    a.telemetryStalled,
 		Spool:               a.spool,
+		Board:               a.board,
 		Telemetry:           telemetry,
 		ScheduleGoalReached: goalReached,
 	}

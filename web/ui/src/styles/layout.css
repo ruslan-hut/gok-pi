@@ -342,6 +342,38 @@
   font-style: italic;
 }
 
+/* Board health: the temperature reads as ordinary muted metadata and takes
+   colour only when it needs attention, so a fleet of healthy devices stays
+   quiet and the one running hot is the thing you see. */
+.board-health {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.board-temp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-temp.warn {
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
+.board-temp.fault {
+  color: var(--color-danger-text);
+  font-weight: 600;
+}
+
+/* A condition that has passed: context for an earlier slowdown, not an alarm. */
+.board-past {
+  color: var(--color-text-dim);
+  font-weight: 400;
+}
+
 .overview-batteries {
   display: flex;
   flex-direction: column;

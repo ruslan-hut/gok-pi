@@ -1,3 +1,4 @@
+import { boardTitle } from "../../lib/board";
 import { fmtDateTime, fmtDuration } from "../../lib/format";
 import type { AgentSummaryWithDeviceName } from "../../types";
 
@@ -8,6 +9,12 @@ import type { AgentSummaryWithDeviceName } from "../../types";
  *   Connected      — the socket is up (a heartbeat alone keeps this true)
  *   No telemetry   — the socket is up but nothing is arriving
  *   Backlog        — the agent is recording telemetry it cannot deliver
+ *
+ * plus the board's own conditions, shown only while they are active. The
+ * temperature itself lives in the status bar, so it is not repeated here:
+ *
+ *   Under-voltage  — the Pi's supply is sagging right now
+ *   Throttled      — the firmware is holding the CPU back right now
  *
  * The last two have different causes and different fixes, so they are separate
  * badges rather than one merged warning.
@@ -28,6 +35,12 @@ interface AgentStatusBadgesProps {
 export function AgentStatusBadges({ agent, online }: AgentStatusBadgesProps) {
   const backlogAge = agent.spool?.oldest_undelivered_age_sec ?? 0;
   const showBacklog = backlogAge >= backlogWarnAfterSec;
+  // A disconnected agent's last reading is history, not a current alarm.
+  const board = online ? agent.board : undefined;
+  const throttled = board?.throttled;
+  const throttling =
+    throttled &&
+    (throttled.throttled || throttled.freq_capped || throttled.soft_temp_limit);
 
   return (
     <div className="agent-header-badges">
@@ -57,6 +70,18 @@ export function AgentStatusBadges({ agent, online }: AgentStatusBadgesProps) {
       {showBacklog && agent.spool && (
         <span className="badge warn" title={backlogTitle(agent.spool, backlogAge)}>
           Backlog {fmtCompactAge(backlogAge)}
+        </span>
+      )}
+
+      {board && throttled?.under_voltage && (
+        <span className="badge fault" title={boardTitle(board)}>
+          Under-voltage
+        </span>
+      )}
+
+      {board && throttling && (
+        <span className="badge warn" title={boardTitle(board)}>
+          Throttled
         </span>
       )}
     </div>

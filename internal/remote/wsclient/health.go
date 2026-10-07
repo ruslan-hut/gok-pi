@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gok-pi/internal/remote/spool"
+	"gok-pi/internal/sysinfo"
 	"gok-pi/metrics/observers"
 )
 
@@ -149,6 +150,7 @@ type Diagnostics struct {
 	Agent      AgentInfo            `json:"agent"`
 	UptimeSec  int64                `json:"uptime_sec"`
 	Goroutines int                  `json:"goroutines"`
+	Board      *sysinfo.Board       `json:"board,omitempty"`
 	Spool      *spool.Stats         `json:"spool,omitempty"`
 	SpoolError string               `json:"spool_error,omitempty"`
 	Uplink     UplinkDiagnostics    `json:"uplink"`
