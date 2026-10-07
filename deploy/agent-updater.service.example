@@ -8,6 +8,8 @@ Type=oneshot
 User={{AGENT_USER}}
 Group={{AGENT_GROUP}}
 WorkingDirectory={{AGENT_PATH}}/current
+# The updater logs to /var/log/gok too; create it in case the agent has not run yet.
+LogsDirectory=gok
 
 # Option 1: Using environment variables (recommended - currently active)
 # This allows easy overrides via EnvironmentFile

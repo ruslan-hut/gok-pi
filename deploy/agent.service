@@ -7,6 +7,8 @@ After=network-online.target nss-lookup.target
 Type=simple
 User={{AGENT_USER}}
 Group={{AGENT_GROUP}}
+LogsDirectory=gok
+StateDirectory=gok
 Environment=GOK_CONF={{AGENT_PATH}}/config.yml
 Environment=GOK_LOG_DIR=/var/log/gok
 EnvironmentFile=-/etc/default/gok-agent

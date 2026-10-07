@@ -77,11 +77,17 @@ sudo mkdir -p /opt/gok/current /opt/gok/bin
 /opt/gok/
 ├── config.yml        agent config; the agent rewrites it on UI changes
 ├── current/gok       agent binary (replaced by the updater)
+├── current/VERSION   SHA-256 of the installed binary, kept by the updater
 └── bin/agentupdater  updater binary
 ```
 
 The agent saves config with write-to-temp-then-rename, so `gok` must own
 `/opt/gok` itself, not only `config.yml`.
+
+The unit creates `/var/log/gok` (`LogsDirectory=`) and `/var/lib/gok`
+(`StateDirectory=`, the telemetry spool) for `gok` on start. An older unit
+without `StateDirectory=` leaves the spool disabled; create the directory by
+hand with `sudo install -d -o gok -g gok /var/lib/gok`.
 
 ## 5. Install the binaries
 
@@ -164,6 +170,18 @@ EOF
 
 `GOK_UPDATE_BINARY_URL` must be set: the default (VERSION directory + `gok`)
 does not exist on the control server.
+
+Seed the local `VERSION` with the hash of the binary installed in step 5:
+
+```bash
+sha256sum /opt/gok/current/gok | cut -d' ' -f1 | sudo -u gok tee /opt/gok/current/VERSION
+curl -s https://bat.wattbrews.es/downloads/VERSION; echo    # should match
+```
+
+Without it the first updater run sees no local version, re-downloads the
+binary and runs `systemctl restart agent.service`, which starts an agent that
+is still meant to be stopped. When migrating, that is a second agent with the
+same `device_id` as the old one.
 
 The updater runs as `gok` and calls `systemctl restart agent.service`; allow
 that one action with polkit:
