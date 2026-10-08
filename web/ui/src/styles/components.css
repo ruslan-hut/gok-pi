@@ -93,12 +93,31 @@
   border-color: var(--border-color-subtle);
 }
 
-/* Badges that carry a leading icon: keep the glyph on the text's centre line
-   instead of the baseline, which would stretch the pill. */
-.badge.badge-with-icon {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
+/* Icon-only badges: a fixed square so a row of states reads as one rhythm and
+   never wraps the way word badges did. The word is in the tooltip. */
+.badge.badge-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  padding: 0;
+  border-radius: var(--radius-md, 0.5rem);
+  cursor: help;
+}
+
+/* Connected keeps its quiet look; the glyph carries the green instead of a dot. */
+.badge.ok.badge-icon::before {
+  display: none;
+}
+
+.badge.ok.badge-icon {
+  color: var(--color-online);
+}
+
+.badge.ev {
+  color: var(--color-primary);
+  background: var(--color-bg-muted);
+  border-color: var(--border-color-subtle);
 }
 
 /* Status banners (persistent, non-dismissible) */
@@ -430,7 +449,7 @@
     gap: var(--space-sm);
   }
 
-  .badge {
+  .badge:not(.badge-icon) {
     font-size: 0.7rem;
     padding: 0.15rem 0.4rem;
   }

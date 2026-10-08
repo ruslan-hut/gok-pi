@@ -46,9 +46,15 @@
 .battery-card-badges {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
   flex-wrap: wrap;
   flex-shrink: 0;
+}
+
+.goal-reached-icon {
+  display: inline-flex;
+  color: var(--color-success);
+  cursor: help;
 }
 
 .battery-card-toggle {
@@ -58,7 +64,13 @@
   margin-left: var(--space-xs);
 }
 
-.battery-card-header:hover .battery-card-toggle {
+.battery-card-header:hover .goal-reached-icon {
+  display: inline-flex;
+  color: var(--color-success);
+  cursor: help;
+}
+
+.battery-card-toggle {
   color: var(--color-primary);
 }
 

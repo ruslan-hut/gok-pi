@@ -52,22 +52,32 @@ export function BatteryCard({
       batteryConfig.power_limit > 0) ||
       (batteryConfig.soc_limit !== undefined && batteryConfig.soc_limit > 0));
 
-  const getStatusBadgeClass = (status: string) => {
+  // The header is one line of chips: words like "Disconnected" pushed the
+  // badges onto a second line, so state is a glyph and the words live in the
+  // tooltip and the accessible name.
+  const connection = (() => {
+    const status = snapshot.status || "Disconnected";
     switch (status) {
       case "Connected":
-        return "ok";
+        return { className: "ok", icon: "link", label: "Connected to the battery" };
       case "Disabled":
-        return "muted";
+        return { className: "muted", icon: "block", label: "Disabled in config" };
+      case "Disconnected":
+        return {
+          className: "fault",
+          icon: "link_off",
+          label: "Disconnected: the agent cannot reach the battery",
+        };
       default:
-        return "fault";
+        return { className: "fault", icon: "error", label: status };
     }
-  };
+  })();
 
   const flow = snapshot.battery_discharging
-    ? { className: "discharge", label: "Discharging" }
+    ? { className: "discharge", icon: "electric_bolt", label: "Discharging: supplying the site" }
     : snapshot.battery_charging
-      ? { className: "charge", label: "Charging" }
-      : { className: "idle", label: "Idle" };
+      ? { className: "charge", icon: "battery_charging_full", label: "Charging" }
+      : { className: "idle", icon: "pause", label: "Idle" };
 
   const renderOperatingMode = (mode: string | undefined | null): string => {
     if (!mode) return "n/a";
@@ -112,29 +122,39 @@ export function BatteryCard({
         <span className="battery-card-title">{name}</span>
         <span className="battery-card-badges">
           <span
-            className={`badge ${getStatusBadgeClass(snapshot.status || "Disconnected")}`}
+            className={`badge badge-icon ${connection.className}`}
+            title={connection.label}
+            aria-label={connection.label}
+            role="img"
           >
-            {snapshot.status || "Disconnected"}
+            <Icon name={connection.icon} size={16} />
           </span>
+          <span
+            className={`badge badge-icon ${flow.className}`}
+            title={flow.label}
+            aria-label={flow.label}
+            role="img"
+          >
+            <Icon name={flow.icon} size={16} />
+          </span>
+          {snapshot.override_source === "charger" && (
+            <span
+              className="badge badge-icon ev"
+              title="EV session: a charging session is driving this battery and overrides the schedule until it ends"
+              aria-label="EV session in progress"
+              role="img"
+            >
+              <Icon name="ev_station" size={16} />
+            </span>
+          )}
           {hasGoalReachedToday && (
             <span
               className="goal-reached-icon"
               title="Schedule goal reached today"
-              style={{
-                color: "var(--color-success)",
-                marginLeft: "0.25rem",
-              }}
+              aria-label="Schedule goal reached today"
+              role="img"
             >
               <Icon name="check_circle" size={18} />
-            </span>
-          )}
-          <span className={`badge ${flow.className}`}>{flow.label}</span>
-          {snapshot.override_source === "charger" && (
-            <span
-              className="badge badge-with-icon"
-              title="An EV charging session is driving this battery; it overrides the schedule until the session ends."
-            >
-              <Icon name="ev_station" size={14} />EV session
             </span>
           )}
           {!readonly && (
