@@ -373,6 +373,12 @@ type workerEntry struct {
 	discharger *controller.Controller
 	charger    *controller.Controller
 	config     entity.BatteryConfig
+
+	// stop cancels everything started for this battery, including the status
+	// poller. Stopping only the controllers leaves the poller running against the
+	// old driver instance: after a URL change that means two pollers for the same
+	// battery name, one of them failing, flapping the shared connection state.
+	stop func()
 }
 
 type workerManager struct {
@@ -464,6 +470,9 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 			if battery, exists := allBatteries[name]; exists && !battery.Enabled {
 				observers.UpdateStatus(name, "Disabled")
 			}
+			if removed.stop != nil {
+				removed.stop()
+			}
 			if removed.discharger != nil {
 				go removed.discharger.Stop()
 			}
@@ -491,6 +500,9 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 					slog.Bool("driver_changed", driverChanged),
 				).Info("restarting workers (connection config changed)")
 				if removed, ok := m.remove(name); ok {
+					if removed.stop != nil {
+						removed.stop()
+					}
 					if removed.discharger != nil {
 						removed.discharger.Stop()
 					}
@@ -522,6 +534,9 @@ func (m *workerManager) Apply(ctx context.Context, wg *sync.WaitGroup, batteries
 				// Other config fields changed (not URL/token), restart workers
 				if removed, ok := m.remove(name); ok {
 					log.With(slog.String("battery", name)).Info("restarting workers (config changed)")
+					if removed.stop != nil {
+						removed.stop()
+					}
 					if removed.discharger != nil {
 						removed.discharger.Stop()
 					}
@@ -641,8 +656,13 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		return nil, fmt.Errorf("creating battery driver: %w", err)
 	}
 
+	// Everything this worker starts hangs off a context of its own so a restart
+	// (or a removal) tears down the poller together with the controllers.
+	workerCtx, cancel := context.WithCancel(ctx)
+
 	entry := &workerEntry{
 		config: battery,
+		stop:   cancel,
 	}
 
 	// A single status poller polls the battery once per tick and fans the reading out
@@ -683,11 +703,12 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 	if hasDischargeSchedules {
 		w, err := initController(battery, schedules, timezone, controller.DischargeDirection(api), api, mode, workerLog)
 		if err != nil {
+			cancel()
 			return nil, fmt.Errorf("creating discharge worker: %w", err)
 		}
 		w.SetStatusFeed(poller.Subscribe())
 		entry.discharger = w
-		runController(ctx, wg, w, "discharge", workerLog)
+		runController(workerCtx, wg, w, "discharge", workerLog)
 	}
 
 	if hasChargeSchedules {
@@ -696,18 +717,19 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 			if entry.discharger != nil {
 				entry.discharger.Stop()
 			}
+			cancel()
 			return nil, fmt.Errorf("creating charge worker: %w", err)
 		}
 		w.SetStatusFeed(poller.Subscribe())
 		entry.charger = w
-		runController(ctx, wg, w, "charge", workerLog)
+		runController(workerCtx, wg, w, "charge", workerLog)
 	}
 
 	// Start polling only after subscribers are registered (Subscribe must precede Run).
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		poller.Run(ctx)
+		poller.Run(workerCtx)
 	}()
 
 	return entry, nil
