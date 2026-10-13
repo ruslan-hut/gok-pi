@@ -66,6 +66,7 @@ Key packages:
 - `remote/server/email` - Brevo-backed daily/weekly/monthly email reports built from session DB + price fetcher
 - `remote/server/chargers.go` + `charger_links.go` - evsys EV charger integration: webhook receiver, charger↔battery links, active session tracking
 - `metrics/observers` - Prometheus gauges and telemetry snapshots
+- `internal/netscan` - Two-stage IP sweep (TCP port check, then an injected probe) behind the battery-scan RPC; vendor-agnostic, see `doc/battery-scan.md`
 - `internal/sysinfo` - Host board health (SoC temperature, Raspberry Pi throttling flags) from sysfs; sent on every agent heartbeat and shown in the web UI, nil off a Pi
 - `internal/config` - YAML config loading via cleanenv, thread-safe updates
 - `internal/lib/atomicfile` - Atomic file writes (write-to-temp-then-rename)
@@ -96,7 +97,8 @@ Environment variables override config values via cleanenv tags.
 
 8. Connectivity alerts (control server): `agentWatcher` (`remote/server/agent_alerts.go`) raises one email per outage when an agent stays disconnected for 10 minutes, and one recovery notice when it returns. Agents known to the config store are seeded as offline at startup, so a device that is down while the server restarts is still reported. Alerts need `email_reports.enabled` plus recipients subscribed to `alerts`.
    Subscriptions are per address: `email_reports.recipients` is a list of `{address, daily, weekly, monthly, alerts}`. `EmailReportsConfig.UnmarshalJSON` still accepts the original plain-string list — migrated addresses inherit the agent's report toggles and are never auto-subscribed to alerts. Use `RecipientsFor(entity.EmailKind*)` rather than reading `Recipients` directly.
-9. Remote restart: `POST /api/agents/<id>/restart` sends the `restart_agent` command; the agent shuts down as it would on SIGTERM and exits 75 (`restartExitCode`), which brings it back under either `Restart=always` or `Restart=on-failure`. Use it when an agent is reachable but misbehaving — the binary updater (30 min timer) is the path for shipping code.
+9. Battery scan: `POST /api/agents/<id>/scan-battery` sends `server.scan.request`; the agent sweeps an address range with `internal/netscan` (port check, then a `driver.Driver.Status()` probe with the battery's own token) and answers `agent.scan.response`. It exists to tell a battery that took a new DHCP lease from one that is off the air — the agent log cannot distinguish them. One sweep at a time, read-only on the battery, logged-in users only; see `doc/battery-scan.md`.
+10. Remote restart: `POST /api/agents/<id>/restart` sends the `restart_agent` command; the agent shuts down as it would on SIGTERM and exits 75 (`restartExitCode`), which brings it back under either `Restart=always` or `Restart=on-failure`. Use it when an agent is reachable but misbehaving — the binary updater (30 min timer) is the path for shipping code.
 
 ## Battery Drivers
 

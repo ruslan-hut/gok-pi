@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentSummary, ChargerLink, ChargerSession, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, EmailProviderStatus, HistoryResponse, PriceLimits, PricesState, SessionsResponse } from "./types";
+import type { AgentConfig, AgentSummary, BatteryScanRequest, BatteryScanResult, ChargerLink, ChargerSession, DBRecordsQuery, DBRecordsResponse, DBStatsResponse, EmailProviderStatus, HistoryResponse, PriceLimits, PricesState, SessionsResponse } from "./types";
 
 const AUTH_TOKEN_KEY = "gok-pi-auth-token";
 const AUTH_EXPIRY_KEY = "gok-pi-auth-expires";
@@ -389,4 +389,34 @@ export async function restartAgent(agentId: string): Promise<void> {
     const text = await res.text();
     throw new Error(text || `Restart failed: ${res.statusText}`);
   }
+}
+
+/**
+ * scanForBattery asks the agent to sweep an address range for its battery.
+ *
+ * The sweep runs on the device, which is the only place with a route to the
+ * battery, and takes seconds rather than milliseconds — hence the long wait and
+ * no retry. Leaving `range` unset means "the subnet the battery is configured
+ * on", which is the answer nearly every time a battery takes a new DHCP lease.
+ */
+export async function scanForBattery(
+  agentId: string,
+  request: BatteryScanRequest = {},
+): Promise<BatteryScanResult> {
+  const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/scan-battery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("Login required to scan for the battery.");
+    }
+    if (res.status === 404) {
+      throw new Error("Agent is not connected.");
+    }
+    const text = await res.text();
+    throw new Error(text.trim() || `Scan failed: ${res.statusText}`);
+  }
+  return (await res.json()) as BatteryScanResult;
 }

@@ -20,11 +20,13 @@ import (
 //   - agent.config:       Agent's current config snapshot (batteries + schedules)
 //   - agent.log.response: Response to a log request with log file contents
 //   - agent.diag.response: Response to a diagnostics request with agent health
+//   - agent.scan.response: Response to a battery scan with what the sweep found
 //
 // Server → Agent messages:
 //   - server.config.push:  Push updated config (batteries, schedules, limits) to agent
 //   - server.log.request:  Request agent to send back its log file contents
 //   - server.diag.request: Request agent to report its uplink/spool/battery health
+//   - server.scan.request: Request agent to sweep an address range for its battery
 const (
 	agentMessageHello        = "agent.hello"
 	agentMessageTelemetry    = "agent.telemetry"
@@ -33,10 +35,12 @@ const (
 	agentMessageConfig       = "agent.config"
 	agentMessageLogResponse  = "agent.log.response"
 	agentMessageDiagResponse = "agent.diag.response"
+	agentMessageScanResponse = "agent.scan.response"
 
 	serverMessageConfigPush  = "server.config.push"
 	serverMessageLogRequest  = "server.log.request"
 	serverMessageDiagRequest = "server.diag.request"
+	serverMessageScanRequest = "server.scan.request"
 
 	// commandRestartAgent asks the agent to shut down and let its supervisor
 	// start it again. It carries no target: it is about the process, not a battery.
@@ -88,6 +92,7 @@ type agentConnection struct {
 	// In-flight server→agent requests, keyed by request ID.
 	logRequests  *pendingRequests[AgentLogResponse]
 	diagRequests *pendingRequests[AgentDiagResponse]
+	scanRequests *pendingRequests[AgentScanResponse]
 }
 
 func newAgentConnection(conn *websocket.Conn, r *http.Request, s *Server) *agentConnection {
@@ -100,6 +105,7 @@ func newAgentConnection(conn *websocket.Conn, r *http.Request, s *Server) *agent
 		telemetry:    make(map[string]TelemetrySnapshot),
 		logRequests:  newPendingRequests[AgentLogResponse](),
 		diagRequests: newPendingRequests[AgentDiagResponse](),
+		scanRequests: newPendingRequests[AgentScanResponse](),
 	}
 }
 
@@ -264,6 +270,13 @@ func (a *agentConnection) handleMessage(message []byte) {
 			return
 		}
 		a.diagRequests.resolve(diagResp.RequestID, diagResp)
+	case agentMessageScanResponse:
+		var scanResp AgentScanResponse
+		if err := json.Unmarshal(message, &scanResp); err != nil {
+			a.log().With(slog.Any("error", err)).Warn("decode battery scan response")
+			return
+		}
+		a.scanRequests.resolve(scanResp.RequestID, scanResp)
 	default:
 		a.log().With(slog.String("type", base.Type)).Debug("received unhandled agent message")
 	}
@@ -462,6 +475,28 @@ func (a *agentConnection) requestDiagnostics(timeout time.Duration) (AgentDiagRe
 	}
 
 	return awaitAgentResponse(a, a.diagRequests, requestID, payload, timeout, "diagnostics")
+}
+
+// requestBatteryScan asks the agent to sweep an address range for its battery.
+// It is read-only on the battery: the probe behind it reads status and commands
+// nothing. It is not, however, free — it puts a connect attempt on every address
+// in the range — so it only ever happens when an operator asks for it.
+func (a *agentConnection) requestBatteryScan(req BatteryScanRequest, timeout time.Duration) (AgentScanResponse, error) {
+	requestID := fmt.Sprintf("%s-scan-%d", a.id, time.Now().UnixNano())
+
+	payload := struct {
+		Type      string             `json:"type"`
+		RequestID string             `json:"request_id"`
+		Scan      BatteryScanRequest `json:"scan"`
+		SentAt    time.Time          `json:"sent_at"`
+	}{
+		Type:      serverMessageScanRequest,
+		RequestID: requestID,
+		Scan:      req,
+		SentAt:    time.Now().UTC(),
+	}
+
+	return awaitAgentResponse(a, a.scanRequests, requestID, payload, timeout, "battery scan")
 }
 
 func (a *agentConnection) log() *slog.Logger {

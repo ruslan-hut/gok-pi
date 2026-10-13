@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"gok-pi/internal/netscan"
 	"gok-pi/internal/remote/wsclient"
 	"gok-pi/internal/sysinfo"
 )
@@ -180,5 +181,107 @@ func TestBoardHealthSurvivesTheWire(t *testing.T) {
 	want := AgentBoardThrottled(*sent.Throttled)
 	if received.Throttled == nil || *received.Throttled != want {
 		t.Fatalf("throttled: sent %+v, received %+v", want, received.Throttled)
+	}
+}
+
+// TestScanResponseSurvivesTheWire pins the JSON names shared by the agent's
+// wsclient.ScanResponse and the server's AgentScanResponse. The scan payload is
+// forwarded verbatim to the UI, so a rename on either side would show up as an
+// empty result panel — a scan that found nothing and a scan whose result the
+// server could not read look identical to an operator.
+func TestScanResponseSurvivesTheWire(t *testing.T) {
+	sent := wsclient.ScanResponse{
+		Type:      "agent.scan.response",
+		RequestID: "agent-1-scan-123",
+		SentAt:    time.Now().UTC(),
+		Scan: &wsclient.BatteryScanResult{
+			Battery:       "BAT-001",
+			ConfiguredURL: "http://192.168.68.107/api/v2",
+			Range:         "192.168.68.0/24",
+			Port:          80,
+			Scanned:       254,
+			Responded:     2,
+			Found:         1,
+			ElapsedMs:     6100,
+			Results: []netscan.Result{
+				{Address: "192.168.68.142", PortOpen: true, Battery: true, Detail: "sonnen: usoc 61%"},
+				{Address: "192.168.68.107", PortOpen: true, Detail: "received status code: 404"},
+			},
+		},
+	}
+
+	raw, err := json.Marshal(sent)
+	if err != nil {
+		t.Fatalf("marshal scan response: %v", err)
+	}
+
+	var received AgentScanResponse
+	if err := json.Unmarshal(raw, &received); err != nil {
+		t.Fatalf("unmarshal into the server type: %v", err)
+	}
+
+	if received.RequestID != sent.RequestID {
+		t.Fatalf("request_id: sent %q, received %q", sent.RequestID, received.RequestID)
+	}
+	if received.Error != "" {
+		t.Fatalf("unexpected error on a successful scan: %q", received.Error)
+	}
+	if len(received.Scan) == 0 {
+		t.Fatal("expected the scan payload to be carried through")
+	}
+
+	// This is the shape the UI reads, since the server forwards it unparsed.
+	var payload struct {
+		Range   string `json:"range"`
+		Found   int    `json:"found"`
+		Results []struct {
+			Address string `json:"address"`
+			Battery bool   `json:"battery"`
+			Detail  string `json:"detail"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(received.Scan, &payload); err != nil {
+		t.Fatalf("decode forwarded scan: %v", err)
+	}
+	if payload.Range != "192.168.68.0/24" || payload.Found != 1 {
+		t.Fatalf("unexpected forwarded payload: %+v", payload)
+	}
+	if len(payload.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(payload.Results))
+	}
+	if !payload.Results[0].Battery || payload.Results[0].Address != "192.168.68.142" {
+		t.Errorf("the found battery did not survive: %+v", payload.Results[0])
+	}
+	// The non-battery entry is the one that names what took the old address.
+	if payload.Results[1].Detail == "" {
+		t.Error("expected the listening non-battery to keep its detail")
+	}
+}
+
+// TestScanResponseCarriesAgentRejection pins the other half: when the agent
+// refuses the request the reason has to reach the operator, because every one of
+// those reasons is something they can fix.
+func TestScanResponseCarriesAgentRejection(t *testing.T) {
+	sent := wsclient.ScanResponse{
+		Type:      "agent.scan.response",
+		RequestID: "agent-1-scan-124",
+		Error:     "a battery scan is already running",
+		SentAt:    time.Now().UTC(),
+	}
+
+	raw, err := json.Marshal(sent)
+	if err != nil {
+		t.Fatalf("marshal scan response: %v", err)
+	}
+
+	var received AgentScanResponse
+	if err := json.Unmarshal(raw, &received); err != nil {
+		t.Fatalf("unmarshal into the server type: %v", err)
+	}
+	if received.Error != sent.Error {
+		t.Fatalf("error: sent %q, received %q", sent.Error, received.Error)
+	}
+	if len(received.Scan) != 0 {
+		t.Errorf("expected no scan payload on a rejection, got %s", received.Scan)
 	}
 }

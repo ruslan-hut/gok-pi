@@ -197,6 +197,27 @@ type AgentDiagResponse struct {
 	SentAt      time.Time       `json:"sent_at"`
 }
 
+// BatteryScanRequest asks an agent to sweep an address range looking for its
+// battery. Every field is optional: the agent fills the blanks from the
+// battery's own configuration, which is the only place that knows them.
+type BatteryScanRequest struct {
+	Battery string `json:"battery,omitempty"`
+	Range   string `json:"range,omitempty"`
+	Port    int    `json:"port,omitempty"`
+}
+
+// AgentScanResponse carries the result of a battery scan. Like AgentDiagResponse
+// the payload stays raw: the agent owns its shape, and a server that insisted on
+// parsing it would reject a newer agent reporting a field it has not been taught
+// about.
+type AgentScanResponse struct {
+	Type      string          `json:"type"`
+	RequestID string          `json:"request_id"`
+	Scan      json.RawMessage `json:"scan,omitempty"`
+	Error     string          `json:"error,omitempty"`
+	SentAt    time.Time       `json:"sent_at"`
+}
+
 // AgentSpoolHealth is the uplink summary carried on every agent heartbeat. It
 // mirrors wsclient.SpoolHealth; the two are separate so the agent can add fields
 // without the server failing to decode the message.

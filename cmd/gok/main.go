@@ -159,6 +159,10 @@ func run() int {
 			lg.Info("telemetry spool enabled", slog.String("path", filepath.Join(*dataPath, "telemetry-spool.db")))
 		}
 
+		// Answers the battery-scan RPC. Registered before Run so a scan request
+		// arriving on the first connection is not refused.
+		remoteClient.SetBatteryScanner(newBatteryScanner(lg))
+
 		remoteClient.Run(ctx)
 		remoteClient.PublishConfigSnapshot(conf.Batteries, conf.Schedules)
 

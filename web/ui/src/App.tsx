@@ -338,6 +338,9 @@ function Dashboard({ readonly, onLoginRequest, onLogout, theme, onToggleTheme, b
                       logsDisabled={!selectedAgentOnline}
                       agentOnline={selectedAgentOnline}
                       readonly={readonly}
+                      batteryNames={
+                        configHook.agentConfig?.batteries?.map((b) => b.name) ?? []
+                      }
                     />
                   )}
                 </>

@@ -396,3 +396,33 @@ export interface DBRecordsResponse {
   agents: string[];
 }
 
+// Battery scan: the agent sweeps an address range looking for its battery, so an
+// operator can tell "the battery moved to a new DHCP lease" from "the battery is
+// off the air". Mirrors wsclient.BatteryScanResult and netscan.Result.
+
+export interface BatteryScanRequest {
+  battery?: string;
+  range?: string;
+  port?: number;
+}
+
+export interface BatteryScanEntry {
+  address: string;
+  port_open: boolean;
+  battery: boolean;
+  detail?: string;
+  latency_ms?: number;
+}
+
+export interface BatteryScanResult {
+  battery: string;
+  configured_url?: string;
+  range: string;
+  port: number;
+  results: BatteryScanEntry[];
+  scanned: number;
+  responded: number;
+  found: number;
+  elapsed_ms: number;
+  truncated?: boolean;
+}

@@ -442,6 +442,18 @@ func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// POST only, which puts it behind requireAuthForWrites: a scan is read-only
+	// on the battery but it does put traffic on someone's LAN, so it is not
+	// something an anonymous reader of the dashboard gets to start.
+	if len(segments) == 2 && segments[1] == "scan-battery" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleAgentBatteryScan(w, r, agentID)
+		return
+	}
+
 	if len(segments) == 2 && segments[1] == "email-test" {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1661,6 +1673,64 @@ func (s *Server) handleAgentDiag(w http.ResponseWriter, _ *http.Request, agentID
 	}
 	if _, err := w.Write(resp.Diagnostics); err != nil {
 		s.log.With(slog.Any("error", err)).Error("write diagnostics response")
+	}
+}
+
+// handleAgentBatteryScan asks a connected agent to sweep for its battery and
+// returns what it found verbatim.
+//
+// The timeout is wide because the sweep is the slow part and there is nothing
+// useful to return early: a scan that gave up at ten seconds would report "not
+// found" about a subnet it had half-finished, which is the one answer worse than
+// waiting. The agent caps its own sweep below this, so the usual outcome is the
+// agent's own result rather than this timeout.
+func (s *Server) handleAgentBatteryScan(w http.ResponseWriter, r *http.Request, agentID string) {
+	s.agentsMu.RLock()
+	agent, ok := s.agents[agentID]
+	s.agentsMu.RUnlock()
+
+	if !ok {
+		http.Error(w, "agent not connected", http.StatusNotFound)
+		return
+	}
+
+	var req BatteryScanRequest
+	if r.Body != nil {
+		// An empty body is the common case: it means "look where the battery is
+		// configured to be", and the agent works the range out for itself.
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			http.Error(w, fmt.Sprintf("invalid request body: %v", err), http.StatusBadRequest)
+			return
+		}
+	}
+
+	s.log.With(
+		slog.String("agent", agentID),
+		slog.String("battery", req.Battery),
+		slog.String("range", req.Range),
+	).Info("battery scan requested")
+
+	resp, err := agent.requestBatteryScan(req, 2*time.Minute)
+	if err != nil {
+		s.log.With(slog.String("agent", agentID), slog.Any("error", err)).Error("requesting battery scan from agent")
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if resp.Error != "" {
+		// The agent rejected the request itself — an unparseable range, an
+		// ambiguous battery name, a scan already running. That is the operator's
+		// mistake to fix, not a server fault.
+		http.Error(w, resp.Error, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if len(resp.Scan) == 0 {
+		_, _ = w.Write([]byte("{}"))
+		return
+	}
+	if _, err := w.Write(resp.Scan); err != nil {
+		s.log.With(slog.Any("error", err)).Error("write battery scan response")
 	}
 }
 

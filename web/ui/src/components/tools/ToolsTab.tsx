@@ -1,6 +1,7 @@
 import { StatusMessagePreview } from "./StatusMessagePreview";
 import { LogViewer } from "./LogViewer";
 import { AgentMaintenance } from "./AgentMaintenance";
+import { BatteryScan } from "./BatteryScan";
 
 interface ToolsTabProps {
   // Status message
@@ -25,6 +26,8 @@ interface ToolsTabProps {
   // Agent process
   agentOnline: boolean;
   readonly: boolean;
+  // Battery scan
+  batteryNames: string[];
 }
 
 export function ToolsTab({
@@ -47,6 +50,7 @@ export function ToolsTab({
   logsDisabled,
   agentOnline,
   readonly,
+  batteryNames,
 }: ToolsTabProps) {
   return (
     <>
@@ -70,8 +74,12 @@ export function ToolsTab({
         onLinesChange={onLinesChange}
         disabled={logsDisabled}
       />
-      {/* Restarting is a write, so it is shown to logged-in users only — the
-          same line the database inspector and the config forms draw. */}
+      {/* Both of these act on the device rather than just reading it, so they
+          are shown to logged-in users only — the same line the database
+          inspector and the config forms draw. */}
+      {!readonly && (
+        <BatteryScan agentId={agentId} online={agentOnline} batteryNames={batteryNames} />
+      )}
       {!readonly && <AgentMaintenance agentId={agentId} online={agentOnline} />}
     </>
   );

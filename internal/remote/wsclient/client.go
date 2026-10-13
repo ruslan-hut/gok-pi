@@ -41,6 +41,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -83,6 +84,8 @@ const (
 	messageTypeLogResponse  = "agent.log.response"
 	messageTypeDiagRequest  = "server.diag.request"
 	messageTypeDiagResponse = "agent.diag.response"
+	messageTypeScanRequest  = "server.scan.request"
+	messageTypeScanResponse = "agent.scan.response"
 )
 
 type AgentMetadata struct {
@@ -163,6 +166,11 @@ type Client struct {
 	configSync      chan configSnapshot
 	initialConfig   *configSnapshot
 	initialConfigMu sync.RWMutex
+
+	// batteryScanner answers the battery-scan RPC; see scan.go. It is set once
+	// before Run and only read afterwards, so it needs no lock.
+	batteryScanner BatteryScanner
+	scanRunning    atomic.Bool
 }
 
 func New(cfg config.RemoteControl, meta AgentMetadata, log *slog.Logger) *Client {
@@ -568,6 +576,8 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn) error {
 			c.handleLogRequest(raw)
 		case messageTypeDiagRequest:
 			c.handleDiagRequest(raw)
+		case messageTypeScanRequest:
+			c.handleScanRequest(ctx, raw)
 		default:
 			var msg IncomingMessage
 			if err := json.Unmarshal(raw, &msg); err != nil {
