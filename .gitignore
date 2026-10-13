@@ -12,3 +12,4 @@ PLAN.md
 /essprobe
 .DS_Store
 .env.*
+*.log
