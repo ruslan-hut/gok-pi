@@ -116,10 +116,6 @@ export function BatteryScan({ agentId, online, batteryNames }: BatteryScanProps)
               placeholder="the battery's own subnet"
               disabled={disabled}
             />
-            <small className="form-help-text">
-              Leave empty to sweep the /24 around the configured address. Accepts
-              <code>192.168.1.0/24</code>, <code>192.168.1.100-150</code> or a comma-separated list.
-            </small>
           </label>
 
           <button type="button" className="button-small" onClick={onScan} disabled={disabled}>
@@ -127,6 +123,11 @@ export function BatteryScan({ agentId, online, batteryNames }: BatteryScanProps)
             {busy ? "Scanning…" : "Scan"}
           </button>
         </div>
+
+        <small className="form-help-text battery-scan-help">
+          Leave the range empty to sweep the /24 around the configured address. Accepts
+          <code>192.168.1.0/24</code>, <code>192.168.1.100-150</code> or a comma-separated list.
+        </small>
 
         {busy && (
           <small className="form-help-text">
