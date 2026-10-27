@@ -5,6 +5,7 @@
 | [architecture.md](architecture.md) | Executables, package map, control loop, drivers, remote protocol, config sync, metrics |
 | [deployment.md](deployment.md) | Control server config, CI deploy, systemd units, agent build, config and auto-update |
 | [pi-agent-setup.md](pi-agent-setup.md) | Raspberry Pi as on-site agent: OS, service user, systemd, updater, migrating Merce 5 off the L2TP link |
+| [merce5-isolation-router.md](merce5-isolation-router.md) | Merce 5: spare MikroTik to isolate the batteries, find their addresses and fix an IP conflict on site |
 | [battery-scan.md](battery-scan.md) | Finding a battery that moved: the Tools-tab sweep, range forms, two-stage probe, code map |
 | [evsys-integration.md](evsys-integration.md) | EV charger webhooks: evsys setup, charger↔battery links, override behaviour |
 | [huawei-integration.md](huawei-integration.md) | Huawei LUNA2000B over Modbus-TCP: site, validated point table, SmartLogger dispatch registers and handover options, bring-up stages |
