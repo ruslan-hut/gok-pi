@@ -19,7 +19,7 @@ battery has, check for duplicates, and open the batteries' web UI.
 | Address | **192.168.88.250/24** on `bridge`; the default `.1` is removed |
 | LAN ports | ether2–ether5 (bridge) |
 | ether1 | default WAN (DHCP client); leave it **unplugged** |
-| Wi‑Fi | wlan1 and wlan2 disabled |
+| Wi‑Fi | `iso-mikrotik` (2.4 GHz) and `iso-mikrotik-5g` (5 GHz), WPA2-PSK AES, WPS off, bridged with the LAN ports; key held by the owner (not stored here) |
 | DHCP server | on, pool `192.168.88.200–239`, lease 10 min, **no gateway, no DNS** |
 | Services | ssh 22, winbox 8291, www 80; telnet, ftp, api, api-ssl disabled |
 | Login | `admin`, password set by the owner (not stored here) |
@@ -40,7 +40,9 @@ Why it is set up this way:
 Applied to a factory-reset router:
 
 ```
-/interface wireless disable wlan1,wlan2
+/interface wireless security-profiles add name=iso mode=dynamic-keys authentication-types=wpa2-psk unicast-ciphers=aes-ccm group-ciphers=aes-ccm wpa2-pre-shared-key=<key>
+/interface wireless set wlan1 ssid=iso-mikrotik    band=2ghz-b/g/n  security-profile=iso wps-mode=disabled country=spain disabled=no
+/interface wireless set wlan2 ssid=iso-mikrotik-5g band=5ghz-a/n/ac security-profile=iso wps-mode=disabled country=spain disabled=no
 /ip address add address=192.168.88.250/24 interface=bridge comment=isolation
 /ip address remove [find address="192.168.88.1/24"]
 /ip pool set default-dhcp ranges=192.168.88.200-192.168.88.239
@@ -62,6 +64,9 @@ Netinstall (15 s+) mode. After reset: `192.168.88.1`, user `admin`, empty passwo
 
 1. Laptop: internet over Wi‑Fi or the phone, cable to **ether2–5** of the
    router. The laptop gets `192.168.88.200–239` and keeps its internet.
+   Without a cable: join Wi‑Fi `iso-mikrotik`. The laptop's only Wi‑Fi is then
+   taken, so internet has to come from the phone over USB or Bluetooth
+   tethering.
 2. Check: `ping 192.168.88.250`, then `ssh admin@192.168.88.250`.
 3. Before unplugging the batteries, note which port of the site switch/router
    each one uses, so they can go back.
