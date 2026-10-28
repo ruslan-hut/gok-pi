@@ -115,9 +115,34 @@ pool per battery below, and update the battery URLs in the agent config
 
 | Battery | MAC | Address found | Final address |
 |---|---|---|---|
-| 001 | ? | ? | ? |
-| 002 | ? | ? | ? |
-| 003 | ? | ? | ? |
+| 001 | `c4:00:ad:e6:80:46` | `192.168.8.10` static | `192.168.88.5` static |
+| 002 | `c4:00:ad:ed:e4:5f` | `192.168.8.11` static | `192.168.88.6` static |
+| 003 | `cc:82:7f:2d:35:92` | `192.168.8.12` static | `192.168.88.7` static |
+
+Found 2026-10-28 on the isolation router: all three still on their old static
+addresses in `192.168.8.0/24`, unique IPs and MACs, so no conflict between them.
+They were unreachable because the site network is now `192.168.88.0/24` and
+nothing routes the old subnet. All answer `/api/v2/status` without a token.
+BAT 003 reported `SystemStatus=Init`, `Uac=1` V and zero production and
+consumption — no AC voltage on its side, to be checked separately.
+
+Moved the same day to `.5–.7` (mask `/24`, gateway and DNS `192.168.88.1`).
+The site pool was not read; `.5–.7` were picked on the assumption that the site
+MikroTik (`router.lan`, MAC `2C:C8:1B:E4:EB:D3`) still has the defconf pool
+`192.168.88.10–254` — leases seen from `.23` to `.215`, `.2`/`.3` are static
+MikroTik APs. Verify with `/ip pool print` on `192.168.88.1` when possible.
+Back on the site network all three answer at the new addresses; BAT 003 then
+reported `SystemStatus=Critical Error`, `Ubat=-1`. Two Fronius inverters sit at
+`192.168.88.62`/`.63`.
+
+After a reboot all three were back on `192.168.8.10–12` (same MACs): the new
+address took effect at once but was not kept across a restart. The battery
+only keeps a new address once its web UI has been opened **at the new
+address** right after the change — that visit confirms it. Without it the
+battery falls back to the previous settings on the next reboot. So: change the
+address, open `http://<new ip>` straight away, then reboot once to check. Site
+`192.168.88.10` and `.12` are now taken by other devices, so the old host
+numbers cannot be reused in the site subnet.
 
 Site router (`192.168.88.x`): model ?, address ?, DHCP pool ?.
 
