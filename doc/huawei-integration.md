@@ -235,7 +235,8 @@ Enough to run a whole-site driver from unit 0 alone:
 
 ### Power meter (unit 3)
 
-SL §2.4: **positive = fed to the grid, negative = drawn from the grid**. Key
+SL §2.4 states positive = fed to the grid. **On this site it is the opposite:
+positive = import, negative = export** (measured 2026-11-03, see below). Key
 registers: 32278 active power (I32, gain 1000, kW), 32335/32337/32339 per-phase
 active power, 32357 / 32349 positive / negative active energy (I64, gain 100;
 which one is import follows the meter direction setting, so check it against
@@ -304,9 +305,9 @@ during an evening or EV discharge before relying on it for control.
 
 Voltages 237–240 V phase, 412–416 V line. 32278 hovered around 0 (±0.3 kW),
 consistent with the logger's export-limitation loop holding grid exchange at zero.
-32341 total = 32357 positive (1077 kWh) − 32349 negative (8627 kWh). By the
-meter's sign convention (positive = export) and the site's profile, **32349 is
-lifetime import and 32357 export**. That is inferred from magnitudes, not yet
+32341 total = 32357 positive (1077 kWh) − 32349 negative (8627 kWh). This section
+first read 32349 as lifetime import. **That was wrong:** 32349 is export and 32357
+is import, measured 2026-11-03. It was inferred from magnitudes, not yet
 checked against a direction of flow.
 
 ### Connectivity
@@ -342,20 +343,23 @@ assumption against the running firmware before stage 4.
 
 The read-only driver returned plausible readings from the real site. PV, ESS and
 meter are read in separate requests, so while power is moving the derived
-consumption can be off for a sample (ESS −23.5 kW, PV 22.7 kW, meter +5.1 kW gave
-a negative load, floored to 0). Use averages rather than single samples.
+consumption can be off for a sample. Use averages rather than single samples.
+
+**Meter direction, measured.** Over 30 minutes the logger's *Grid import today* (40513)
+rose 0.04 kWh with export (40511) flat, and meter 32357 rose by the same 0.04 kWh with
+32349 flat. So 32357 is import and 32349 export. FusionSolar agrees: about 3 kWh a day
+imported and 83 exported in October, against 3 and 82 from the deltas below. Power follows
+the counters: over 176 samples, `PV + ESS + 32278` stays near the site's load (minimum
+−1.8 kW), while `PV + ESS − 32278` reaches −16.9 kW. The driver and `essprobe` read the
+meter this way.
 
 Counter deltas since 2026-09-28, 35.9 days:
 
 | Counter | Delta | Per day |
 |---|---|---|
-| 32349 Meter negative (import) | 2,945 kWh | 82 kWh |
-| 32357 Meter positive (export) | 110 kWh | 3 kWh |
+| 32357 Meter positive (import) | 110 kWh | 3 kWh |
+| 32349 Meter negative (export) | 2,945 kWh | 82 kWh |
 | 40476 ESS discharged | 3,621 kWh | 101 kWh |
-
-Only 3 kWh a day leaves through the meter while 101 kWh a day is discharged, so the
-discharge is consumed on site. Next to a base load near 1 kW, that points to the EV
-chargers sitting behind the meter. A session-by-session check on site settles it.
 
 ## Handing over control
 
@@ -510,8 +514,8 @@ SmartLogger. Enable it with no schedules and no charger link.
 | `RemainingCapacityWh` | 40482 |
 | `PacTotalW` | 40392, AC side, negative = charge. The discharge direction is still inferred |
 | `ProductionW` | 40388 |
-| `GridFeedInW` | meter 32278, positive = export |
-| `ConsumptionW` | `ProductionW + PacTotalW − GridFeedInW`, floored at 0. Assumes the meter sits at the grid connection, to be confirmed on site |
+| `GridFeedInW` | meter 32278 with the sign reversed: on this site 32278 is positive on import |
+| `ConsumptionW` | `ProductionW + PacTotalW − GridFeedInW`, floored at 0. The EV chargers are behind the meter: sessions give 94–100 % of FusionSolar's consumption in August and October |
 | `BatteryCharging`, `BatteryDischarging` | `PacTotalW` beyond ±100 W |
 | `OperatingMode` | always `2` (auto): the logger runs the array |
 

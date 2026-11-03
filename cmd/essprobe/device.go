@@ -172,7 +172,7 @@ var meterDevice = &device{
 		{"A-B line voltage", huawei.MeterVoltageAB, plausibleRange(170, 520)},
 	},
 	status: []huawei.Register{huawei.MeterActivePower},
-	footer: "On this meter positive active power is export to the grid, negative is import (SL section 2.4).",
+	footer: "Measured on site 2026-11-03: positive active power is import, negative is export. SL section 2.4 states the opposite.",
 	annotate: func(reg huawei.Register, s *sample) string {
 		switch reg.Addr {
 		case huawei.MeterActivePower.Addr, huawei.MeterActivePowerA.Addr,
@@ -329,9 +329,9 @@ func gridDirection(s *sample, reg huawei.Register) string {
 	case !ok || v == 0:
 		return ""
 	case v > 0:
-		return "export to grid"
-	default:
 		return "import from grid"
+	default:
+		return "export to grid"
 	}
 }
 

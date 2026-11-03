@@ -153,7 +153,7 @@ func TestIdentifyMeter(t *testing.T) {
 	}
 
 	got := out.String()
-	for _, want := range []string{"231.2", "399.8", "-12.5", "import from grid"} {
+	for _, want := range []string{"231.2", "399.8", "-12.5", "export to grid"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("identify() output missing %q\n%s", want, got)
 		}

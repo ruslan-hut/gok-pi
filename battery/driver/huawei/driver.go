@@ -135,12 +135,12 @@ func (d *Driver) Status() (*entity.SystemStatus, error) {
 		return nil, fmt.Errorf("implausible soc %g", soc)
 	}
 
-	// Both conventions match Sonnen: 40392 is negative while charging, and the
-	// meter is positive while feeding the grid. The discharge direction of 40392
-	// is inferred until it has been observed on site.
+	// 40392 matches Sonnen, negative while charging; its discharge direction is
+	// inferred until observed on site. The meter is the opposite of its document:
+	// on site, positive power accompanies a rising import counter (2026-11-03).
 	essW := logger[LoggerESSActivePower.Addr] * 1000
 	pvW := logger[LoggerPVActivePower.Addr] * 1000
-	feedInW := meter[MeterActivePower.Addr] * 1000
+	feedInW := -meter[MeterActivePower.Addr] * 1000
 
 	return &entity.SystemStatus{
 		USOC:                soc,

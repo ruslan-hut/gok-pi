@@ -87,7 +87,7 @@ func TestStatus(t *testing.T) {
 	}{
 		{
 			name:   "pv charges the battery",
-			essRaw: -39300, pvRaw: 40300, meterRaw: 100,
+			essRaw: -39300, pvRaw: 40300, meterRaw: -100,
 			wantPac: -39300, wantConsumption: 900, wantCharging: true,
 		},
 		{
@@ -97,12 +97,12 @@ func TestStatus(t *testing.T) {
 		},
 		{
 			name:   "grid covers the load with the battery idle",
-			essRaw: 0, pvRaw: 0, meterRaw: -80000,
+			essRaw: 0, pvRaw: 0, meterRaw: 80000,
 			wantPac: 0, wantConsumption: 80000,
 		},
 		{
 			name:   "noise around zero is idle and never negative",
-			essRaw: -50, pvRaw: 0, meterRaw: 200,
+			essRaw: -50, pvRaw: 0, meterRaw: -200,
 			wantPac: -50, wantConsumption: 0,
 		},
 	}
@@ -134,7 +134,7 @@ func TestStatus(t *testing.T) {
 			if math.Abs(got.ProductionW-float64(tt.pvRaw)) > 1e-6 {
 				t.Errorf("production = %g", got.ProductionW)
 			}
-			if math.Abs(got.GridFeedInW-float64(tt.meterRaw)) > 1e-6 {
+			if math.Abs(got.GridFeedInW+float64(tt.meterRaw)) > 1e-6 {
 				t.Errorf("feed-in = %g", got.GridFeedInW)
 			}
 			if got.BatteryCharging != tt.wantCharging || got.BatteryDischarging != tt.wantDischarging {

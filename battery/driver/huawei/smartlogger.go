@@ -417,7 +417,8 @@ var (
 	// MeterCurrentC is row 9 at 32276.
 	MeterCurrentC = Register{Name: "Phase C current", Addr: 32276, Kind: I32, Gain: 10, Unit: "A", Access: RO}
 
-	// MeterActivePower is row 10, "Active power" at 32278: positive = export.
+	// MeterActivePower is row 10, "Active power" at 32278. The document says
+	// positive = export; on the Pedernoso site positive is import (2026-11-03).
 	MeterActivePower = Register{Name: "Active power", Addr: 32278, Kind: I32, Gain: 1000, Unit: "kW", Access: RO}
 	// MeterReactivePower is row 11 at 32280.
 	MeterReactivePower = Register{Name: "Reactive power", Addr: 32280, Kind: I32, Gain: 1000, Unit: "kVar", Access: RO}
@@ -438,8 +439,7 @@ var (
 	// MeterTotalReactiveEnergy is row 41 at 32345.
 	MeterTotalReactiveEnergy = Register{Name: "Total reactive energy", Addr: 32345, Kind: I64, Gain: 100, Unit: "kvarh", Access: RO}
 	// MeterNegativeActiveEnergy is row 42, "Negative active electricity" at
-	// 32349. Which of negative and positive is import depends on the meter's
-	// direction setting; check against MeterActivePower before relying on it.
+	// 32349. On the Pedernoso site this is export, and positive is import.
 	MeterNegativeActiveEnergy = Register{Name: "Negative active energy", Addr: 32349, Kind: I64, Gain: 100, Unit: "kWh", Access: RO}
 	// MeterNegativeReactiveEnergy is row 43 at 32353.
 	MeterNegativeReactiveEnergy = Register{Name: "Negative reactive energy", Addr: 32353, Kind: I64, Gain: 100, Unit: "kvarh", Access: RO}
