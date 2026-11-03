@@ -202,6 +202,8 @@ func (p *StatusPoller) observe(status *entity.SystemStatus) {
 		RemainingCapacityWh: status.RemainingCapacityWh,
 		ConsumptionW:        status.ConsumptionW,
 		PacTotalW:           status.PacTotalW,
+		ProductionW:         status.ProductionW,
+		GridFeedInW:         status.GridFeedInW,
 		BatteryDischarging:  status.BatteryDischarging,
 		BatteryCharging:     status.BatteryCharging,
 		OperatingMode:       status.OperatingMode,

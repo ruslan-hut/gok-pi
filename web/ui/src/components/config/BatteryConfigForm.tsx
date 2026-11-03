@@ -107,6 +107,7 @@ export function BatteryConfigForm({
               disabled={disabled}
             >
               <option value="sonnen">Sonnen</option>
+              <option value="huawei">Huawei (read-only)</option>
             </select>
           </div>
           <div className="form-field">
@@ -120,12 +121,12 @@ export function BatteryConfigForm({
               onChange={(e) => onChange({ ...battery, url: e.target.value })}
               disabled={disabled}
               required
-              placeholder="http://192.168.1.100"
+              placeholder={battery.driver === "huawei" ? "modbus://192.168.1.100:502" : "http://192.168.1.100"}
             />
           </div>
           <div className="form-field">
             <label htmlFor={`battery-token-${index}`}>
-              Token *
+              Token {battery.driver === "huawei" ? "" : "*"}
             </label>
             <input
               id={`battery-token-${index}`}
@@ -135,7 +136,7 @@ export function BatteryConfigForm({
                 onChange({ ...battery, token: e.target.value })
               }
               disabled={disabled}
-              required
+              required={battery.driver !== "huawei"}
               placeholder="API token"
             />
           </div>

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/jmoiron/sqlx"
 )
 
 func historyStore(t *testing.T) *Store {
@@ -148,5 +150,46 @@ func TestCleanupHistory(t *testing.T) {
 	}
 	if len(remaining) != 1 {
 		t.Fatalf("expected the recent bucket to survive, got %d rows", len(remaining))
+	}
+}
+
+func TestMigrateHistoryAddsPowerColumnsToOldTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+
+	db, err := sqlx.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`
+		CREATE TABLE telemetry_history (
+			agent_id TEXT NOT NULL, battery_name TEXT NOT NULL, bucket TEXT NOT NULL,
+			usoc REAL NOT NULL DEFAULT 0, rsoc REAL NOT NULL DEFAULT 0,
+			remaining_capacity_wh REAL NOT NULL DEFAULT 0,
+			consumption_avg_w REAL NOT NULL DEFAULT 0, consumption_max_w REAL NOT NULL DEFAULT 0,
+			pac_avg_w REAL NOT NULL DEFAULT 0, pac_min_w REAL NOT NULL DEFAULT 0, pac_max_w REAL NOT NULL DEFAULT 0,
+			operating_mode TEXT NOT NULL DEFAULT '', samples INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (agent_id, battery_name, bucket)
+		);
+		INSERT INTO telemetry_history (agent_id, battery_name, bucket, usoc) VALUES ('a', 'b', '2026-11-03T10:00:00Z', 50);
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for range 2 {
+		if err := migrateHistory(db); err != nil {
+			t.Fatalf("migrate: %v", err)
+		}
+	}
+
+	var point TelemetryPoint
+	err = db.Get(&point, `SELECT usoc, production_avg_w, grid_avg_w, grid_min_w, grid_max_w FROM telemetry_history`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if point.USOC != 50 || point.GridMinW != 0 {
+		t.Errorf("got %+v", point)
 	}
 }

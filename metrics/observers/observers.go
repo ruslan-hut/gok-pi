@@ -158,6 +158,8 @@ type Reading struct {
 	RemainingCapacityWh float64
 	ConsumptionW        float64
 	PacTotalW           float64
+	ProductionW         float64
+	GridFeedInW         float64
 	BatteryDischarging  bool
 	BatteryCharging     bool
 	OperatingMode       string
@@ -189,6 +191,8 @@ func UpdateBattery(name string, r Reading) {
 		snapshot.RemainingCapacityWh = r.RemainingCapacityWh
 		snapshot.ConsumptionW = r.ConsumptionW
 		snapshot.PacTotalW = r.PacTotalW
+		snapshot.ProductionW = r.ProductionW
+		snapshot.GridFeedInW = r.GridFeedInW
 		snapshot.BatteryDischarging = r.BatteryDischarging
 		snapshot.BatteryDischargingSet = true
 		snapshot.BatteryCharging = r.BatteryCharging

@@ -12,6 +12,8 @@ export interface TelemetrySnapshot {
   remaining_capacity_wh: number;
   consumption_w: number;
   pac_total_w: number;
+  production_w?: number;
+  grid_feed_in_w?: number;
   battery_discharging: boolean;
   battery_discharging_set: boolean;
   battery_charging?: boolean;
@@ -133,6 +135,10 @@ export interface TelemetryPoint {
   pac_avg_w: number;
   pac_min_w: number;
   pac_max_w: number;
+  production_avg_w?: number;
+  grid_avg_w?: number;
+  grid_min_w?: number;
+  grid_max_w?: number;
   operating_mode: string;
   samples: number;
 }

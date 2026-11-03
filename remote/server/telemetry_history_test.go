@@ -171,3 +171,24 @@ func TestNilRecorderIsInert(t *testing.T) {
 	rec.Flush(now)
 	rec.Forget("agent-1")
 }
+
+func TestStreamKeepsGridExtremesAndSolarAverage(t *testing.T) {
+	s := &telemetryStream{}
+	for _, f := range []TelemetrySnapshot{
+		{ProductionW: 1000, GridFeedInW: -120000},
+		{ProductionW: 3000, GridFeedInW: 500},
+	} {
+		s.accumulate(f)
+	}
+
+	p := s.point(streamKey{agentID: "a", battery: "b"})
+	if p.ProductionAvgW != 2000 || p.GridMinW != -120000 || p.GridMaxW != 500 || p.GridAvgW != -59750 {
+		t.Fatalf("got %+v", p)
+	}
+
+	s.reset(time.Time{})
+	s.accumulate(TelemetrySnapshot{GridFeedInW: 100})
+	if p := s.point(streamKey{}); p.GridMinW != 100 || p.GridMaxW != 100 {
+		t.Fatalf("extremes survived reset: %+v", p)
+	}
+}

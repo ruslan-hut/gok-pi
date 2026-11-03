@@ -1,13 +1,14 @@
 # Huawei LUNA2000B Integration (Modbus-TCP)
 
 Support for Huawei LUNA2000B C&I energy storage systems, reached over Modbus-TCP.
-Status: **reading works on the real site; nothing writes yet.** Modbus TCP is
+Status: **reading works on the real site; nothing writes yet.** A read-only agent
+driver exists (2026-11-03) and has only run against the simulator. Modbus TCP is
 enabled on the SmartLogger, both ESS units answer, and the cabinet point table is
 validated against them (2026-09-15). The SmartLogger's own interface document
 arrived on 2026-09-24. It gives a plant-level ESS dispatch register at unit 0, so
 dispatch no longer has to go to each cabinet. The logger and meter tables were
 validated on site on 2026-09-28 (stage 2b), and the same day the write path was
-proven at unit 0 without changing anything (stage 3). No driver exists yet.
+proven at unit 0 without changing anything (stage 3).
 
 Source documents, both in `huawei/`:
 
@@ -222,7 +223,7 @@ Enough to run a whole-site driver from unit 0 alone:
 | 40516 | SOH | U16, gain 10 | |
 | 40484 | Rated ESS capacity | U32, gain 1000, kWh | **430.08**, the unit-0 equivalent of the RatedCapacity check |
 | 40480 / 40482 | Chargeable / dischargeable energy | U32, gain 1000, kWh | |
-| 40398 | Rated ESS power | U32, gain 1000, kW | **216** (2 × 108, the cabinets' rated power 30238), the base for 40383. Not 2 × Pmax |
+| 40398 | Rated ESS power | U32, gain 1000, kW | **216** on SPC161 (2 × 108, the cabinets' rated power 30238); **280.8** on SPC275 (2 × Pmax). The base for 40383 |
 | 40412 / 40697 | Min / max active power adjustment | I32, gain 10, kW | −225.1 / 335.8: −40490, and 40492 + 55 kW of PV |
 | 40490 / 40492 | Max ESS charge / discharge power now | U32, gain 1000, kW | ≈ 225.2 (varies) / 280.8 (2 × Pmax) |
 | 40392 | Active ESS power | I32, gain 1000, kW | sign unknown. "Output" suggests AC side, negative = charge |
@@ -323,6 +324,38 @@ outside [90, 100], so it is no longer a no-op. Candidate replacement: **41948**
 (comm exception detection time, RW U16, [60, 1800], currently 300). Writing 300
 back changes nothing and exercises both `0x06` and `0x10`. That register is also
 unrelated to dispatch. It does belong to a protection feature (41947) that is off.
+
+## Read-back, 2026-11-03
+
+Read from the laptop over VPN at 10:17Z, no alarms raised, active power control
+mode still 6. The Huawei team has updated the logger firmware since 2026-09-28.
+
+| Item | 2026-09-28 | 2026-11-03 |
+|---|---|---|
+| Logger firmware | V300R024C10SPC161 | **V300R024C10SPC275** |
+| 40398 Rated ESS power | 216 kW | **280.8 kW**. The reference for 40383 moved with it |
+| 42470 / 42471 Array SOC limits | 0 / 0 | **100 / 5**, now matching the UI |
+| 40738 Scheduling target | 55 kW | 50 kW |
+
+The SmartLogger document still describes SPC161's issue; recheck any write-path
+assumption against the running firmware before stage 4.
+
+The read-only driver returned plausible readings from the real site. PV, ESS and
+meter are read in separate requests, so while power is moving the derived
+consumption can be off for a sample (ESS −23.5 kW, PV 22.7 kW, meter +5.1 kW gave
+a negative load, floored to 0). Use averages rather than single samples.
+
+Counter deltas since 2026-09-28, 35.9 days:
+
+| Counter | Delta | Per day |
+|---|---|---|
+| 32349 Meter negative (import) | 2,945 kWh | 82 kWh |
+| 32357 Meter positive (export) | 110 kWh | 3 kWh |
+| 40476 ESS discharged | 3,621 kWh | 101 kWh |
+
+Only 3 kWh a day leaves through the meter while 101 kWh a day is discharged, so the
+discharge is consumed on site. Next to a base load near 1 kW, that points to the EV
+chargers sitting behind the meter. A session-by-session check on site settles it.
 
 ## Handing over control
 
@@ -453,6 +486,7 @@ shows exactly which address is unsupported, instead of failing the whole block.
 | `battery/driver/huawei/smartlogger_alarms.go` | all 90 alarms of SL table 2-2, with sub-IDs and causes |
 | `battery/driver/huawei/blocks.go` | batching reads into `0x03` requests |
 | `battery/driver/huawei/devicelist.go` | parsing the vendor device-description format |
+| `battery/driver/huawei/driver.go` | read-only `driver.Driver` for the whole array at unit 0, with the grid meter |
 | `cmd/essprobe/` | read-only field diagnostic for cabinet, logger and meter |
 | `cmd/writeproof/` | stage 3: writes an allowlisted unit-0 register's current value back with `0x06` and `0x10` |
 
@@ -464,9 +498,33 @@ scanning, Japanese remote-output signals and the write-only commands. The two
 alarm bits the document assigns twice (50005 bits 13 and 14) are kept with both
 claimants, so a raised bit reports both.
 
-**No `driver.Driver` implementation yet.** Nothing calls `driver.Register`, there
-is no blank import in `cmd/gok/main.go`, and the Web UI driver select is
-untouched.
+### The read-only driver
+
+`driver: huawei` with `url: modbus://<logger>:502` (add `?meter_unit=N` if the meter
+is not at unit 3; no token is needed). One gok battery is the ESS array behind one
+SmartLogger. Enable it with no schedules and no charger link.
+
+| `entity.SystemStatus` | Source |
+|---|---|
+| `USOC`, `RSOC` | 40515. Outside 0–100 % the reading is refused |
+| `RemainingCapacityWh` | 40482 |
+| `PacTotalW` | 40392, AC side, negative = charge. The discharge direction is still inferred |
+| `ProductionW` | 40388 |
+| `GridFeedInW` | meter 32278, positive = export |
+| `ConsumptionW` | `ProductionW + PacTotalW − GridFeedInW`, floored at 0. Assumes the meter sits at the grid connection, to be confirmed on site |
+| `BatteryCharging`, `BatteryDischarging` | `PacTotalW` beyond ±100 W |
+| `OperatingMode` | always `2` (auto): the logger runs the array |
+
+A failure on either unit fails the whole reading, as does a register holding the
+maximum of its type. The driver never constructs a `modbus.Writer`. `StartDischarge`,
+`StartCharge` and `SwitchOperatingModeToManual` return `ErrReadOnly`; `StopDischarge`,
+`StopCharge` and `SwitchOperatingModeToAuto` succeed without touching anything, since
+there is nothing to undo. The connection closes after 30 s without a poll, which
+releases the logger's client slot when a worker restarts.
+
+Solar and grid power travel in telemetry as `production_w` and `grid_feed_in_w`, and
+are stored per minute in `telemetry_history`: `production_avg_w`, `grid_avg_w`,
+`grid_max_w` and `grid_min_w`, the strongest import of the minute.
 
 ### The read-only guarantee
 
@@ -606,15 +664,10 @@ LAN (added to the Modbus TCP whitelist) so that a multi-day recording and a live
 setpoint do not depend on a VPN session. Start with a small discharge
 (≤ 10 kW), in a window with no EV sessions.
 
-## Adding the driver later
+## Adding control to the driver later
 
-Per [architecture.md](architecture.md#battery-drivers), a new driver needs: a package implementing `driver.Driver`, a
-`driver.Register("huawei", …)` call in its `init()`, a blank import in
-`cmd/gok/main.go`, and a matching option in
-`web/ui/src/components/config/BatteryConfigForm.tsx`.
-
-With the logger document, the mapping becomes a **whole-site driver at unit 0**:
-one gok battery = the ESS array behind one SmartLogger.
+Only if the site's plan calls for writes. The mapping for control, on top of the
+read-only driver:
 
 | `driver.Driver` | Huawei (option B) |
 |---|---|

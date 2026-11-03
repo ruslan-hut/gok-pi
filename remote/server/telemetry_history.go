@@ -49,6 +49,10 @@ type telemetryStream struct {
 	pacSum         float64
 	pacMin         float64
 	pacMax         float64
+	productionSum  float64
+	gridSum        float64
+	gridMin        float64
+	gridMax        float64
 
 	usoc          float64
 	rsoc          float64
@@ -185,7 +189,11 @@ func (s *telemetryStream) accumulate(snap TelemetrySnapshot) {
 	if s.samples == 0 {
 		s.pacMin = snap.PacTotalW
 		s.pacMax = snap.PacTotalW
+		s.gridMin = snap.GridFeedInW
+		s.gridMax = snap.GridFeedInW
 	} else {
+		s.gridMin = min(s.gridMin, snap.GridFeedInW)
+		s.gridMax = max(s.gridMax, snap.GridFeedInW)
 		if snap.PacTotalW < s.pacMin {
 			s.pacMin = snap.PacTotalW
 		}
@@ -199,6 +207,8 @@ func (s *telemetryStream) accumulate(snap TelemetrySnapshot) {
 		s.consumptionMax = snap.ConsumptionW
 	}
 	s.pacSum += snap.PacTotalW
+	s.productionSum += snap.ProductionW
+	s.gridSum += snap.GridFeedInW
 
 	s.usoc = snap.USOC
 	s.rsoc = snap.RSOC
@@ -223,6 +233,10 @@ func (s *telemetryStream) point(key streamKey) sessiondb.TelemetryPoint {
 		PacAvgW:             s.pacSum / samples,
 		PacMinW:             s.pacMin,
 		PacMaxW:             s.pacMax,
+		ProductionAvgW:      s.productionSum / samples,
+		GridAvgW:            s.gridSum / samples,
+		GridMinW:            s.gridMin,
+		GridMaxW:            s.gridMax,
 		OperatingMode:       s.operatingMode,
 		Samples:             s.samples,
 	}
@@ -237,4 +251,8 @@ func (s *telemetryStream) reset(bucket time.Time) {
 	s.pacSum = 0
 	s.pacMin = 0
 	s.pacMax = 0
+	s.productionSum = 0
+	s.gridSum = 0
+	s.gridMin = 0
+	s.gridMax = 0
 }

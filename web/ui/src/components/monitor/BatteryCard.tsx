@@ -195,6 +195,21 @@ export function BatteryCard({
           qualifier={pacDirection(snapshot.pac_total_w)}
           hint="Power across the battery's inverter (Pac). Out means the battery is supplying the site, in means it is being charged."
         />
+        {snapshot.production_w !== undefined && (
+          <Metric
+            label="Solar"
+            value={`${snapshot.production_w.toFixed(0)} W`}
+            hint="What the solar panels are producing right now."
+          />
+        )}
+        {snapshot.grid_feed_in_w !== undefined && (
+          <Metric
+            label="Grid"
+            value={`${Math.abs(snapshot.grid_feed_in_w).toFixed(0)} W`}
+            qualifier={snapshot.grid_feed_in_w < 0 ? "import" : "export"}
+            hint="Power at the grid connection. Import means the site is drawing from the grid, export means it is feeding it."
+          />
+        )}
         <Metric
           label="Mode"
           value={renderOperatingMode(snapshot.operating_mode)}

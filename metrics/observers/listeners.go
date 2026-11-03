@@ -13,6 +13,8 @@ type Snapshot struct {
 	RemainingCapacityWh   float64 `json:"remaining_capacity_wh"`
 	ConsumptionW          float64 `json:"consumption_w"`
 	PacTotalW             float64 `json:"pac_total_w"`
+	ProductionW           float64 `json:"production_w"`
+	GridFeedInW           float64 `json:"grid_feed_in_w"` // positive = export, negative = import
 	BatteryDischarging    bool    `json:"battery_discharging"`
 	BatteryDischargingSet bool    `json:"battery_discharging_set"`
 	BatteryCharging       bool    `json:"battery_charging"`

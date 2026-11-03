@@ -34,6 +34,15 @@ type TelemetryPoint struct {
 	PacMinW float64 `db:"pac_min_w" json:"pac_min_w"`
 	PacMaxW float64 `db:"pac_max_w" json:"pac_max_w"`
 
+	ProductionAvgW float64 `db:"production_avg_w" json:"production_avg_w"`
+
+	// Grid power is positive for export and negative for import. GridMinW is the
+	// strongest import of the minute, which is what a contracted import limit
+	// is measured against.
+	GridAvgW float64 `db:"grid_avg_w" json:"grid_avg_w"`
+	GridMinW float64 `db:"grid_min_w" json:"grid_min_w"`
+	GridMaxW float64 `db:"grid_max_w" json:"grid_max_w"`
+
 	OperatingMode string `db:"operating_mode" json:"operating_mode"` // last mode seen in the minute
 	Samples       int    `db:"samples"        json:"samples"`
 }
@@ -84,6 +93,31 @@ func migrateHistory(db *sqlx.DB) error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_history_bucket ON telemetry_history(bucket);
 	`)
+	if err != nil {
+		return err
+	}
+
+	for _, column := range []string{"production_avg_w", "grid_avg_w", "grid_min_w", "grid_max_w"} {
+		if err := addHistoryColumn(db, column); err != nil {
+			return fmt.Errorf("add column %s: %w", column, err)
+		}
+	}
+	return nil
+}
+
+// addHistoryColumn adds a power column to a table created by an older version.
+// SQLite has no ADD COLUMN IF NOT EXISTS.
+func addHistoryColumn(db *sqlx.DB, column string) error {
+	var exists bool
+	err := db.Get(&exists, `SELECT COUNT(*) > 0 FROM pragma_table_info('telemetry_history') WHERE name = ?`, column)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+
+	_, err = db.Exec(`ALTER TABLE telemetry_history ADD COLUMN ` + column + ` REAL NOT NULL DEFAULT 0`)
 	return err
 }
 
@@ -104,8 +138,9 @@ func (s *Store) UpsertTelemetryPoints(points []TelemetryPoint) error {
 			INSERT INTO telemetry_history (
 				agent_id, battery_name, bucket, usoc, rsoc, remaining_capacity_wh,
 				consumption_avg_w, consumption_max_w, pac_avg_w, pac_min_w, pac_max_w,
+				production_avg_w, grid_avg_w, grid_min_w, grid_max_w,
 				operating_mode, samples
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(agent_id, battery_name, bucket) DO UPDATE SET
 				usoc = excluded.usoc,
 				rsoc = excluded.rsoc,
@@ -115,10 +150,15 @@ func (s *Store) UpsertTelemetryPoints(points []TelemetryPoint) error {
 				pac_avg_w = excluded.pac_avg_w,
 				pac_min_w = excluded.pac_min_w,
 				pac_max_w = excluded.pac_max_w,
+				production_avg_w = excluded.production_avg_w,
+				grid_avg_w = excluded.grid_avg_w,
+				grid_min_w = excluded.grid_min_w,
+				grid_max_w = excluded.grid_max_w,
 				operating_mode = excluded.operating_mode,
 				samples = excluded.samples`,
 			p.AgentID, p.BatteryName, p.Bucket, p.USOC, p.RSOC, p.RemainingCapacityWh,
 			p.ConsumptionAvgW, p.ConsumptionMaxW, p.PacAvgW, p.PacMinW, p.PacMaxW,
+			p.ProductionAvgW, p.GridAvgW, p.GridMinW, p.GridMaxW,
 			p.OperatingMode, p.Samples,
 		)
 		if err != nil {
@@ -136,6 +176,7 @@ func (s *Store) UpsertTelemetryPoints(points []TelemetryPoint) error {
 func (s *Store) QueryTelemetryHistory(q HistoryQuery) ([]TelemetryPoint, error) {
 	query := `SELECT agent_id, battery_name, bucket, usoc, rsoc, remaining_capacity_wh,
 	                 consumption_avg_w, consumption_max_w, pac_avg_w, pac_min_w, pac_max_w,
+	                 production_avg_w, grid_avg_w, grid_min_w, grid_max_w,
 	                 operating_mode, samples
 	          FROM telemetry_history
 	          WHERE bucket >= ?`

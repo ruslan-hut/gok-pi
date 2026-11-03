@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"gok-pi/battery/controller"
 	"gok-pi/battery/driver"
+	_ "gok-pi/battery/driver/huawei"
 	_ "gok-pi/battery/driver/sonnen"
 	"gok-pi/battery/entity"
 	"gok-pi/internal/config"
