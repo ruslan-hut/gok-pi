@@ -9,6 +9,7 @@ import (
 	"gok-pi/internal/lib/sl"
 	"gok-pi/internal/modbus"
 	"log/slog"
+	"math"
 	"net"
 	"net/url"
 	"strconv"
@@ -138,14 +139,14 @@ func (d *Driver) Status() (*entity.SystemStatus, error) {
 	// 40392 matches Sonnen, negative while charging; its discharge direction is
 	// inferred until observed on site. The meter is the opposite of its document:
 	// on site, positive power accompanies a rising import counter (2026-11-03).
-	essW := logger[LoggerESSActivePower.Addr] * 1000
-	pvW := logger[LoggerPVActivePower.Addr] * 1000
-	feedInW := -meter[MeterActivePower.Addr] * 1000
+	essW := wholeWatts(logger[LoggerESSActivePower.Addr])
+	pvW := wholeWatts(logger[LoggerPVActivePower.Addr])
+	feedInW := 0 - wholeWatts(meter[MeterActivePower.Addr]) // not unary minus: an idle meter must not read -0
 
 	return &entity.SystemStatus{
 		USOC:                soc,
 		RSOC:                soc,
-		RemainingCapacityWh: logger[LoggerDischargeableCapacity.Addr] * 1000,
+		RemainingCapacityWh: wholeWatts(logger[LoggerDischargeableCapacity.Addr]),
 		PacTotalW:           essW,
 		ProductionW:         pvW,
 		GridFeedInW:         feedInW,
@@ -154,6 +155,12 @@ func (d *Driver) Status() (*entity.SystemStatus, error) {
 		BatteryDischarging:  essW > activeThresholdW,
 		OperatingMode:       opModeAuto,
 	}, nil
+}
+
+// wholeWatts converts kW or kWh to a whole number of W or Wh. The registers hold whole watts, and
+// without the rounding the division by gain and this multiplication leave a binary fraction behind.
+func wholeWatts(kilo float64) float64 {
+	return math.Round(kilo * 1000)
 }
 
 // read fetches regs from one unit, one contiguous block at a time, so that a

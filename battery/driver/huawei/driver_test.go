@@ -234,3 +234,23 @@ func TestRegisteredWithDriverFactory(t *testing.T) {
 		t.Fatalf("got %T", d)
 	}
 }
+
+func TestWholeWattsLeavesNoBinaryFraction(t *testing.T) {
+	for raw := -400000; raw <= 400000; raw += 7 {
+		if got := wholeWatts(float64(raw) / 1000); got != float64(raw) {
+			t.Fatalf("wholeWatts(%d/1000) = %v", raw, got)
+		}
+	}
+}
+
+func TestIdleMeterIsNotNegativeZero(t *testing.T) {
+	_, d := newSite(t)
+
+	got, err := d.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Signbit(got.GridFeedInW) {
+		t.Errorf("feed-in = %v, want +0", got.GridFeedInW)
+	}
+}

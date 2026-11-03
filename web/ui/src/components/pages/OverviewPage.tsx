@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchDBStats } from "../../api";
 import { Icon } from "../shared/Icon";
 import { boardTempLevel, boardTitle, fmtBoardTempShort } from "../../lib/board";
-import { fmtAgo, fmtBytes, fmtDate, fmtEnergy, fmtSignedEUR } from "../../lib/format";
+import { fmtAgo, fmtBytes, fmtDate, fmtEnergy, fmtSignedEUR, fmtWatts } from "../../lib/format";
 import type {
   AgentsMap,
   AppPage,
@@ -233,7 +233,7 @@ function BatteryRow({
           {flow.label}
         </span>
         {power > 0 && (
-          <span className="overview-battery-power">{power} W</span>
+          <span className="overview-battery-power">{fmtWatts(power)}</span>
         )}
       </div>
     </div>

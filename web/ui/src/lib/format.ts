@@ -3,6 +3,11 @@
 
 const LOCALE = "en-GB";
 
+/** fmtWatts renders a power magnitude in whole watts; the caller shows its direction. */
+export function fmtWatts(watts: number): string {
+  return `${Math.abs(watts).toFixed(0)} W`;
+}
+
 /** fmtEUR renders a money amount at fixed 2dp so columns align on the decimal. */
 export function fmtEUR(eur: number): string {
   return `${eur.toFixed(2)} EUR`;

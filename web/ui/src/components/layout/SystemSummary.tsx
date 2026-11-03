@@ -1,3 +1,4 @@
+import { fmtWatts } from "../../lib/format";
 import type { TelemetrySnapshot } from "../../types";
 
 interface SystemSummaryProps {
@@ -43,7 +44,7 @@ export function SystemSummary({ batteries }: SystemSummaryProps) {
           Net flow
         </span>
         <span className="system-summary-value">
-          {Math.abs(totalPac)} W
+          {fmtWatts(totalPac)}
           {totalPac !== 0 && (
             <span className="metric-qualifier">
               {" "}

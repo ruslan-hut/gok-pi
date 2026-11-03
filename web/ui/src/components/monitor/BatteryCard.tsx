@@ -3,6 +3,7 @@ import type { MouseEvent } from "react";
 import { Metric } from "./Metric";
 import { Icon } from "../shared/Icon";
 import type { BatteryConfig, CommandState, TelemetrySnapshot } from "../../types";
+import { fmtWatts } from "../../lib/format";
 
 const defaultCommandState: CommandState = {
   power: 500,
@@ -185,28 +186,28 @@ export function BatteryCard({
           hint="Energy left in the battery right now, not its total capacity."
         />
         <Metric
-          label="House load"
-          value={`${snapshot.consumption_w} W`}
+          label="Site load"
+          value={fmtWatts(snapshot.consumption_w)}
           hint="What the site is drawing right now, from any source."
         />
         <Metric
           label="AC power"
-          value={`${Math.abs(snapshot.pac_total_w)} W`}
+          value={fmtWatts(snapshot.pac_total_w)}
           qualifier={pacDirection(snapshot.pac_total_w)}
           hint="Power across the battery's inverter (Pac). Out means the battery is supplying the site, in means it is being charged."
         />
         {snapshot.production_w !== undefined && (
           <Metric
             label="Solar"
-            value={`${snapshot.production_w.toFixed(0)} W`}
+            value={fmtWatts(snapshot.production_w)}
             hint="What the solar panels are producing right now."
           />
         )}
         {snapshot.grid_feed_in_w !== undefined && (
           <Metric
             label="Grid"
-            value={`${Math.abs(snapshot.grid_feed_in_w).toFixed(0)} W`}
-            qualifier={snapshot.grid_feed_in_w < 0 ? "import" : "export"}
+            value={fmtWatts(snapshot.grid_feed_in_w)}
+            qualifier={gridDirection(snapshot.grid_feed_in_w)}
             hint="Power at the grid connection. Import means the site is drawing from the grid, export means it is feeding it."
           />
         )}
@@ -372,6 +373,12 @@ export function BatteryCard({
 }
 
 /** Positive Pac is energy leaving the battery; see remote/server/sessions.go. */
+// A value that displays as 0 W has no direction worth naming.
+function gridDirection(feedInW: number): string | undefined {
+  if (Math.round(feedInW) === 0) return undefined;
+  return feedInW < 0 ? "import" : "export";
+}
+
 function pacDirection(pacTotalW: number): string | undefined {
   if (pacTotalW > 0) return "out";
   if (pacTotalW < 0) return "in";

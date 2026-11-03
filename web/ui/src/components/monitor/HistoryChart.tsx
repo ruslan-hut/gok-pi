@@ -98,7 +98,7 @@ export function HistoryChart({ points, from, to }: HistoryChartProps) {
           viewBox={`0 0 ${WIDTH} ${height}`}
           className="history-chart-svg"
           role="img"
-          aria-label="Battery charge level, battery power and house load over the selected window"
+          aria-label="Battery charge level, battery power and site load over the selected window"
           onMouseLeave={() => setHoverT(null)}
           onMouseMove={(e) => {
             const svg = e.currentTarget;
@@ -259,7 +259,7 @@ export function HistoryChart({ points, from, to }: HistoryChartProps) {
         <LegendItem className="soc" label="Charge level" />
         <LegendItem className="out" label="Battery out" />
         <LegendItem className="in" label="Battery in" />
-        <LegendItem className="load" label="House load" />
+        <LegendItem className="load" label="Site load" />
       </div>
     </div>
   );
