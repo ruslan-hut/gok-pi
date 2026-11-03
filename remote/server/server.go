@@ -644,11 +644,20 @@ func (s *Server) sendCommand(agentID string, req CommandRequest) error {
 }
 
 func (s *Server) onTelemetry(agentID string, snapshot TelemetrySnapshot) {
-	if s.sessions != nil {
-		s.sessions.OnTelemetry(agentID, snapshot)
+	if isFreshReading(snapshot) {
+		if s.sessions != nil {
+			s.sessions.OnTelemetry(agentID, snapshot)
+		}
+		s.telemetry.Observe(agentID, snapshot, time.Now())
 	}
-	s.telemetry.Observe(agentID, snapshot, time.Now())
 	s.broadcastTelemetry(agentID, snapshot)
+}
+
+// isFreshReading reports whether a frame's values were just read from the battery.
+// While a battery is unreachable its agent keeps sending the last reading with a
+// status saying so: the UI needs that status, but the values are not measurements.
+func isFreshReading(snapshot TelemetrySnapshot) bool {
+	return snapshot.Status == "" || snapshot.Status == "Connected"
 }
 
 // runTelemetryRecorder flushes buffered history and re-checks whether connected

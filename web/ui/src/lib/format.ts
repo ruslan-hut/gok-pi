@@ -8,6 +8,14 @@ export function fmtWatts(watts: number): string {
   return `${Math.abs(watts).toFixed(0)} W`;
 }
 
+/** NO_READING stands in for a value the battery is not reporting right now. */
+export const NO_READING = "—";
+
+/** isLiveReading is false while the agent is resending its last reading of an unreachable battery. */
+export function isLiveReading(snapshot: { status?: string }): boolean {
+  return snapshot.status === "Connected";
+}
+
 /** fmtEUR renders a money amount at fixed 2dp so columns align on the decimal. */
 export function fmtEUR(eur: number): string {
   return `${eur.toFixed(2)} EUR`;

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchDBStats } from "../../api";
 import { Icon } from "../shared/Icon";
 import { boardTempLevel, boardTitle, fmtBoardTempShort } from "../../lib/board";
-import { fmtAgo, fmtBytes, fmtDate, fmtEnergy, fmtSignedEUR, fmtWatts } from "../../lib/format";
+import { fmtAgo, fmtBytes, fmtDate, fmtEnergy, fmtSignedEUR, fmtWatts, isLiveReading } from "../../lib/format";
 import type {
   AgentsMap,
   AppPage,
@@ -100,7 +100,7 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                       <BatteryRow
                         key={t.name}
                         snapshot={t}
-                        stale={agent.connected === false}
+                        stale={agent.connected === false || !isLiveReading(t)}
                       />
                     ))}
                   </div>

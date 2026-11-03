@@ -3,7 +3,7 @@ import type { MouseEvent } from "react";
 import { Metric } from "./Metric";
 import { Icon } from "../shared/Icon";
 import type { BatteryConfig, CommandState, TelemetrySnapshot } from "../../types";
-import { fmtWatts } from "../../lib/format";
+import { fmtWatts, isLiveReading, NO_READING } from "../../lib/format";
 
 const defaultCommandState: CommandState = {
   power: 500,
@@ -74,7 +74,12 @@ export function BatteryCard({
     }
   })();
 
-  const flow = snapshot.battery_discharging
+  const live = isLiveReading(snapshot);
+  const lastKnown = live ? undefined : "last known";
+
+  const flow = !live
+    ? { className: "muted", icon: "help", label: "No live reading" }
+    : snapshot.battery_discharging
     ? { className: "discharge", icon: "electric_bolt", label: "Discharging: supplying the site" }
     : snapshot.battery_charging
       ? { className: "charge", icon: "battery_charging_full", label: "Charging" }
@@ -173,41 +178,44 @@ export function BatteryCard({
         <Metric
           label="RSoC"
           value={`${snapshot.rsoc.toFixed(1)} %`}
+          qualifier={lastKnown}
           hint="Relative state of charge — how full the cells are, across the battery's full physical range."
         />
         <Metric
           label="USoC"
           value={`${snapshot.usoc.toFixed(1)} %`}
+          qualifier={lastKnown}
           hint="Usable state of charge — what is available to you, once the reserve the battery keeps back is excluded. This is the figure schedules act on."
         />
         <Metric
           label="Remaining"
           value={`${snapshot.remaining_capacity_wh.toFixed(0)} Wh`}
+          qualifier={lastKnown}
           hint="Energy left in the battery right now, not its total capacity."
         />
         <Metric
           label="Site load"
-          value={fmtWatts(snapshot.consumption_w)}
+          value={live ? fmtWatts(snapshot.consumption_w) : NO_READING}
           hint="What the site is drawing right now, from any source."
         />
         <Metric
           label="AC power"
-          value={fmtWatts(snapshot.pac_total_w)}
-          qualifier={pacDirection(snapshot.pac_total_w)}
+          value={live ? fmtWatts(snapshot.pac_total_w) : NO_READING}
+          qualifier={live ? pacDirection(snapshot.pac_total_w) : undefined}
           hint="Power across the battery's inverter (Pac). Out means the battery is supplying the site, in means it is being charged."
         />
         {snapshot.production_w !== undefined && (
           <Metric
             label="Solar"
-            value={fmtWatts(snapshot.production_w)}
+            value={live ? fmtWatts(snapshot.production_w) : NO_READING}
             hint="What the solar panels are producing right now."
           />
         )}
         {snapshot.grid_feed_in_w !== undefined && (
           <Metric
             label="Grid"
-            value={fmtWatts(snapshot.grid_feed_in_w)}
-            qualifier={gridDirection(snapshot.grid_feed_in_w)}
+            value={live ? fmtWatts(snapshot.grid_feed_in_w) : NO_READING}
+            qualifier={live ? gridDirection(snapshot.grid_feed_in_w) : undefined}
             hint="Power at the grid connection. Import means the site is drawing from the grid, export means it is feeding it."
           />
         )}

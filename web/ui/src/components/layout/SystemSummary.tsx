@@ -1,4 +1,4 @@
-import { fmtWatts } from "../../lib/format";
+import { fmtWatts, isLiveReading, NO_READING } from "../../lib/format";
 import type { TelemetrySnapshot } from "../../types";
 
 interface SystemSummaryProps {
@@ -8,16 +8,17 @@ interface SystemSummaryProps {
 export function SystemSummary({ batteries }: SystemSummaryProps) {
   if (batteries.length === 0) return null;
 
-  const totalCapacity = batteries.reduce(
+  const live = batteries.filter(isLiveReading);
+  const noReading = batteries.length - live.length;
+  const totalCapacity = live.reduce(
     (sum, b) => sum + b.remaining_capacity_wh,
     0,
   );
-  const avgSoc =
-    batteries.reduce((sum, b) => sum + b.rsoc, 0) / batteries.length;
-  const totalPac = batteries.reduce((sum, b) => sum + b.pac_total_w, 0);
-  const charging = batteries.filter((b) => b.battery_charging).length;
-  const discharging = batteries.filter((b) => b.battery_discharging).length;
-  const idle = batteries.length - charging - discharging;
+  const avgSoc = live.reduce((sum, b) => sum + b.rsoc, 0) / live.length;
+  const totalPac = live.reduce((sum, b) => sum + b.pac_total_w, 0);
+  const charging = live.filter((b) => b.battery_charging).length;
+  const discharging = live.filter((b) => b.battery_discharging).length;
+  const idle = live.length - charging - discharging;
 
   return (
     <div className="system-summary">
@@ -29,12 +30,12 @@ export function SystemSummary({ batteries }: SystemSummaryProps) {
           Remaining
         </span>
         <span className="system-summary-value">
-          {totalCapacity.toFixed(0)} Wh
+          {live.length > 0 ? `${totalCapacity.toFixed(0)} Wh` : NO_READING}
         </span>
       </div>
       <div className="system-summary-item">
         <span className="system-summary-label">Avg SoC</span>
-        <span className="system-summary-value">{avgSoc.toFixed(1)}%</span>
+        <span className="system-summary-value">{live.length > 0 ? `${avgSoc.toFixed(1)}%` : NO_READING}</span>
       </div>
       <div className="system-summary-item">
         <span
@@ -44,7 +45,7 @@ export function SystemSummary({ batteries }: SystemSummaryProps) {
           Net flow
         </span>
         <span className="system-summary-value">
-          {fmtWatts(totalPac)}
+          {live.length > 0 ? fmtWatts(totalPac) : NO_READING}
           {totalPac !== 0 && (
             <span className="metric-qualifier">
               {" "}
@@ -69,6 +70,11 @@ export function SystemSummary({ batteries }: SystemSummaryProps) {
           {idle > 0 && (
             <span className="system-summary-status idle">
               {idle} idle
+            </span>
+          )}
+          {noReading > 0 && (
+            <span className="system-summary-status idle">
+              {noReading} no reading
             </span>
           )}
         </span>

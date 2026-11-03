@@ -192,3 +192,54 @@ func TestStreamKeepsGridExtremesAndSolarAverage(t *testing.T) {
 		t.Fatalf("extremes survived reset: %+v", p)
 	}
 }
+
+func TestOnTelemetryKeepsOnlyFreshReadings(t *testing.T) {
+	tests := []struct {
+		status      string
+		wantHistory bool
+		wantEnergy  bool
+	}{
+		{status: "Connected", wantHistory: true, wantEnergy: true},
+		{status: "", wantHistory: true, wantEnergy: true},
+		{status: "Disconnected"},
+		{status: "Disabled"},
+	}
+
+	for _, tt := range tests {
+		t.Run("status "+tt.status, func(t *testing.T) {
+			rec, store := recorderWithStore(t)
+			tracker := NewSessionTracker(testLogger(), store, nil)
+			s := &Server{telemetry: rec, sessions: tracker}
+
+			base := time.Date(2026, 8, 12, 20, 30, 0, 0, time.UTC)
+			start := frame("BAT-001", base, 90, 400, 5000)
+			start.Status = "Connected"
+			start.OperatingMode, start.OperatingModeSet = "1", true
+			start.BatteryDischarging, start.BatteryDischargingSet = true, true
+			s.onTelemetry("agent-1", start)
+			rec.Flush(base.Add(30 * time.Second))
+
+			next := start
+			next.Status = tt.status
+			next.UpdatedAt = base.Add(time.Minute)
+			s.onTelemetry("agent-1", next)
+			rec.Flush(base.Add(90 * time.Second))
+
+			points, err := store.QueryTelemetryHistory(sessiondb.HistoryQuery{Since: base.Add(-time.Hour)})
+			if err != nil {
+				t.Fatalf("query: %v", err)
+			}
+			if got := len(points) == 2; got != tt.wantHistory {
+				t.Errorf("history has %d buckets, want second bucket %v", len(points), tt.wantHistory)
+			}
+
+			sess := tracker.active["agent-1:BAT-001:discharge"]
+			if sess == nil {
+				t.Fatal("no active discharge session")
+			}
+			if got := sess.energyWh > 0; got != tt.wantEnergy {
+				t.Errorf("session energy = %g, want accumulated %v", sess.energyWh, tt.wantEnergy)
+			}
+		})
+	}
+}
