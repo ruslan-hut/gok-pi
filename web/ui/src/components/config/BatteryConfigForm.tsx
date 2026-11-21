@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Icon } from "../shared/Icon";
-import type { BatteryConfig } from "../../types";
+import { TOKEN_MASK, type BatteryConfig } from "../../types";
 
 interface BatteryConfigFormProps {
   index: number;
@@ -20,6 +20,7 @@ export function BatteryConfigForm({
   readonly,
 }: BatteryConfigFormProps) {
   const [collapsed, setCollapsed] = useState(true);
+  const tokenIsSet = battery.token === TOKEN_MASK;
 
   return (
     <div className="config-item config-item-battery">
@@ -126,18 +127,21 @@ export function BatteryConfigForm({
           </div>
           <div className="form-field">
             <label htmlFor={`battery-token-${index}`}>
-              Token {battery.driver === "huawei" ? "" : "*"}
+              Token {battery.driver === "huawei" || tokenIsSet ? "" : "*"}
             </label>
+            {/* The server never sends a stored token, only TOKEN_MASK. Leaving the
+                field empty keeps the stored token; typing replaces it. */}
             <input
               id={`battery-token-${index}`}
               type="password"
-              value={battery.token}
+              autoComplete="new-password"
+              value={tokenIsSet ? "" : battery.token}
               onChange={(e) =>
                 onChange({ ...battery, token: e.target.value })
               }
               disabled={disabled}
-              required={battery.driver !== "huawei"}
-              placeholder="API token"
+              required={battery.driver !== "huawei" && !tokenIsSet}
+              placeholder={tokenIsSet ? "Token is set - type a new one to replace it" : "API token"}
             />
           </div>
           <div className="form-field">

@@ -149,6 +149,10 @@ export interface HistoryResponse {
   until?: string;
 }
 
+// The control server never sends a stored battery token: it sends this mask. A
+// config saved with the mask (or an empty token) keeps the stored token.
+export const TOKEN_MASK = "********";
+
 export interface BatteryConfig {
   name: string;
   driver?: string;

@@ -358,6 +358,7 @@ func (s *Server) handleUIWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := newUIConnection(conn, s)
+	client.authed = s.auth.validateToken(r.URL.Query().Get("token"))
 
 	s.registerUI(client)
 	go client.run()
@@ -421,6 +422,13 @@ func (s *Server) handleAgentRoutes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleAgentRestart(w, agentID)
+		return
+	}
+
+	// Agent logs and diagnostics are for the logged-in operator: they expose
+	// battery addresses and internals, and each request puts work on the agent.
+	if len(segments) == 2 && (segments[1] == "diag" || segments[1] == "logs") && !s.isLoggedIn(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -525,10 +533,16 @@ func (s *Server) handleAgentConfigGet(w http.ResponseWriter, _ *http.Request, ag
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(cfg); err != nil {
+	if err := json.NewEncoder(w).Encode(redactTokens(cfg)); err != nil {
 		s.log.With(slog.Any("error", err)).Error("encode agent config response")
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
+}
+
+// isLoggedIn reports whether the request carries a valid UI session (or the server
+// has no login configured).
+func (s *Server) isLoggedIn(r *http.Request) bool {
+	return s.auth.validateToken(r.Header.Get(headerAuthToken))
 }
 
 func (s *Server) handleAgentConfigPut(w http.ResponseWriter, r *http.Request, agentID string) {
@@ -555,7 +569,7 @@ func (s *Server) handleAgentConfigPut(w http.ResponseWriter, r *http.Request, ag
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(cfg); err != nil {
+	if err := json.NewEncoder(w).Encode(redactTokens(cfg)); err != nil {
 		s.log.With(slog.Any("error", err)).Error("encode agent config response")
 	}
 }
@@ -785,15 +799,42 @@ func (s *Server) broadcastUI(message interface{}) {
 	}
 }
 
+// broadcastUISplit sends full to UI sockets that authenticated when they opened
+// and public to the rest. Each payload is marshaled once.
+func (s *Server) broadcastUISplit(full, public interface{}) {
+	fullData, err := json.Marshal(full)
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("marshal ui broadcast")
+		return
+	}
+	publicData, err := json.Marshal(public)
+	if err != nil {
+		s.log.With(slog.Any("error", err)).Error("marshal ui broadcast")
+		return
+	}
+
+	s.uiMu.RLock()
+	defer s.uiMu.RUnlock()
+
+	for client := range s.uiClient {
+		if client.authed {
+			client.sendBytes(fullData)
+		} else {
+			client.sendBytes(publicData)
+		}
+	}
+}
+
 func (s *Server) broadcastConfigUpdated(agentID string, cfg AgentConfig) {
-	payload := UIConfigUpdate{
+	// The UI socket is public: tokens are masked, the real ones only go to the
+	// agent (pushConfigToAgent).
+	s.broadcastUI(UIConfigUpdate{
 		Type:    "config.updated",
 		AgentID: agentID,
-		Config:  cfg,
+		Config:  redactTokens(cfg),
 		SentAt:  time.Now().UTC(),
 		Message: "agent config updated",
-	}
-	s.broadcastUI(payload)
+	})
 }
 
 func (s *Server) pushConfigToAgent(agentID string, cfg AgentConfig) error {

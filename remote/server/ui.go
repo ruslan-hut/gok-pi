@@ -12,6 +12,10 @@ type uiConnection struct {
 	conn *websocket.Conn
 	s    *Server
 
+	// authed is set when the socket was opened with a valid session token; the
+	// rest of the sockets are the public read-only dashboard.
+	authed bool
+
 	send chan interface{}
 	done chan struct{}
 

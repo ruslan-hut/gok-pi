@@ -34,6 +34,38 @@ type AgentConfigRequest struct {
 	EmailReports *entity.EmailReportsConfig `json:"email_reports,omitempty"`
 }
 
+// TokenMask stands in for a battery API token in everything shown to the UI. The
+// real token never leaves the server except on the agent channel. A config coming
+// back with the mask (or with an empty token) means "keep the stored token".
+const TokenMask = "********"
+
+// redactTokens returns a copy of cfg with every battery token replaced by
+// TokenMask (an unset token stays empty, so the UI can tell the two apart).
+func redactTokens(cfg AgentConfig) AgentConfig {
+	cfg.Batteries = entity.CloneBatteryConfigs(cfg.Batteries)
+	for i := range cfg.Batteries {
+		if cfg.Batteries[i].Token != "" {
+			cfg.Batteries[i].Token = TokenMask
+		}
+	}
+	return cfg
+}
+
+// keepStoredTokens fills in the token of each incoming battery that carries the
+// mask or no token at all from the stored battery of the same name. A mask with
+// no stored battery behind it is dropped rather than saved as a token.
+func keepStoredTokens(incoming, stored []entity.BatteryConfig) {
+	byName := make(map[string]string, len(stored))
+	for _, b := range stored {
+		byName[b.Name] = b.Token
+	}
+	for i := range incoming {
+		if incoming[i].Token == "" || incoming[i].Token == TokenMask {
+			incoming[i].Token = byName[incoming[i].Name]
+		}
+	}
+}
+
 type configSnapshot map[string]AgentConfig
 
 // ConfigStore persists agent configuration overrides to disk.
@@ -116,13 +148,16 @@ func (cs *ConfigStore) Save(agentID string, req AgentConfigRequest) (AgentConfig
 		return AgentConfig{}, fmt.Errorf("%w: %v", ErrInvalidSchedules, err)
 	}
 
+	batteries := entity.CloneBatteryConfigs(req.Batteries)
+	keepStoredTokens(batteries, current.Batteries)
+
 	next := AgentConfig{
 		DeviceName:   req.DeviceName,
 		Env:          req.Env,
 		Timezone:     req.Timezone,
 		Revision:     1,
 		UpdatedAt:    time.Now().UTC(),
-		Batteries:    entity.CloneBatteryConfigs(req.Batteries),
+		Batteries:    batteries,
 		Schedules:    entity.CloneSchedules(req.Schedules),
 		EmailReports: entity.CloneEmailReports(req.EmailReports),
 	}

@@ -587,6 +587,18 @@ func (s *Server) handleChargerLinks(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleChargerSessions lists the currently active charging sessions.
+// redactChargerSessions drops who is charging (RFID tag and user name) from
+// sessions shown to readers who have not logged in.
+func redactChargerSessions(in []ChargerSession) []ChargerSession {
+	out := make([]ChargerSession, len(in))
+	copy(out, in)
+	for i := range out {
+		out[i].IdTag = ""
+		out[i].Username = ""
+	}
+	return out
+}
+
 func (s *Server) handleChargerSessions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
@@ -594,16 +606,21 @@ func (s *Server) handleChargerSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sessions := s.chargerSessions.List()
+	if !s.isLoggedIn(r) {
+		sessions = redactChargerSessions(sessions)
+	}
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(s.chargerSessions.List()); err != nil {
+	if err := json.NewEncoder(w).Encode(sessions); err != nil {
 		s.log.With(slog.Any("error", err)).Error("encode charger sessions response")
 	}
 }
 
 func (s *Server) broadcastChargerSessions() {
-	s.broadcastUI(UIChargerSessionsBroadcast{
-		Type:     "charger.sessions",
-		Sessions: s.chargerSessions.List(),
-		SentAt:   time.Now().UTC(),
-	})
+	sessions := s.chargerSessions.List()
+	now := time.Now().UTC()
+	s.broadcastUISplit(
+		UIChargerSessionsBroadcast{Type: "charger.sessions", Sessions: sessions, SentAt: now},
+		UIChargerSessionsBroadcast{Type: "charger.sessions", Sessions: redactChargerSessions(sessions), SentAt: now},
+	)
 }
