@@ -62,6 +62,11 @@ type Direction struct {
 	CanStart func(soc, socLimit, deadband float64) bool
 	// IsActive returns true if the battery is currently performing this operation.
 	IsActive func(status *entity.SystemStatus) bool
+	// BatteryLimitIsFloor says the battery's soc_limit is a bound this direction
+	// must not cross: discharge never goes below it, whatever a schedule or a
+	// command asks for. Charge has no lower bound; its default target is 100 %
+	// and the battery's soc_limit does not apply to it.
+	BatteryLimitIsFloor bool
 	// StartOp starts the operation at the given power rate.
 	StartOp func(power int) error
 	// StopOp stops the operation.
@@ -81,14 +86,15 @@ type FullClient interface {
 // DischargeDirection returns a Direction configured for discharge control.
 func DischargeDirection(client FullClient) Direction {
 	return Direction{
-		Name:           "discharge",
-		Module:         "battery.discharge",
-		ScheduleFilter: func(t string) bool { return t == "" || t == "discharge" },
-		GoalReached:    func(soc, limit float64) bool { return soc <= limit },
-		CanStart:       func(soc, limit, deadband float64) bool { return soc >= limit+deadband },
-		IsActive:       func(s *entity.SystemStatus) bool { return s.BatteryDischarging },
-		StartOp:        client.StartDischarge,
-		StopOp:         client.StopDischarge,
+		Name:                "discharge",
+		BatteryLimitIsFloor: true,
+		Module:              "battery.discharge",
+		ScheduleFilter:      func(t string) bool { return t == "" || t == "discharge" },
+		GoalReached:         func(soc, limit float64) bool { return soc <= limit },
+		CanStart:            func(soc, limit, deadband float64) bool { return soc >= limit+deadband },
+		IsActive:            func(s *entity.SystemStatus) bool { return s.BatteryDischarging },
+		StartOp:             client.StartDischarge,
+		StopOp:              client.StopDischarge,
 	}
 }
 
@@ -221,7 +227,7 @@ const (
 )
 
 func New(name string, client Client, dir Direction, log *slog.Logger) (*Controller, error) {
-	return &Controller{
+	c := &Controller{
 		dir:             dir,
 		name:            name,
 		client:          client,
@@ -233,7 +239,27 @@ func New(name string, client Client, dir Direction, log *slog.Logger) (*Controll
 		stop:            make(chan struct{}),
 		stopped:         make(chan struct{}),
 		firstStatusPoll: true,
-	}, nil
+	}
+	c.socLimit = c.defaultSocLimit()
+	return c, nil
+}
+
+// defaultSocLimit is the SoC target used when no schedule or command sets one:
+// the battery's soc_limit for discharge, 100 % for charge.
+func (c *Controller) defaultSocLimit() float64 {
+	if c.dir.BatteryLimitIsFloor {
+		return c.batterySocLimit
+	}
+	return 100
+}
+
+// clampSocLimit keeps a requested limit from crossing the battery's own soc_limit
+// where that is a floor (discharge). Charge limits pass through unchanged.
+func (c *Controller) clampSocLimit(limit float64) float64 {
+	if c.dir.BatteryLimitIsFloor && limit < c.batterySocLimit {
+		return c.batterySocLimit
+	}
+	return limit
 }
 
 // SetHysteresis overrides the anti-flapping parameters. A zero or negative value
@@ -340,7 +366,7 @@ func (c *Controller) SetBatteryDefaults(powerLimit, socLimit int) {
 	c.batterySocLimit = float64(socLimit)
 	if !c.ready {
 		c.powerLimit = powerLimit
-		c.socLimit = float64(socLimit)
+		c.socLimit = c.defaultSocLimit()
 	}
 }
 
@@ -525,7 +551,7 @@ func (c *Controller) checkTime() {
 
 				oldRate := c.rate
 				c.powerLimit = schedule.PowerLimit
-				c.socLimit = float64(schedule.SocLimit)
+				c.socLimit = c.clampSocLimit(float64(schedule.SocLimit))
 				c.calculateRate()
 
 				canStart := true
@@ -619,7 +645,9 @@ func (c *Controller) checkTime() {
 	c.ready = false
 	if c.batteryPowerLimit > 0 || c.batterySocLimit > 0 {
 		c.powerLimit = c.batteryPowerLimit
-		c.socLimit = c.batterySocLimit
+	}
+	if !c.dir.BatteryLimitIsFloor || c.batteryPowerLimit > 0 || c.batterySocLimit > 0 {
+		c.socLimit = c.defaultSocLimit()
 	}
 
 	c.removeExpiredAutoSchedules()
@@ -851,7 +879,7 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 				c.powerLimit = *cmd.Limits.PowerLimit
 			}
 			if cmd.Limits.SocLimit != nil {
-				c.socLimit = float64(*cmd.Limits.SocLimit)
+				c.socLimit = c.clampSocLimit(float64(*cmd.Limits.SocLimit))
 			}
 			c.calculateRate()
 		}
@@ -915,7 +943,7 @@ func (c *Controller) processControlCommand(cmd ControlCommand) error {
 			log = log.With(slog.Int("power_limit", c.powerLimit))
 		}
 		if cmd.Limits.SocLimit != nil {
-			c.socLimit = float64(*cmd.Limits.SocLimit)
+			c.socLimit = c.clampSocLimit(float64(*cmd.Limits.SocLimit))
 			log = log.With(slog.Int("soc_limit", *cmd.Limits.SocLimit))
 		}
 		c.calculateRate()
