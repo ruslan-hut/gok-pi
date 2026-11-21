@@ -35,7 +35,8 @@ func NewClient(log *slog.Logger) *Client {
 }
 
 // FetchPrices fetches hourly PVPC prices for the given date.
-// Returns ErrNoData if prices are not yet published (e.g., tomorrow's prices before ~20:15 CET).
+// Returns ErrNoData if prices are not yet published (e.g., tomorrow's prices before ~20:15 CET),
+// including a successful response that lacks the PVPC series.
 func (c *Client) FetchPrices(ctx context.Context, date time.Time) ([]HourlyPrice, error) {
 	dateStr := date.Format("2006-01-02")
 	startDate := dateStr + "T00:00"
@@ -131,7 +132,9 @@ func (c *Client) extractPVPC(resp apiResponse) ([]HourlyPrice, error) {
 		return prices, nil
 	}
 
-	return nil, fmt.Errorf("%w: PVPC series (id %s) not found in response", ErrAPIError, pvpcSeriesID)
+	// REE publishes the spot series before PVPC, so a successful response
+	// without series 1001 means PVPC is not out yet, not that the API failed.
+	return nil, fmt.Errorf("%w: PVPC series (id %s) not yet published", ErrNoData, pvpcSeriesID)
 }
 
 func truncate(s string, maxLen int) string {
