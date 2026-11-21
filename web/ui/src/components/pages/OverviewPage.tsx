@@ -86,11 +86,7 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
               }
             >
               <div className="agent-card-header">
-                <strong>
-                  {agent.device_name ||
-                    agent.agent.hostname ||
-                    agent.agent.id}
-                </strong>
+                <strong>{agentLabel(agents, agent.agent.id)}</strong>
                 <span
                   className={`badge ${agent.connected === false ? "fault" : "ok"}`}
                 >
@@ -174,7 +170,7 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
                 <tbody>
                   {agentStats.map((a) => (
                     <tr key={a.agent_id}>
-                      <td>{a.agent_id}</td>
+                      <td title={a.agent_id}>{agentLabel(agents, a.agent_id)}</td>
                       <td className="num">{a.total_sessions}</td>
                       <td className="num">{a.charge_sessions}</td>
                       <td className="num">{a.discharge_sessions}</td>
@@ -204,6 +200,11 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
       </div>
     </div>
   );
+}
+
+function agentLabel(agents: AgentsMap, id: string): string {
+  const agent = agents[id];
+  return agent?.device_name || agent?.agent.hostname || id;
 }
 
 /**
