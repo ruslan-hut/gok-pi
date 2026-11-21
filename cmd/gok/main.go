@@ -690,22 +690,17 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 	}
 	schedules = validSchedules
 
-	// Check if we have discharge or charge schedules
-	hasDischargeSchedules := false
-	hasChargeSchedules := false
-	for _, schedule := range schedules {
-		if schedule.Type == "charge" {
-			hasChargeSchedules = true
-		} else {
-			hasDischargeSchedules = true
-		}
-	}
-
 	// Both directions share one mode coordinator so they never fight over the
 	// battery's operating mode (auto only when neither direction is active).
 	mode := controller.NewModeCoordinator()
 
-	if hasDischargeSchedules {
+	// Both controllers are always created, whatever schedule types exist now.
+	// The status poller cannot take a subscriber after Run, so a controller
+	// missing at start could not be added when the server later pushes a
+	// schedule of that type (a nightly charge window after a day without any,
+	// or a Price Limits change): it would be silently dropped until restart.
+	// A controller with no schedules and no override idles in Run.
+	{
 		w, err := initController(battery, schedules, timezone, controller.DischargeDirection(api), api, mode, workerLog)
 		if err != nil {
 			cancel()
@@ -716,7 +711,7 @@ func startWorker(ctx context.Context, wg *sync.WaitGroup, battery entity.Battery
 		runController(workerCtx, wg, w, "discharge", workerLog)
 	}
 
-	if hasChargeSchedules {
+	{
 		w, err := initController(battery, schedules, timezone, controller.ChargeDirection(api), api, mode, workerLog)
 		if err != nil {
 			if entry.discharger != nil {
