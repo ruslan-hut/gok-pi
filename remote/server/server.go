@@ -1441,7 +1441,22 @@ func (s *Server) handleDBStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agents, err := s.sessions.Store().GetAgentStats()
+	// Optional period for the per-agent table; RFC3339, half-open [from, to).
+	var from, to time.Time
+	if v := r.URL.Query().Get("from"); v != "" {
+		if from, err = time.Parse(time.RFC3339, v); err != nil {
+			http.Error(w, "invalid from", http.StatusBadRequest)
+			return
+		}
+	}
+	if v := r.URL.Query().Get("to"); v != "" {
+		if to, err = time.Parse(time.RFC3339, v); err != nil {
+			http.Error(w, "invalid to", http.StatusBadRequest)
+			return
+		}
+	}
+
+	agents, err := s.sessions.Store().GetAgentStatsRange(from, to)
 	if err != nil {
 		s.log.With(slog.Any("error", err)).Error("get agent db stats")
 		http.Error(w, "internal error", http.StatusInternalServerError)

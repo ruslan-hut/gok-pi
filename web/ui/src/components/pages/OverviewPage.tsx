@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchDBStats } from "../../api";
 import { Icon } from "../shared/Icon";
 import { boardTempLevel, boardTitle, fmtBoardTempShort } from "../../lib/board";
-import { fmtAgo, fmtBytes, fmtDate, fmtEnergy, fmtSignedEUR, fmtWatts, isLiveReading } from "../../lib/format";
+import { fmtAgo, fmtEnergy, fmtSignedEUR, fmtWatts, isLiveReading } from "../../lib/format";
 import type {
   AgentsMap,
   AppPage,
-  DBStats,
   AgentDBStats,
   TelemetrySnapshot,
 } from "../../types";
@@ -16,18 +15,47 @@ interface OverviewPageProps {
   onNavigate: (page: AppPage) => void;
 }
 
+interface MonthOption {
+  label: string;
+  from: string;
+  to: string;
+}
+
+/** The current month and the 11 before it, newest first, on local-time month boundaries. */
+function lastMonths(): MonthOption[] {
+  const now = new Date();
+  const out: MonthOption[] = [];
+  for (let i = 0; i < 12; i++) {
+    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    out.push({
+      label: start.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+      from: start.toISOString(),
+      to: end.toISOString(),
+    });
+  }
+  return out;
+}
+
 export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
-  const [dbStats, setDbStats] = useState<DBStats | null>(null);
+  const months = useMemo(lastMonths, []);
+  const [monthIdx, setMonthIdx] = useState(0);
   const [agentStats, setAgentStats] = useState<AgentDBStats[]>([]);
 
   useEffect(() => {
-    fetchDBStats()
+    let stale = false;
+    const m = months[monthIdx];
+    fetchDBStats({ from: m.from, to: m.to })
       .then((data) => {
-        setDbStats(data.stats);
-        setAgentStats(data.agents ?? []);
+        if (!stale) setAgentStats(data.agents ?? []);
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        if (!stale) setAgentStats([]);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [months, monthIdx]);
 
   const agentList = Object.values(agents);
 
@@ -111,79 +139,69 @@ export function OverviewPage({ agents, onNavigate }: OverviewPageProps) {
         </div>
       )}
 
-      {dbStats && (
-        <div className="overview-section">
-          <h3>Session Database</h3>
-          <div className="db-stats">
-            <div className="db-stats-grid">
-              <div className="db-stats-item">
-                <span className="db-stats-label">Size</span>
-                <span className="db-stats-value">
-                  {fmtBytes(dbStats.file_size_bytes)}
-                </span>
-              </div>
-              <div className="db-stats-item">
-                <span className="db-stats-label">Sessions</span>
-                <span className="db-stats-value">{dbStats.total_sessions}</span>
-              </div>
-              <div className="db-stats-item">
-                <span className="db-stats-label">Active</span>
-                <span className="db-stats-value">{dbStats.open_sessions}</span>
-              </div>
-              <div className="db-stats-item">
-                <span className="db-stats-label">Data range</span>
-                <span className="db-stats-value">
-                  {dbStats.oldest_session
-                    ? `${fmtDate(dbStats.oldest_session)} — ${dbStats.newest_session ? fmtDate(dbStats.newest_session) : "—"}`
-                    : "—"}
-                </span>
-              </div>
-            </div>
-            {agentStats.length > 0 && (
-              <div className="db-stats-agents">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Device</th>
-                      <th className="num">Sessions</th>
-                      <th className="num">Charge</th>
-                      <th className="num">Discharge</th>
-                      <th className="num">Energy</th>
-                      <th className="num">Net</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {agentStats.map((a) => (
-                      <tr key={a.agent_id}>
-                        <td>{a.agent_id}</td>
-                        <td className="num">{a.total_sessions}</td>
-                        <td className="num">{a.charge_sessions}</td>
-                        <td className="num">{a.discharge_sessions}</td>
-                        <td className="num">{fmtEnergy(a.total_energy_wh)}</td>
-                        <td className="num">
-                          {a.net_cost_eur !== 0 ? (
-                            <span
-                              className={
-                                a.net_cost_eur < 0
-                                  ? "amount-negative"
-                                  : "amount-positive"
-                              }
-                            >
-                              {fmtSignedEUR(a.net_cost_eur)}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+      <div className="overview-section">
+        <div className="overview-section-head">
+          <h3>Summary</h3>
+          <select
+            value={monthIdx}
+            onChange={(e) => setMonthIdx(Number(e.target.value))}
+            aria-label="Period"
+          >
+            {months.map((m, i) => (
+              <option key={m.from} value={i}>
+                {m.label}
+                {i === 0 ? " (current)" : ""}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
+        <div className="db-stats">
+          {agentStats.length === 0 ? (
+            <p>No sessions in this period.</p>
+          ) : (
+            <div className="db-stats-agents">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Device</th>
+                    <th className="num">Sessions</th>
+                    <th className="num">Charge</th>
+                    <th className="num">Discharge</th>
+                    <th className="num">Energy</th>
+                    <th className="num">Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agentStats.map((a) => (
+                    <tr key={a.agent_id}>
+                      <td>{a.agent_id}</td>
+                      <td className="num">{a.total_sessions}</td>
+                      <td className="num">{a.charge_sessions}</td>
+                      <td className="num">{a.discharge_sessions}</td>
+                      <td className="num">{fmtEnergy(a.total_energy_wh)}</td>
+                      <td className="num">
+                        {a.net_cost_eur !== 0 ? (
+                          <span
+                            className={
+                              a.net_cost_eur < 0
+                                ? "amount-negative"
+                                : "amount-positive"
+                            }
+                          >
+                            {fmtSignedEUR(a.net_cost_eur)}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

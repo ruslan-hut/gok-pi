@@ -338,8 +338,11 @@ export async function fetchChargerSessions(): Promise<ChargerSession[]> {
   return (await res.json()) as ChargerSession[];
 }
 
-export async function fetchDBStats(): Promise<DBStatsResponse> {
-  const res = await fetch("/api/db-stats");
+export async function fetchDBStats(period?: { from: string; to: string }): Promise<DBStatsResponse> {
+  const qs = period
+    ? `?from=${encodeURIComponent(period.from)}&to=${encodeURIComponent(period.to)}`
+    : "";
+  const res = await fetch(`/api/db-stats${qs}`);
   if (!res.ok) {
     throw new Error(`Failed to load DB stats: ${res.statusText}`);
   }

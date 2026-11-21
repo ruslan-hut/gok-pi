@@ -491,6 +491,17 @@
   border-top: 1px solid var(--border-color-subtle);
 }
 
+.overview-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.overview-section-head h3 {
+  margin: 0;
+}
+
 /* Connection dot */
 .connection {
   display: inline-flex;
@@ -685,6 +696,15 @@
   font-family: var(--font-body), sans-serif;
 }
 
+/* Never let the table push the page wider than the screen. */
+.db-stats-agents {
+  overflow-x: auto;
+}
+
+.overview-section-head select {
+  max-width: 60%;
+}
+
 /* Tablet breakpoint */
 @media (max-width: 960px) {
   .content {
@@ -699,6 +719,16 @@
 
 /* Mobile breakpoint */
 @media (max-width: 600px) {
+  .db-stats-agents th,
+  .db-stats-agents td {
+    padding: 0.35rem 0.3rem;
+  }
+
+  .db-stats-agents td:first-child {
+    min-width: 6rem;
+    overflow-wrap: anywhere;
+  }
+
   :root {
     font-size: 15px;
   }

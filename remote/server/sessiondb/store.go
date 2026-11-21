@@ -373,8 +373,14 @@ func (s *Store) GetStats() (*DBStats, error) {
 	return stats, nil
 }
 
-// GetAgentStats returns per-agent session statistics.
+// GetAgentStats returns per-agent session statistics over all time.
 func (s *Store) GetAgentStats() ([]AgentDBStats, error) {
+	return s.GetAgentStatsRange(time.Time{}, time.Time{})
+}
+
+// GetAgentStatsRange returns per-agent statistics of closed sessions that
+// started in [since, until). A zero bound is not applied.
+func (s *Store) GetAgentStatsRange(since, until time.Time) ([]AgentDBStats, error) {
 	var rows []struct {
 		AgentID     string  `db:"agent_id"`
 		Total       int64   `db:"total"`
@@ -383,7 +389,7 @@ func (s *Store) GetAgentStats() ([]AgentDBStats, error) {
 		TotalEnergy float64 `db:"total_energy"`
 		TotalCost   float64 `db:"total_cost"`
 	}
-	err := s.db.Select(&rows, `
+	query := `
 		SELECT agent_id,
 		       COUNT(*) as total,
 		       SUM(CASE WHEN type = 'charge' THEN 1 ELSE 0 END) as charges,
@@ -391,9 +397,18 @@ func (s *Store) GetAgentStats() ([]AgentDBStats, error) {
 		       COALESCE(SUM(energy_wh), 0) as total_energy,
 		       COALESCE(SUM(cost_eur), 0) as total_cost
 		FROM sessions
-		WHERE ended_at IS NOT NULL
-		GROUP BY agent_id`)
-	if err != nil {
+		WHERE ended_at IS NOT NULL`
+	var args []interface{}
+	if !since.IsZero() {
+		query += " AND started_at >= ?"
+		args = append(args, since.UTC().Format(time.RFC3339))
+	}
+	if !until.IsZero() {
+		query += " AND started_at < ?"
+		args = append(args, until.UTC().Format(time.RFC3339))
+	}
+	query += " GROUP BY agent_id ORDER BY agent_id"
+	if err := s.db.Select(&rows, query, args...); err != nil {
 		return nil, err
 	}
 
