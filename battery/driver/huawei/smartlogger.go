@@ -31,8 +31,8 @@ var (
 	LoggerPVActivePowerFast = Register{Name: "PV active power (fast)", Addr: 30012, Kind: U32, Gain: 1000, Unit: "kW", Access: RO}
 
 	// LoggerESSActivePowerFast is row 4, "Energy storage active power (fast)"
-	// at 30014: output active power of the array's energy storage. Sign not
-	// yet confirmed on site.
+	// at 30014: output active power of the array's energy storage. Positive
+	// means discharge, the same sign as 40392 (measured on site).
 	LoggerESSActivePowerFast = Register{Name: "ESS active power (fast)", Addr: 30014, Kind: I32, Gain: 1000, Unit: "kW", Access: RO}
 
 	// LoggerEnergyChargedThisMonth is row 6 at 30050.

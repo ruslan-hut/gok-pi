@@ -226,9 +226,9 @@ Enough to run a whole-site driver from unit 0 alone:
 | 40398 | Rated ESS power | U32, gain 1000, kW | **216** on SPC161 (2 × 108, the cabinets' rated power 30238); **280.8** on SPC275 (2 × Pmax). The base for 40383 |
 | 40412 / 40697 | Min / max active power adjustment | I32, gain 10, kW | −225.1 / 335.8: −40490, and 40492 + 55 kW of PV |
 | 40490 / 40492 | Max ESS charge / discharge power now | U32, gain 1000, kW | ≈ 225.2 (varies) / 280.8 (2 × Pmax) |
-| 40392 | Active ESS power | I32, gain 1000, kW | sign unknown. "Output" suggests AC side, negative = charge |
-| 40507 | ESS charge/discharge power | I32, gain 1000, kW | sign unknown. Battery side like 30417? |
-| 30014 | ESS active power (fast) | I32, gain 1000, kW | fast interface |
+| 40392 | Active ESS power | I32, gain 1000, kW | AC side: negative = charge, positive = discharge (measured 2026-09-28 and 2026-11-03) |
+| 40507 | ESS charge/discharge power | I32, gain 1000, kW | battery side: positive = charge, negative = discharge (measured 2026-09-28 and 2026-11-03) |
+| 30014 | ESS active power (fast) | I32, gain 1000, kW | fast interface; same sign as 40392 (measured 2026-09-28 and 2026-11-24) |
 | 40468 / 40470 | Energy charged / discharged today | U32, gain 100, kWh | = sum of the cabinets' daily counters |
 | 40488 / 40489 / 40207 | Number of ESSs / PCSs / running PCSs | U16 | **0** / 2 / 2. 40488 does not count network-attached ESSs; use 40489 |
 | 40217 / 40218 | End-of-discharge / end-of-charge SOC (RO) | U16, gain 10 | 5.0 / 100.0 |
@@ -298,8 +298,19 @@ discharged today* flat at 0.11 kWh):
 | 40507 ESS charge/discharge power | +11 … +14 kW | battery side: **positive = charge**, the mirror of 40392 |
 
 The same split as the cabinets' 32986 and 30417. `watch` agreed on every SOC
-step. The discharge direction was not observed in this session; confirm it once
-during an evening or EV discharge before relying on it for control.
+step. The discharge direction was not observed in this session. 40392 and 40507
+were confirmed while discharging on 2026-11-03, 30014 on 2026-11-24 (below).
+
+Discharge, 2026-11-24, read from the Pi on the site LAN while an EV charged on
+PE00005 (SOC 92 %):
+
+| Register | Read | Convention |
+|---|---|---|
+| 30014 ESS active power (fast) | +25.1 … +25.9 kW | **positive = discharge**; tracks 40392 within ~0.3 kW and moved one sample earlier |
+| 40392 Active ESS power | +25.1 … +25.6 kW | positive = discharge |
+| 40507 ESS charge/discharge power | −25.1 … −25.6 kW | negative = discharge |
+
+The meter (32278) stayed near 0 kW, so PE00005 is behind the logger's meter.
 
 ### Meter at unit 3
 
@@ -606,8 +617,8 @@ alarms (table 3-2), and working status.
    3 s) before any unattended use.
 4. **Sign of 40381.** Inferred as negative = charge; settled only by the first
    write. The read-only registers are settled while charging (2026-09-28): 40392 and
-   30014 negative = charge, 40507 positive = charge. The discharge direction
-   still needs one observation.
+   30014 negative = charge, 40507 positive = charge. Discharge confirmed: 40392
+   and 40507 on 2026-11-03, 30014 on 2026-11-24.
 5. **Grid limits** if dispatch is taken over: the 99 kW feed-in cap (a static
    ≤ 49 kW discharge cap covers it) and the contracted import power for grid
    charging.
